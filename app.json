@@ -23,10 +23,10 @@
       "expo-web-browser"
     ],
     "android": {
-      "edgeToEdgeEnabled": true,
       "splash": {
         "image": "./assets/images/splash.png"
-      }
+      },
+      "package": "com.anonymous.SeleneTV"
     },
     "ios": {
       "splash": {
