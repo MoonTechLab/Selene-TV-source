@@ -31,7 +31,6 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
   const [nextSectionTitleNodeHandle, setNextSectionTitleNodeHandle] = useState<number | null>(null);
 
   const handleSectionFocus = () => {
-    console.log(`[${title}] Section focused`);
     if (!mainScrollViewRef?.current) return;
     
     // 使用 setTimeout 确保 ref 已经设置
@@ -39,10 +38,8 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
       if (!sectionRef.current) return;
     
       if (isFirst) {
-        console.log(`[${title}] Scrolling to top (first section)`);
         mainScrollViewRef.current?.scrollTo({ y: 0, animated: true });
       } else if (isLast) {
-        console.log(`[${title}] Scrolling to end (last section)`);
         mainScrollViewRef.current?.scrollToEnd({ animated: true });
       } else {
         // 测量当前区域在主滚动视图中的位置
@@ -52,12 +49,7 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
             // 预留上下边距（例如 100px）
             const topPadding = 100;
             const scrollToY = Math.max(0, y - topPadding);
-            console.log(`[${title}] Scrolling to y: ${scrollToY} (measured y: ${y})`);
             mainScrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
-          },
-          () => {
-            // 测量失败时的回调
-            console.log(`[${title}] measureLayout failed`);
           }
         );
       }
@@ -65,7 +57,6 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
   };
 
   const handleCardFocus = (index: number) => {
-    console.log(`[${title}] Card ${index} focused`);
     if (!scrollViewRef.current) return;
     
     // 卡片宽度 120 + 右边距 20 = 140
@@ -83,20 +74,17 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
     if (cardRightInViewport > screenWidth - horizontalMargin) {
       const newScrollX = cardPosition - screenWidth + actualCardWidth + horizontalMargin;
       currentScrollX.current = newScrollX;
-      console.log(`[${title}] Scrolling right to x: ${newScrollX}`);
       scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
     }
     // 如果卡片左边超出视口或距离左边太近，向左滚动
     else if (cardLeftInViewport < horizontalMargin - contentPadding) {
       const newScrollX = Math.max(0, cardPosition - horizontalMargin + contentPadding);
       currentScrollX.current = newScrollX;
-      console.log(`[${title}] Scrolling left to x: ${newScrollX}`);
       scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
     }
   };
 
   const handleCardsBlur = () => {
-    console.log(`[${title}] Cards blurred, resetting scroll`);
     // 当焦点离开卡片区域时，滚动回到最开头
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({ x: 0, animated: true });
@@ -104,18 +92,9 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
     }
   };
 
-  const handleTitleFocus = () => {
-    console.log(`[${title}] Title focused`);
-  };
-
-  const handleTitleBlur = () => {
-    console.log(`[${title}] Title blurred`);
-  };
-
   useEffect(() => {
     if (titlePressableRef.current) {
       const handle = findNodeHandle(titlePressableRef.current);
-      console.log(`[${title}] Title node handle:`, handle);
       setTitleNodeHandle(handle);
     }
   }, [title]);
@@ -123,7 +102,6 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
   useEffect(() => {
     if (nextSectionTitleRef?.current) {
       const handle = findNodeHandle(nextSectionTitleRef.current);
-      console.log(`[${title}] Next section title node handle:`, handle);
       setNextSectionTitleNodeHandle(handle);
     }
   }, [title, nextSectionTitleRef]);
@@ -142,8 +120,6 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
         trapFocusLeft
         trapFocusRight
         autoFocus={false}
-        onFocus={handleTitleFocus}
-        onBlur={handleTitleBlur}
       >
         <Pressable 
           ref={(ref) => {
@@ -182,7 +158,6 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
               key={video.id}
               title={video.title}
               coverUrl={video.coverUrl}
-              onPress={() => console.log('Video pressed:', video.id)}
               onFocus={() => handleCardFocus(index)}
               nextFocusUp={titleNodeHandle ?? undefined}
               nextFocusDown={nextSectionTitleNodeHandle ?? undefined}

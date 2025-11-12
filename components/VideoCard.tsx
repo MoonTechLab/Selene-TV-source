@@ -1,5 +1,6 @@
-import { StyleSheet, View, Text, Pressable, Image, Animated, Easing } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Animated, Easing } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
+import FastImage from 'react-native-fast-image';
 
 interface VideoCardProps {
   title: string;
@@ -18,6 +19,7 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
   const [containerWidth, setContainerWidth] = useState(0);
   const [isMeasured, setIsMeasured] = useState(false);
   const [measureKey, setMeasureKey] = useState(0);
+  const [imageError, setImageError] = useState(false);
   const needsScroll = titleWidth > containerWidth && containerWidth > 0;
 
   useEffect(() => {
@@ -110,7 +112,26 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
           nextFocusDown={nextFocusDown}
         >
           <View style={styles.cover}>
-            <Image source={{ uri: coverUrl }} style={styles.coverImage} />
+            <FastImage 
+              source={{ 
+                uri: coverUrl,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                  'Referer': 'https://movie.douban.com/',
+                },
+                priority: FastImage.priority.normal,
+              }} 
+              style={styles.coverImage}
+              resizeMode={FastImage.resizeMode.cover}
+              onError={() => {
+                setImageError(true);
+              }}
+            />
+            {imageError && (
+              <View style={styles.errorOverlay}>
+                <Text style={styles.errorText}>加载失败</Text>
+              </View>
+            )}
           </View>
           <View 
             style={styles.content}
@@ -236,5 +257,20 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
     flexDirection: 'row',
     maxWidth: 1000,
+  },
+  errorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#ff6b6b',
+    fontSize: 10,
+    textAlign: 'center',
   },
 });

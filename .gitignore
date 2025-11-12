@@ -2,7 +2,6 @@ node_modules/
 .expo/
 dist/
 ios/
-android/
 npm-debug.*
 *.jks
 *.p8
@@ -11,6 +10,16 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/*.iml
+android/.cxx/
+android/.externalNativeBuild/
 
 # macOS
 .DS_Store

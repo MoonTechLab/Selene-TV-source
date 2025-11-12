@@ -38,6 +38,7 @@ const renderTabContent = (tab: TabType) => {
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [focusedTab, setFocusedTab] = useState<TabType | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const tabSwitcherRef = useRef<any>(null);
@@ -61,19 +62,33 @@ export default function HomeScreen() {
   const handleTabFocus = (tab: TabType | null) => {
     setFocusedTab(tab);
     
-    if (tab === null) return;
+    if (tab === null) {
+      setIsSwitching(false);
+      return;
+    }
     
+    // 清除之前的定时器
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
     
+    // 标记正在切换
+    setIsSwitching(true);
+    
     timerRef.current = setTimeout(() => {
       setActiveTab(tab);
+      setIsSwitching(false);
     }, 500);
   };
 
   const handleTabChange = (tab: TabType) => {
+    // 清除定时器
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setActiveTab(tab);
+    setIsSwitching(false);
   };
 
   return (
@@ -92,6 +107,7 @@ export default function HomeScreen() {
             ref={tabSwitcherRef}
             activeTab={activeTab} 
             focusedTab={focusedTab}
+            isSwitching={isSwitching}
             onTabFocus={handleTabFocus}
             onTabChange={handleTabChange} 
           />

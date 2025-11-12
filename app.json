@@ -26,12 +26,13 @@
       "splash": {
         "image": "./assets/images/splash.png"
       },
-      "package": "com.anonymous.SeleneTV"
+      "package": "org.moontechlab.selenetv"
     },
     "ios": {
       "splash": {
         "image": "./assets/images/splash.png"
-      }
+      },
+      "bundleIdentifier": "org.moontechlab.selenetv"
     },
     "web": {
       "bundler": "metro",

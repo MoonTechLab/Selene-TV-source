@@ -24,6 +24,7 @@ const tabs: TabItem[] = [
 interface TabSwitcherProps {
   activeTab: TabType;
   focusedTab: TabType | null;
+  isSwitching: boolean;
   onTabFocus: (tab: TabType) => void;
   onTabChange: (tab: TabType) => void;
 }
@@ -32,9 +33,10 @@ export interface TabSwitcherRef {
   focusToHome: () => void;
 }
 
-const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, onTabFocus, onTabChange }, ref) => {
+const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, isSwitching, onTabFocus, onTabChange }, ref) => {
   const hasFocus = focusedTab !== null;
   const homeTabRef = useRef<any>(null);
+  const tabRefs = useRef<Record<TabType, any>>({} as Record<TabType, any>);
   const [shouldFocusHome, setShouldFocusHome] = useState(true); // 初始为 true，启动时聚焦首页
   
   // 为每个 tab 创建动画值
@@ -69,7 +71,14 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
   
   return (
     <View style={styles.navContainer}>
-      <TVFocusGuideView style={styles.navWrapper} autoFocus trapFocusLeft trapFocusRight>
+      <TVFocusGuideView 
+        style={styles.navWrapper} 
+        autoFocus 
+        trapFocusLeft 
+        trapFocusRight
+        trapFocusUp={isSwitching}
+        trapFocusDown={isSwitching}
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -82,7 +91,10 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
               }}
             >
               <Pressable
-                ref={tab.key === 'home' ? homeTabRef : null}
+                ref={(el) => {
+                  tabRefs.current[tab.key] = el;
+                  if (tab.key === 'home') homeTabRef.current = el;
+                }}
                 style={({ focused }) => [
                   styles.tabItem,
                   !tab.label && styles.tabItemIconOnly,
@@ -93,6 +105,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
                 onPress={() => onTabChange(tab.key)}
                 onBlur={() => onTabFocus(null as any)}
                 hasTVPreferredFocus={tab.key === 'home' && shouldFocusHome}
+                nextFocusDown={isSwitching ? tabRefs.current[tab.key] : undefined}
               >
                 {({ focused }) => (
                   <>
@@ -143,14 +156,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    height: 28,
     paddingHorizontal: 12,
     borderRadius: 100,
     gap: 7,
   },
   tabItemIconOnly: {
     paddingHorizontal: 10,
-    paddingVertical: 9,
   },
   tabItemActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
