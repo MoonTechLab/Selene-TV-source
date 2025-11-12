@@ -13,13 +13,11 @@ interface RecommendSectionProps {
   title: string;
   videos: VideoItem[];
   onTitlePress?: () => void;
-  isFirst?: boolean;
-  isLast?: boolean;
   titleRef?: React.RefObject<any>;
   nextSectionTitleRef?: React.RefObject<any>;
 }
 
-export default function RecommendSection({ title, videos, onTitlePress, isFirst = false, isLast = false, titleRef, nextSectionTitleRef }: RecommendSectionProps) {
+export default function RecommendSection({ title, videos, onTitlePress, titleRef, nextSectionTitleRef }: RecommendSectionProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionRef = useRef<any>(null);
   const titlePressableRef = useRef<any>(null);
@@ -37,22 +35,16 @@ export default function RecommendSection({ title, videos, onTitlePress, isFirst 
     setTimeout(() => {
       if (!sectionRef.current) return;
     
-      if (isFirst) {
-        mainScrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      } else if (isLast) {
-        mainScrollViewRef.current?.scrollToEnd({ animated: true });
-      } else {
-        // 测量当前区域在主滚动视图中的位置
+      // 测量当前区域在主滚动视图中的位置
         sectionRef.current.measureLayout(
           mainScrollViewRef.current as any,
           (_x: number, y: number) => {
             // 预留上下边距（例如 100px）
-            const topPadding = 100;
+            const topPadding = 230;
             const scrollToY = Math.max(0, y - topPadding);
             mainScrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
           }
         );
-      }
     }, 0);
   };
 

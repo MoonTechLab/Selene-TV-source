@@ -85,7 +85,6 @@ export default function HomeTab() {
       <RecommendSection 
         title="热门电影" 
         videos={loading || hotMovieVideos.length === 0 ? mockVideos('movie', 12) : hotMovieVideos}
-        isFirst={true}
         nextSectionTitleRef={seriesTitleRef}
       />
       <RecommendSection 
@@ -104,7 +103,6 @@ export default function HomeTab() {
         title="热门综艺" 
         videos={loading || hotShowVideos.length === 0 ? mockVideos('variety', 12) : hotShowVideos}
         titleRef={varietyTitleRef}
-        isLast={true}
       />
     </View>
   );
