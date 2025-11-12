@@ -43,7 +43,7 @@ importers:
         version: 15.0.9(expo@54.0.23)(react-native-tvos@0.81.5-1)
       lucide-react-native:
         specifier: ^0.553.0
-        version: 0.553.0(react-native-svg@15.14.0(react-native-tvos@0.81.5-1)(react@19.1.0))(react-native-tvos@0.81.5-1)(react@19.1.0)
+        version: 0.553.0(react-native-svg@15.15.0(react-native-tvos@0.81.5-1)(react@19.1.0))(react-native-tvos@0.81.5-1)(react@19.1.0)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -1352,8 +1352,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.8.26:
-    resolution: {integrity: sha512-73lC1ugzwoaWCLJ1LvOgrR5xsMLTqSKIEoMHVtL9E/HNk0PXtTM76ZIm84856/SF7Nv8mPZxKoBsgpm0tR1u1Q==}
+  baseline-browser-mapping@2.8.27:
+    resolution: {integrity: sha512-2CXFpkjVnY2FT+B6GrSYxzYf65BJWEqz5tIRHCvNsZZ2F3CmsCB37h8SpYgKG7y9C4YAeTipIPWG7EmFmhAeXA==}
     hasBin: true
 
   better-opn@3.0.2:
@@ -2105,8 +2105,8 @@ packages:
     resolution: {integrity: sha512-okMH7OXXJ7YrN9Ok3/SXrnu4iX9yOk+25nqX4imS2npuvTYDmo/QEZoqwZkYaIDk3jVvBOTOIEgEhaLOynBS9g==}
     hasBin: true
 
-  js-yaml@4.1.0:
-    resolution: {integrity: sha512-wpxZs9NoxZaJESJGIZTyDEaYpl0FKSA+FB9aJiyemKhMwkxQg63h4T1KJgUGHpTqPDNRcmmYLugrRjJlBtWvRA==}
+  js-yaml@4.1.1:
+    resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
     hasBin: true
 
   jsc-safe-url@0.2.4:
@@ -2724,8 +2724,8 @@ packages:
       react: '*'
       react-native: '*'
 
-  react-native-svg@15.14.0:
-    resolution: {integrity: sha512-B3gYc7WztcOT4N54AtUutbe0Nuqqh/nkresY0fAXzUHYLsWuIu/yGiCCD3DKfAs6GLv5LFtWTu7N333Q+e3bkg==}
+  react-native-svg@15.15.0:
+    resolution: {integrity: sha512-/Wx6F/IZ88B/GcF88bK8K7ZseJDYt+7WGaiggyzLvTowChQ8BM5idmcd4pK+6QJP6a6DmzL2sfOMukFUn/NArg==}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -4284,7 +4284,7 @@ snapshots:
       '@babel/code-frame': 7.10.4
       chalk: 4.1.2
       find-up: 5.0.0
-      js-yaml: 4.1.0
+      js-yaml: 4.1.1
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -5049,7 +5049,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.8.26: {}
+  baseline-browser-mapping@2.8.27: {}
 
   better-opn@3.0.2:
     dependencies:
@@ -5086,7 +5086,7 @@ snapshots:
 
   browserslist@4.28.0:
     dependencies:
-      baseline-browser-mapping: 2.8.26
+      baseline-browser-mapping: 2.8.27
       caniuse-lite: 1.0.30001754
       electron-to-chromium: 1.5.250
       node-releases: 2.0.27
@@ -5839,7 +5839,7 @@ snapshots:
       argparse: 1.0.10
       esprima: 4.0.1
 
-  js-yaml@4.1.0:
+  js-yaml@4.1.1:
     dependencies:
       argparse: 2.0.1
 
@@ -5941,11 +5941,11 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react-native@0.553.0(react-native-svg@15.14.0(react-native-tvos@0.81.5-1)(react@19.1.0))(react-native-tvos@0.81.5-1)(react@19.1.0):
+  lucide-react-native@0.553.0(react-native-svg@15.15.0(react-native-tvos@0.81.5-1)(react@19.1.0))(react-native-tvos@0.81.5-1)(react@19.1.0):
     dependencies:
       react: 19.1.0
       react-native: react-native-tvos@0.81.5-1(@babel/core@7.28.5)(@types/react@19.1.17)(react-native-tvos@0.81.5-1)(react@19.1.0)
-      react-native-svg: 15.14.0(react-native-tvos@0.81.5-1)(react@19.1.0)
+      react-native-svg: 15.15.0(react-native-tvos@0.81.5-1)(react@19.1.0)
 
   makeerror@1.0.12:
     dependencies:
@@ -6614,7 +6614,7 @@ snapshots:
       react-native-is-edge-to-edge: 1.2.1(react-native-tvos@0.81.5-1)(react@19.1.0)
       warn-once: 0.1.1
 
-  react-native-svg@15.14.0(react-native-tvos@0.81.5-1)(react@19.1.0):
+  react-native-svg@15.15.0(react-native-tvos@0.81.5-1)(react@19.1.0):
     dependencies:
       css-select: 5.2.2
       css-tree: 1.1.3
