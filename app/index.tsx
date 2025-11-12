@@ -39,7 +39,7 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [focusedTab, setFocusedTab] = useState<TabType | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const tabSwitcherRef = useRef<any>(null);
 
