@@ -30,14 +30,14 @@ interface TabSwitcherProps {
 }
 
 export interface TabSwitcherRef {
-  focusToHome: () => void;
+  focusToCurrent: () => void;
 }
 
 const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, isSwitching, onTabFocus, onTabChange }, ref) => {
   const hasFocus = focusedTab !== null;
-  const homeTabRef = useRef<any>(null);
   const tabRefs = useRef<Record<TabType, any>>({} as Record<TabType, any>);
-  const [shouldFocusHome, setShouldFocusHome] = useState(true); // 初始为 true，启动时聚焦首页
+  const [shouldFocusCurrent, setShouldFocusCurrent] = useState(true); // 初始为 true，启动时聚焦当前 tab
+  const [focusTarget, setFocusTarget] = useState<TabType>(activeTab);
   
   // 为每个 tab 创建动画值
   const tabAnimations = useRef(
@@ -48,11 +48,13 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
   ).current;
 
   useImperativeHandle(ref, () => ({
-    focusToHome: () => {
+    focusToCurrent: () => {
+      // 设置焦点目标为当前激活的 tab
+      setFocusTarget(activeTab);
       // 触发重新渲染以应用 hasTVPreferredFocus
-      setShouldFocusHome(true);
+      setShouldFocusCurrent(true);
       setTimeout(() => {
-        setShouldFocusHome(false);
+        setShouldFocusCurrent(false);
       }, 200);
     },
   }));
@@ -93,7 +95,6 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
               <Pressable
                 ref={(el) => {
                   tabRefs.current[tab.key] = el;
-                  if (tab.key === 'home') homeTabRef.current = el;
                 }}
                 style={({ focused }) => [
                   styles.tabItem,
@@ -104,7 +105,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
                 onFocus={() => onTabFocus(tab.key)}
                 onPress={() => onTabChange(tab.key)}
                 onBlur={() => onTabFocus(null as any)}
-                hasTVPreferredFocus={tab.key === 'home' && shouldFocusHome}
+                hasTVPreferredFocus={tab.key === focusTarget && shouldFocusCurrent}
                 nextFocusDown={isSwitching ? tabRefs.current[tab.key] : undefined}
               >
                 {({ focused }) => (

@@ -48,10 +48,12 @@ export default function HomeScreen() {
       // 滚动到顶部
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       
-      // 等待滚动动画完成后再聚焦到 TabSwitcher
-      setTimeout(() => {
-        tabSwitcherRef.current?.focusToHome();
-      }, 300);
+      // 使用 requestAnimationFrame 确保在下一帧执行，无需固定延时
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          tabSwitcherRef.current?.focusToCurrent();
+        });
+      });
       
       return true; // 阻止默认的返回行为
     });

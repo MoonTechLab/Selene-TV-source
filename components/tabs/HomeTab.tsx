@@ -103,6 +103,7 @@ export default function HomeTab() {
         title="热门综艺" 
         videos={loading || hotShowVideos.length === 0 ? mockVideos('variety', 12) : hotShowVideos}
         titleRef={varietyTitleRef}
+        isLast={true}
       />
     </View>
   );

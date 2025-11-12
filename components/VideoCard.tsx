@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, Animated, Easing } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Animated, Easing, useTVEventHandler } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
 import FastImage from 'react-native-fast-image';
 
@@ -6,14 +6,17 @@ interface VideoCardProps {
   title: string;
   coverUrl: string;
   onPress?: () => void;
-  onFocus?: () => void;
+  onFocus?: (cardRef: any) => void;
+  onBlur?: () => void;
+  onNavigateVertical?: (direction: 'up' | 'down') => void;
   nextFocusUp?: number;
   nextFocusDown?: number;
 }
 
-export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, nextFocusUp, nextFocusDown }: VideoCardProps) {
+export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const cardRef = useRef<any>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [titleWidth, setTitleWidth] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -71,7 +74,7 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
       duration: 100,
       useNativeDriver: true,
     }).start();
-    onFocusProp?.();
+    onFocusProp?.(cardRef.current);
   };
   
   // 当测量完成后启动动画
@@ -93,11 +96,24 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
       useNativeDriver: true,
     }).start();
     stopScrollAnimation();
+    onBlurProp?.();
   };
+
+  // 监听 TV 遥控器事件
+  useTVEventHandler((evt: any) => {
+    const eventType = evt?.eventType;
+    // 按上或按下时，传递方向信息给父组件
+    if (eventType === 'up') {
+      onNavigateVertical?.('up');
+    } else if (eventType === 'down') {
+      onNavigateVertical?.('down');
+    }
+  });
 
   return (
     <>
       <Animated.View
+        ref={cardRef}
         style={[
           styles.container,
           { transform: [{ scale: scaleAnim }] },
