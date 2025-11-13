@@ -1,4 +1,4 @@
-import { StyleSheet, Text, ScrollView, Pressable, TVFocusGuideView, useWindowDimensions, findNodeHandle, BackHandler } from 'react-native';
+import { StyleSheet, Text, ScrollView, Pressable, TVFocusGuideView, useWindowDimensions, findNodeHandle, BackHandler, Animated } from 'react-native';
 import { useRef, useState, useEffect } from 'react';
 import VideoCard from './VideoCard';
 import VideoCardSkeleton from './VideoCardSkeleton';
@@ -31,6 +31,7 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const [titleNodeHandle, setTitleNodeHandle] = useState<number | null>(null);
   const [nextSectionTitleNodeHandle, setNextSectionTitleNodeHandle] = useState<number | null>(null);
+  const titleFocusAnim = useRef(new Animated.Value(0)).current;
 
   const resetScroll = () => {
     if (scrollViewRef.current) {
@@ -41,6 +42,12 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
   };
 
   const handleTitleFocus = () => {
+    Animated.timing(titleFocusAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
     if (!mainScrollViewRef?.current || !titlePressableRef.current) return;
 
     // 测量标题在主滚动视图中的位置
@@ -52,6 +59,14 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
         mainScrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
       }
     );
+  };
+
+  const handleTitleBlur = () => {
+    Animated.timing(titleFocusAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
   };
 
   const handleScroll = (event: any) => {
@@ -144,14 +159,23 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
               titleRef.current = ref;
             }
           }}
-          style={({ focused }) => [
-            styles.titleContainer,
-            focused && styles.titleContainerFocused,
-          ]}
           onPress={onTitlePress}
           onFocus={handleTitleFocus}
+          onBlur={handleTitleBlur}
         >
-          <Text style={styles.title}>{title}</Text>
+          <Animated.View
+            style={[
+              styles.titleContainer,
+              {
+                backgroundColor: titleFocusAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.1)'],
+                }),
+              },
+            ]}
+          >
+            <Text style={styles.title}>{title}</Text>
+          </Animated.View>
         </Pressable>
       </TVFocusGuideView>
 
@@ -215,9 +239,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginLeft: 16,
     borderRadius: 6,
-  },
-  titleContainerFocused: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   title: {
     fontSize: 16,
