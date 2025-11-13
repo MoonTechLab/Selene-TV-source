@@ -76,9 +76,9 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
   const handleCardFocus = (index: number, cardRef: any) => {
     if (!scrollViewRef.current) return;
 
-    // 卡片宽度 120 + 右边距 20 = 140
-    const cardWidth = 140;
-    const actualCardWidth = 120;
+    // 卡片宽度 100 + 右边距 20 = 120
+    const cardWidth = 120;
+    const actualCardWidth = 100;
     const cardPosition = index * cardWidth;
     const horizontalMargin = 160; // 左右预留余量
     const contentPadding = 16; // ScrollView 的 paddingHorizontal

@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, Pressable, Animated, Easing, useTVEventHandler } from 'react-native';
-import { useRef, useEffect, useState, memo } from 'react';
+import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import FastImage from 'react-native-fast-image';
 
 interface VideoCardProps {
@@ -22,19 +22,34 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
   const [containerWidth, setContainerWidth] = useState(0);
   const [isMeasured, setIsMeasured] = useState(false);
   const [measureKey, setMeasureKey] = useState(0);
-  const [imageError, setImageError] = useState(false);
   const needsScroll = titleWidth > containerWidth && containerWidth > 0;
+  
+  // 固定的文本间隔
+  const TEXT_GAP = 40;
+  
+  // 使用 ref 存储最新的 titleWidth，避免闭包问题
+  const titleWidthRef = useRef(titleWidth);
+  useEffect(() => {
+    titleWidthRef.current = titleWidth;
+  }, [titleWidth]);
 
   useEffect(() => {
     scrollAnim.setValue(0);
   }, []);
 
-  const startScrollAnimation = () => {
+  const startScrollAnimation = useCallback(() => {
     if (!needsScroll) return;
 
-    // 循环距离：文本宽度 + 间距
-    const gap = 30; // 两个文本之间的间距
-    const loopDistance = titleWidth + gap;
+    // 循环距离：文本宽度 + 固定间距（使用 ref 获取最新值）
+    const loopDistance = titleWidthRef.current + TEXT_GAP;
+    
+    console.log('🔄 [VideoCard] 启动滚动动画:', {
+      title: title.substring(0, 20) + '...',
+      titleWidth: titleWidthRef.current,
+      TEXT_GAP,
+      loopDistance,
+      containerWidth,
+    });
     
     // 先延迟1秒
     Animated.sequence([
@@ -48,16 +63,16 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
         })
       ),
     ]).start();
-  };
+  }, [needsScroll, scrollAnim, TEXT_GAP, title, containerWidth]);
 
-  const stopScrollAnimation = () => {
+  const stopScrollAnimation = useCallback(() => {
     scrollAnim.stopAnimation();
     Animated.timing(scrollAnim, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  };
+  }, [scrollAnim]);
 
   const handleFocus = () => {
     // 先停止所有动画，防止快速移动时的状态冲突
@@ -86,7 +101,7 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
         startScrollAnimation();
       });
     }
-  }, [isFocused, isMeasured, needsScroll]);
+  }, [isFocused, isMeasured, needsScroll, titleWidth]);
 
   const handleBlur = () => {
     setIsFocused(false);
@@ -143,11 +158,6 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
                 // setImageError(true);
               }}
             />
-            {imageError && (
-              <View style={styles.errorOverlay}>
-                <Text style={styles.errorText}>加载失败</Text>
-              </View>
-            )}
           </View>
           <View 
             style={styles.content}
@@ -180,7 +190,7 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
                         styles.titleScrolling,
                         { 
                           transform: [{ translateX: scrollAnim }],
-                          left: titleWidth + 30,
+                          left: titleWidth + TEXT_GAP,
                         },
                       ]}
                     >
