@@ -1,6 +1,6 @@
 import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated, findNodeHandle } from 'react-native';
 import { Home, Film, Tv, Cat, Clover, User, Search, Radio } from 'lucide-react-native';
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 
 export type TabType = 'home' | 'movie' | 'series' | 'anime' | 'variety' | 'live' | 'mine' | 'search';
 
@@ -28,18 +28,31 @@ interface TabSwitcherProps {
   onTabFocus: (tab: TabType) => void;
   onTabChange: (tab: TabType) => void;
   firstSectionTitleRef?: React.RefObject<any>;
+  movieFirstSelectorRef?: React.RefObject<any>;
+  seriesFirstSelectorRef?: React.RefObject<any>;
+  varietyFirstSelectorRef?: React.RefObject<any>;
 }
 
 export interface TabSwitcherRef {
   focusToCurrent: () => void;
 }
 
-const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, isSwitching, onTabFocus, onTabChange, firstSectionTitleRef }, ref) => {
+const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ 
+  activeTab, 
+  focusedTab, 
+  isSwitching, 
+  onTabFocus, 
+  onTabChange, 
+  firstSectionTitleRef,
+  movieFirstSelectorRef,
+  seriesFirstSelectorRef,
+  varietyFirstSelectorRef
+}, ref) => {
   const hasFocus = focusedTab !== null;
   const tabRefs = useRef<Record<TabType, any>>({} as Record<TabType, any>);
   const [shouldFocusCurrent, setShouldFocusCurrent] = useState(true); // 初始为 true，启动时聚焦当前 tab
   const [focusTarget, setFocusTarget] = useState<TabType>(activeTab);
-  const [firstSectionNodeHandle, setFirstSectionNodeHandle] = useState<number | null>(null);
+  const [nextFocusNodeHandle, setNextFocusNodeHandle] = useState<number | null>(null);
   
   // 为每个 tab 创建动画值
   const tabAnimations = useRef(
@@ -73,20 +86,49 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
     });
   }, [focusedTab]);
 
+  // 更新节点句柄的函数
+  const updateNodeHandle = useCallback(() => {
+    let targetRef = null;
+    
+    switch (activeTab) {
+      case 'home':
+        targetRef = firstSectionTitleRef?.current;
+        break;
+      case 'movie':
+        targetRef = movieFirstSelectorRef?.current;
+        break;
+      case 'series':
+        targetRef = seriesFirstSelectorRef?.current;
+        break;
+      case 'variety':
+        targetRef = varietyFirstSelectorRef?.current;
+        break;
+    }
+    
+    if (targetRef) {
+      const handle = findNodeHandle(targetRef);
+      setNextFocusNodeHandle(handle);
+    } else {
+      setNextFocusNodeHandle(null);
+    }
+  }, [activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, varietyFirstSelectorRef]);
+
   // 监听 activeTab 变化，更新节点句柄
   useEffect(() => {
-    // 使用 setTimeout 确保 HomeTab 已经渲染完成
     const timer = setTimeout(() => {
-      if (activeTab === 'home' && firstSectionTitleRef?.current) {
-        const handle = findNodeHandle(firstSectionTitleRef.current);
-        setFirstSectionNodeHandle(handle);
-      } else {
-        setFirstSectionNodeHandle(null);
-      }
+      updateNodeHandle();
     }, 150); // 等待动画完成后再获取节点句柄
 
     return () => clearTimeout(timer);
-  }, [activeTab]);
+  }, [activeTab, updateNodeHandle]);
+
+  // 当焦点回到 TabSwitcher 时（focusedTab 不为 null），重新获取节点句柄
+  useEffect(() => {
+    if (focusedTab !== null) {
+      // 用户正在 TabSwitcher 上，重新获取最新的节点句柄
+      updateNodeHandle();
+    }
+  }, [focusedTab, updateNodeHandle]);
   
   return (
     <View style={styles.navContainer}>
@@ -126,7 +168,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
                 nextFocusDown={
                   isSwitching 
                     ? tabRefs.current[tab.key] 
-                    : firstSectionNodeHandle ?? undefined
+                    : nextFocusNodeHandle ?? undefined
                 }
               >
                 {({ focused }) => (

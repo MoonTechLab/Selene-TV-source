@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, Dimensions, useWindowDimensions } from 'react-native';
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, forwardRef } from 'react';
 import FilterSelector from '../FilterSelector';
 import VideoCard from '../VideoCard';
 import VideoCardSkeleton from '../VideoCardSkeleton';
@@ -65,7 +65,11 @@ const calculateLayout = () => {
   };
 };
 
-export default function MovieTab() {
+interface MovieTabProps {
+  firstSelectorRef?: React.RefObject<any>;
+}
+
+const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('popular');
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -103,7 +107,7 @@ export default function MovieTab() {
       return;
     }
 
-    const currentPage = isRefresh ? 1 : page;
+    const currentPage = isRefresh ? 0 : page;
     const requestFilterState = getCurrentFilterState();
 
     setIsLoading(true);
@@ -262,6 +266,7 @@ export default function MovieTab() {
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>分类</Text>
           <FilterSelector
+            ref={firstSelectorRef}
             options={CATEGORY_OPTIONS}
             selectedKey={selectedCategory}
             focusedKey={focusedCategoryKey}
@@ -374,7 +379,11 @@ export default function MovieTab() {
       </View>
     </View>
   );
-}
+});
+
+MovieTab.displayName = 'MovieTab';
+
+export default MovieTab;
 
 const styles = StyleSheet.create({
   container: {

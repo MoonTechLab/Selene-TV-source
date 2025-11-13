@@ -14,18 +14,24 @@ import { ScrollContext } from '@/contexts/ScrollContext';
 
 const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
 
-const renderTabContent = (tab: TabType, firstSectionTitleRef?: React.RefObject<any>) => {
+const renderTabContent = (
+  tab: TabType, 
+  firstSectionTitleRef?: React.RefObject<any>,
+  movieFirstSelectorRef?: React.RefObject<any>,
+  seriesFirstSelectorRef?: React.RefObject<any>,
+  varietyFirstSelectorRef?: React.RefObject<any>
+) => {
   switch (tab) {
     case 'home':
       return <HomeTab firstSectionTitleRef={firstSectionTitleRef} />;
     case 'movie':
-      return <MovieTab />;
+      return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
     case 'series':
-      return <SeriesTab />;
+      return <SeriesTab firstSelectorRef={seriesFirstSelectorRef} />;
     case 'anime':
       return <AnimeTab />;
     case 'variety':
-      return <VarietyTab />;
+      return <VarietyTab firstSelectorRef={varietyFirstSelectorRef} />;
     case 'live':
       return <LiveTab />;
     case 'mine':
@@ -45,6 +51,9 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const tabSwitcherRef = useRef<any>(null);
   const firstSectionTitleRef = useRef<any>(null);
+  const movieFirstSelectorRef = useRef<any>(null);
+  const seriesFirstSelectorRef = useRef<any>(null);
+  const varietyFirstSelectorRef = useRef<any>(null);
   
   // 动画值
   const translateX = useRef(new Animated.Value(0)).current;
@@ -181,6 +190,9 @@ export default function HomeScreen() {
             onTabFocus={handleTabFocus}
             onTabChange={handleTabChange}
             firstSectionTitleRef={firstSectionTitleRef}
+            movieFirstSelectorRef={movieFirstSelectorRef}
+            seriesFirstSelectorRef={seriesFirstSelectorRef}
+            varietyFirstSelectorRef={varietyFirstSelectorRef}
           />
 
           <Animated.View
@@ -189,7 +201,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, varietyFirstSelectorRef)}
           </Animated.View>
         </ScrollView>
       </ScrollContext.Provider>

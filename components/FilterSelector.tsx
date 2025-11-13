@@ -1,5 +1,5 @@
 import { StyleSheet, Text, Pressable, Animated, TVFocusGuideView, findNodeHandle } from 'react-native';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 
 interface FilterOption {
   key: string;
@@ -15,17 +15,17 @@ interface FilterSelectorProps {
   onSelect: (key: string) => void;
 }
 
-export default function FilterSelector({ 
-  options, 
-  selectedKey, 
-  focusedKey,
-  onFocus, 
-  onBlur,
-  onSelect 
-}: FilterSelectorProps) {
+const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
+  const { options, selectedKey, focusedKey, onFocus, onBlur, onSelect } = props;
+  
   // 为每个选项创建 ref
   const optionRefs = useRef<Record<string, any>>({});
   const [preferredFocusTarget, setPreferredFocusTarget] = useState<number | null>(null);
+
+  // 暴露当前选中项的引用给父组件
+  useImperativeHandle(ref, () => {
+    return optionRefs.current[selectedKey] || null;
+  }, [selectedKey]);
   
   // 为每个选项创建动画值
   const optionAnimations = useRef(
@@ -97,7 +97,11 @@ export default function FilterSelector({
       })}
     </TVFocusGuideView>
   );
-}
+});
+
+FilterSelector.displayName = 'FilterSelector';
+
+export default FilterSelector;
 
 const styles = StyleSheet.create({
   container: {
