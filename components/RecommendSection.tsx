@@ -1,6 +1,7 @@
 import { StyleSheet, Text, ScrollView, Pressable, TVFocusGuideView, useWindowDimensions, findNodeHandle, BackHandler } from 'react-native';
 import { useRef, useState, useEffect } from 'react';
 import VideoCard from './VideoCard';
+import VideoCardSkeleton from './VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
 
 interface VideoItem {
@@ -16,9 +17,10 @@ interface RecommendSectionProps {
   titleRef?: React.RefObject<any>;
   nextSectionTitleRef?: React.RefObject<any>;
   isLast?: boolean;
+  loading?: boolean;
 }
 
-export default function RecommendSection({ title, videos, onTitlePress, titleRef, nextSectionTitleRef, isLast = false }: RecommendSectionProps) {
+export default function RecommendSection({ title, videos, onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false }: RecommendSectionProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionRef = useRef<any>(null);
   const titlePressableRef = useRef<any>(null);
@@ -169,23 +171,30 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          {videos.map((video, index) => (
-            <VideoCard
-              key={video.id}
-              title={video.title}
-              coverUrl={video.coverUrl}
-              onFocus={(cardRef) => handleCardFocus(index, cardRef)}
-              onNavigateVertical={(direction) => {
-                if (direction === 'up') {
-                  resetScroll();
-                } else if (direction === 'down' && !isLast) {
-                  resetScroll();
-                }
-              }}
-              nextFocusUp={titleNodeHandle ?? undefined}
-              nextFocusDown={nextSectionTitleNodeHandle ?? undefined}
-            />
-          ))}
+          {loading ? (
+            // 显示 8 个骨架屏
+            Array.from({ length: 8 }).map((_, index) => (
+              <VideoCardSkeleton key={`skeleton-${index}`} />
+            ))
+          ) : (
+            videos.map((video, index) => (
+              <VideoCard
+                key={video.id}
+                title={video.title}
+                coverUrl={video.coverUrl}
+                onFocus={(cardRef) => handleCardFocus(index, cardRef)}
+                onNavigateVertical={(direction) => {
+                  if (direction === 'up') {
+                    resetScroll();
+                  } else if (direction === 'down' && !isLast) {
+                    resetScroll();
+                  }
+                }}
+                nextFocusUp={titleNodeHandle ?? undefined}
+                nextFocusDown={nextSectionTitleNodeHandle ?? undefined}
+              />
+            ))
+          )}
         </ScrollView>
       </TVFocusGuideView>
     </TVFocusGuideView>

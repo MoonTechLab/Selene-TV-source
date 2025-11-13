@@ -140,7 +140,7 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
               style={styles.coverImage}
               resizeMode={FastImage.resizeMode.cover}
               onError={() => {
-                setImageError(true);
+                // setImageError(true);
               }}
             />
             {imageError && (

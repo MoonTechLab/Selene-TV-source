@@ -2,7 +2,9 @@ import { StyleSheet, View, Text } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
 import RecommendSection from '../RecommendSection';
 import doubanService from '@/services/doubanService';
+import bangumiService from '@/services/bangumiService';
 import { DoubanMovie } from '@/types/douban';
+import { BangumiItem } from '@/types/bangumi';
 
 const mockVideos = (prefix: string, count: number = 10) => 
   Array.from({ length: count }, (_, i) => ({
@@ -21,6 +23,7 @@ export default function HomeTab() {
   const [hotMovies, setHotMovies] = useState<DoubanMovie[]>([]);
   const [hotTvShows, setHotTvShows] = useState<DoubanMovie[]>([]);
   const [hotShows, setHotShows] = useState<DoubanMovie[]>([]);
+  const [todayBangumi, setTodayBangumi] = useState<BangumiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,10 +37,11 @@ export default function HomeTab() {
 
     try {
       // 并行加载所有数据
-      const [moviesRes, tvShowsRes, showsRes] = await Promise.all([
+      const [moviesRes, tvShowsRes, showsRes, bangumiRes] = await Promise.all([
         doubanService.getHotMovies({ pageLimit: 25, page: 0 }),
         doubanService.getHotTvShows({ pageLimit: 25, page: 0 }),
         doubanService.getHotShows({ pageLimit: 25, page: 0 }),
+        bangumiService.getTodayCalendar(),
       ]);
 
       if (moviesRes.success && moviesRes.data) {
@@ -52,12 +56,11 @@ export default function HomeTab() {
         setHotShows(showsRes.data);
       }
 
-      // 如果所有请求都失败，显示错误
-      if (!moviesRes.success && !tvShowsRes.success && !showsRes.success) {
-        setError('加载失败');
+      if (bangumiRes.success && bangumiRes.data) {
+        setTodayBangumi(bangumiRes.data);
       }
     } catch (err) {
-      setError('加载异常');
+      // setError('加载异常');
     }
 
     setLoading(false);
@@ -71,9 +74,18 @@ export default function HomeTab() {
       coverUrl: item.poster,
     }));
 
+  // 将 Bangumi 数据转换为 RecommendSection 需要的格式
+  const convertBangumiToVideos = (items: BangumiItem[]) =>
+    (items || []).map((item) => ({
+      id: String(item.id),
+      title: item.nameCn || item.name,
+      coverUrl: item.images.large || item.images.common || item.images.medium || item.images.small || item.images.grid,
+    }));
+
   const hotMovieVideos = convertToVideos(hotMovies);
   const hotTvShowVideos = convertToVideos(hotTvShows);
   const hotShowVideos = convertToVideos(hotShows);
+  const todayBangumiVideos = convertBangumiToVideos(todayBangumi);
 
   return (
     <View style={styles.container}>
@@ -84,24 +96,28 @@ export default function HomeTab() {
       )}
       <RecommendSection 
         title="热门电影" 
-        videos={loading || hotMovieVideos.length === 0 ? mockVideos('movie', 12) : hotMovieVideos}
+        videos={hotMovieVideos}
+        loading={loading}
         nextSectionTitleRef={seriesTitleRef}
       />
       <RecommendSection 
         title="热门剧集" 
-        videos={loading || hotTvShowVideos.length === 0 ? mockVideos('series', 12) : hotTvShowVideos}
+        videos={hotTvShowVideos}
+        loading={loading}
         titleRef={seriesTitleRef}
         nextSectionTitleRef={animeTitleRef}
       />
       <RecommendSection 
         title="新番放送" 
-        videos={mockVideos('anime', 12)}
+        videos={todayBangumiVideos}
+        loading={loading}
         titleRef={animeTitleRef}
         nextSectionTitleRef={varietyTitleRef}
       />
-      <RecommendSection 
+      <RecommendSection
         title="热门综艺" 
-        videos={loading || hotShowVideos.length === 0 ? mockVideos('variety', 12) : hotShowVideos}
+        videos={hotShowVideos}
+        loading={loading}
         titleRef={varietyTitleRef}
         isLast={true}
       />
