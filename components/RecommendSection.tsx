@@ -235,13 +235,13 @@ const styles = StyleSheet.create({
   titleContainer: {
     paddingHorizontal: 16,
     paddingVertical: 6,
-    marginBottom: 4,
+    marginBottom: 0,
     alignSelf: 'flex-start',
     marginLeft: 16,
     borderRadius: 6,
   },
   title: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: '#ffffff',
   },

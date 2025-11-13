@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, BackHandler } from 'react-native';
+import { StyleSheet, ScrollView, BackHandler, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useRef, useEffect } from 'react';
 import TabSwitcher, { TabType } from '@/components/TabSwitcher';
@@ -12,10 +12,12 @@ import MineTab from '@/components/tabs/MineTab';
 import SearchTab from '@/components/tabs/SearchTab';
 import { ScrollContext } from '@/contexts/ScrollContext';
 
-const renderTabContent = (tab: TabType) => {
+const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
+
+const renderTabContent = (tab: TabType, firstSectionTitleRef?: React.RefObject<any>) => {
   switch (tab) {
     case 'home':
-      return <HomeTab />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} />;
     case 'movie':
       return <MovieTab />;
     case 'series':
@@ -31,7 +33,7 @@ const renderTabContent = (tab: TabType) => {
     case 'search':
       return <SearchTab />;
     default:
-      return <HomeTab />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} />;
   }
 };
 
@@ -42,6 +44,12 @@ export default function HomeScreen() {
   const timerRef = useRef<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const tabSwitcherRef = useRef<any>(null);
+  const firstSectionTitleRef = useRef<any>(null);
+  
+  // 动画值
+  const translateX = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const previousTabRef = useRef<TabType>(activeTab);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -61,10 +69,60 @@ export default function HomeScreen() {
     return () => backHandler.remove();
   }, []);
 
+  const animateTabChange = (newTab: TabType) => {
+    const currentIndex = TAB_ORDER.indexOf(previousTabRef.current);
+    const newIndex = TAB_ORDER.indexOf(newTab);
+    const direction = newIndex > currentIndex ? 1 : -1; // 1: 向右, -1: 向左
+    
+    // 第一阶段：淡出并移动
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateX, {
+        toValue: direction * -50, // 向左移动 50 或向右移动 -50
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // 先重置位置到另一侧（在内容切换之前）
+      translateX.setValue(direction * 50);
+      
+      // 然后切换内容
+      setActiveTab(newTab);
+      previousTabRef.current = newTab;
+      
+      // 使用 requestAnimationFrame 确保内容切换后再开始第二阶段动画
+      requestAnimationFrame(() => {
+        // 第二阶段：从另一侧淡入并移动到中心
+        Animated.parallel([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translateX, {
+            toValue: 0,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    });
+  };
+
   const handleTabFocus = (tab: TabType | null) => {
     setFocusedTab(tab);
     
     if (tab === null) {
+      setIsSwitching(false);
+      return;
+    }
+    
+    // 如果聚焦的是当前已激活的 tab，不触发切换
+    if (tab === activeTab) {
       setIsSwitching(false);
       return;
     }
@@ -78,18 +136,23 @@ export default function HomeScreen() {
     setIsSwitching(true);
     
     timerRef.current = setTimeout(() => {
-      setActiveTab(tab);
+      animateTabChange(tab);
       setIsSwitching(false);
     }, 500);
   };
 
   const handleTabChange = (tab: TabType) => {
+    // 如果点按的是当前已激活的 tab，不响应
+    if (tab === activeTab) {
+      return;
+    }
+    
     // 清除定时器
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    setActiveTab(tab);
+    animateTabChange(tab);
     setIsSwitching(false);
   };
 
@@ -104,6 +167,11 @@ export default function HomeScreen() {
           ref={scrollViewRef}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={false}
+          scrollEventThrottle={16}
+          nestedScrollEnabled={false}
+          overScrollMode="never"
+          bounces={false}
         >
           <TabSwitcher 
             ref={tabSwitcherRef}
@@ -111,10 +179,18 @@ export default function HomeScreen() {
             focusedTab={focusedTab}
             isSwitching={isSwitching}
             onTabFocus={handleTabFocus}
-            onTabChange={handleTabChange} 
+            onTabChange={handleTabChange}
+            firstSectionTitleRef={firstSectionTitleRef}
           />
 
-          {renderTabContent(activeTab)}
+          <Animated.View
+            style={{
+              opacity,
+              transform: [{ translateX }],
+            }}
+          >
+            {renderTabContent(activeTab, firstSectionTitleRef)}
+          </Animated.View>
         </ScrollView>
       </ScrollContext.Provider>
     </LinearGradient>

@@ -273,12 +273,14 @@ class DoubanService {
           );
         }
       } else {
+        console.log(`获取豆瓣数据失败: ${response.status}`)
         return ApiResponseHelper.error(
           `获取豆瓣数据失败: ${response.status}`,
           response.status
         );
       }
     } catch (error) {
+      console.log(`豆瓣数据请求异常: ${error instanceof Error ? error.message : String(error)}`)
       if (error instanceof Error && error.name === 'AbortError') {
         return ApiResponseHelper.error('豆瓣数据请求超时');
       }

@@ -15,7 +15,11 @@ const mockVideos = (prefix: string, count: number = 10) =>
     coverUrl: 'https://via.placeholder.com/130x195',
   }));
 
-export default function HomeTab() {
+interface HomeTabProps {
+  firstSectionTitleRef?: React.RefObject<any>;
+}
+
+export default function HomeTab({ firstSectionTitleRef }: HomeTabProps = {}) {
   const seriesTitleRef = useRef<any>(null);
   const animeTitleRef = useRef<any>(null);
   const varietyTitleRef = useRef<any>(null);
@@ -98,6 +102,7 @@ export default function HomeTab() {
         title="热门电影" 
         videos={hotMovieVideos}
         loading={loading}
+        titleRef={firstSectionTitleRef}
         nextSectionTitleRef={seriesTitleRef}
       />
       <RecommendSection 

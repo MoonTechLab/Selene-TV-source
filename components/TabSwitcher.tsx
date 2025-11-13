@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated } from 'react-native';
+import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated, findNodeHandle } from 'react-native';
 import { Home, Film, Tv, Cat, Clover, User, Search, Radio } from 'lucide-react-native';
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 
@@ -27,17 +27,19 @@ interface TabSwitcherProps {
   isSwitching: boolean;
   onTabFocus: (tab: TabType) => void;
   onTabChange: (tab: TabType) => void;
+  firstSectionTitleRef?: React.RefObject<any>;
 }
 
 export interface TabSwitcherRef {
   focusToCurrent: () => void;
 }
 
-const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, isSwitching, onTabFocus, onTabChange }, ref) => {
+const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, focusedTab, isSwitching, onTabFocus, onTabChange, firstSectionTitleRef }, ref) => {
   const hasFocus = focusedTab !== null;
   const tabRefs = useRef<Record<TabType, any>>({} as Record<TabType, any>);
   const [shouldFocusCurrent, setShouldFocusCurrent] = useState(true); // 初始为 true，启动时聚焦当前 tab
   const [focusTarget, setFocusTarget] = useState<TabType>(activeTab);
+  const [firstSectionNodeHandle, setFirstSectionNodeHandle] = useState<number | null>(null);
   
   // 为每个 tab 创建动画值
   const tabAnimations = useRef(
@@ -70,6 +72,21 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
       }).start();
     });
   }, [focusedTab]);
+
+  // 监听 activeTab 变化，更新节点句柄
+  useEffect(() => {
+    // 使用 setTimeout 确保 HomeTab 已经渲染完成
+    const timer = setTimeout(() => {
+      if (activeTab === 'home' && firstSectionTitleRef?.current) {
+        const handle = findNodeHandle(firstSectionTitleRef.current);
+        setFirstSectionNodeHandle(handle);
+      } else {
+        setFirstSectionNodeHandle(null);
+      }
+    }, 150); // 等待动画完成后再获取节点句柄
+
+    return () => clearTimeout(timer);
+  }, [activeTab]);
   
   return (
     <View style={styles.navContainer}>
@@ -106,12 +123,16 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ activeTab, f
                 onPress={() => onTabChange(tab.key)}
                 onBlur={() => onTabFocus(null as any)}
                 hasTVPreferredFocus={tab.key === focusTarget && shouldFocusCurrent}
-                nextFocusDown={isSwitching ? tabRefs.current[tab.key] : undefined}
+                nextFocusDown={
+                  isSwitching 
+                    ? tabRefs.current[tab.key] 
+                    : firstSectionNodeHandle ?? undefined
+                }
               >
                 {({ focused }) => (
                   <>
                     <Icon
-                      size={15}
+                      size={12}
                       color={focused ? '#0a0a0a' : '#ffffff'}
                       strokeWidth={2}
                     />
@@ -137,16 +158,16 @@ export default TabSwitcher;
 
 const styles = StyleSheet.create({
   navContainer: {
-    paddingTop: 20,
-    paddingBottom: 10,
+    paddingTop: 13,
+    paddingBottom: 7,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
   navWrapper: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 100,
-    padding: 5,
+    borderRadius: 18,
+    padding: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -159,11 +180,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 28,
     paddingHorizontal: 12,
-    borderRadius: 100,
-    gap: 7,
+    borderRadius: 14,
+    gap: 5,
   },
   tabItemIconOnly: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
   },
   tabItemActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -172,7 +193,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#ffffff',
   },

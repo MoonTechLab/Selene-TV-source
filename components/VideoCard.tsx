@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, Pressable, Animated, Easing, useTVEventHandler } from 'react-native';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, memo } from 'react';
 import FastImage from 'react-native-fast-image';
 
 interface VideoCardProps {
@@ -13,7 +13,7 @@ interface VideoCardProps {
   nextFocusDown?: number;
 }
 
-export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
+function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const cardRef = useRef<any>(null);
@@ -223,15 +223,15 @@ export default function VideoCard({ title, coverUrl, onPress, onFocus: onFocusPr
 
 const styles = StyleSheet.create({
   container: {
-    width: 120,
+    width: 100,
     marginRight: 20,
   },
   pressable: {
     width: '100%',
   },
   cover: {
-    width: 120,
-    height: 180,
+    width: 100,
+    height: 150,
     borderRadius: 6,
     backgroundColor: '#2a2a2a',
     overflow: 'hidden',
@@ -289,4 +289,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: 'center',
   },
+});
+
+// 使用 memo 优化，只在 props 变化时重新渲染
+export default memo(VideoCard, (prevProps, nextProps) => {
+  // 返回 true 表示 props 相同，跳过渲染
+  // 返回 false 表示 props 不同，需要重新渲染
+  return (
+    prevProps.title === nextProps.title &&
+    prevProps.coverUrl === nextProps.coverUrl &&
+    prevProps.nextFocusUp === nextProps.nextFocusUp &&
+    prevProps.nextFocusDown === nextProps.nextFocusDown
+    // 注意：onPress、onFocus、onBlur 等函数引用可能每次都不同
+    // 但它们的行为通常是一致的，所以我们不比较它们
+  );
 });
