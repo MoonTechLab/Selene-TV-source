@@ -6,11 +6,23 @@ import {
   DoubanDataSourceKey,
   DoubanKind,
 } from '@/types/douban';
+import doubanCacheService from './doubanCacheService';
 
 /**
  * 豆瓣服务类
  */
 class DoubanService {
+  private cacheInitialized = false;
+
+  /**
+   * 初始化缓存服务
+   */
+  private async initCache(): Promise<void> {
+    if (!this.cacheInitialized) {
+      await doubanCacheService.init();
+      this.cacheInitialized = true;
+    }
+  }
   /**
    * 将豆瓣 API 返回的 Item 转换为 DoubanMovie
    */
@@ -170,6 +182,44 @@ class DoubanService {
       dataSourceKey = 'direct',
     } = params;
 
+    // 初始化缓存服务
+    await this.initCache();
+
+    // 生成缓存键
+    const cacheKey = doubanCacheService.generateDoubanCategoryCacheKey({
+      kind,
+      category,
+      type,
+      pageLimit,
+      page,
+    });
+
+    // 尝试从缓存获取数据（存取均为已处理后的 DoubanMovie 列表）
+    try {
+      const cachedData = await doubanCacheService.get<DoubanMovie[]>(
+        cacheKey,
+        (raw) => {
+          if (!Array.isArray(raw)) {
+            throw new Error('Invalid cache data format');
+          }
+          return raw.map((m: any) => ({
+            id: m.id?.toString() || '',
+            title: m.title?.toString() || '',
+            poster: m.poster?.toString() || '',
+            rate: m.rate?.toString(),
+            year: m.year?.toString() || '',
+          }));
+        }
+      );
+
+      if (cachedData) {
+        return ApiResponseHelper.success(cachedData);
+      }
+    } catch (e) {
+      // 缓存读取失败，继续执行网络请求
+      console.log('读取缓存失败:', e);
+    }
+
     const start = page * pageLimit;
     const apiUrl = this.buildApiUrl(dataSourceKey, kind, category, type, start, pageLimit);
 
@@ -208,6 +258,14 @@ class DoubanService {
           
           // 将 items 转换为 DoubanMovie 数组
           const movies = data.items.map((item) => this.parseItemToMovie(item));
+          
+          // 缓存成功的结果（保存已处理后的 DoubanMovie 列表），缓存时间为 6 小时
+          try {
+            await doubanCacheService.set(cacheKey, movies, 6 * 60 * 60 * 1000);
+          } catch (cacheError) {
+            console.log('缓存数据失败:', cacheError);
+          }
+          
           return ApiResponseHelper.success(movies, response.status);
         } catch (parseError) {
           return ApiResponseHelper.error(

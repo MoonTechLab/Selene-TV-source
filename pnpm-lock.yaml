@@ -17,6 +17,9 @@ importers:
       expo-build-properties:
         specifier: ~1.0.9
         version: 1.0.9(expo@54.0.23)
+      expo-file-system:
+        specifier: ~19.0.17
+        version: 19.0.17(expo@54.0.23)(react-native-tvos@0.81.5-1)
       expo-font:
         specifier: ~14.0.9
         version: 14.0.9(expo@54.0.23)(react-native-tvos@0.81.5-1)(react@19.1.0)

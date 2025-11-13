@@ -7,6 +7,7 @@ import {
   BangumiCollection,
   BangumiWeekday,
 } from '@/types/bangumi';
+import doubanCacheService from './doubanCacheService';
 
 /**
  * Bangumi 服务类
@@ -14,6 +15,17 @@ import {
 class BangumiService {
   private readonly API_URL = 'https://api.bgm.tv/calendar';
   private readonly USER_AGENT = 'moontechlab/selene/1.0.0 (Android) (http://github.com/moontechlab/selene)';
+  private cacheInitialized = false;
+
+  /**
+   * 初始化缓存服务
+   */
+  private async initCache(): Promise<void> {
+    if (!this.cacheInitialized) {
+      await doubanCacheService.init();
+      this.cacheInitialized = true;
+    }
+  }
 
   /**
    * 解析 BangumiRating
@@ -123,6 +135,37 @@ class BangumiService {
    * @param weekday - 星期几 (1..7, Monday..Sunday)
    */
   async getCalendarByWeekday(weekday: number): Promise<ApiResponse<BangumiItem[]>> {
+    await this.initCache();
+
+    // 接口级缓存：缓存原始 API 数组，固定键，不含参数
+    const cacheKey = 'bangumi_calendar_raw_v1';
+
+    // 先尝试读取原始数组缓存
+    try {
+      const cachedRaw = await doubanCacheService.get<any[]>(
+        cacheKey,
+        (raw) => {
+          if (!Array.isArray(raw)) {
+            throw new Error('Invalid cache data format');
+          }
+          return raw;
+        }
+      );
+
+      if (cachedRaw && cachedRaw.length > 0) {
+        // 解析所有星期数据
+        const calendar = cachedRaw.map((item) => this.parseCalendarResponse(item));
+
+        // 查找目标星期的数据
+        const targetDay = calendar.find((day) => day.weekday.id === weekday);
+        const items = targetDay?.items || [];
+
+        return ApiResponseHelper.success(items);
+      }
+    } catch (_) {
+      // 缓存读取失败，继续执行网络请求
+    }
+
     try {
       const headers: Record<string, string> = {
         'User-Agent': this.USER_AGENT,
@@ -143,6 +186,13 @@ class BangumiService {
       if (response.ok) {
         try {
           const responseData: any[] = await response.json();
+
+          // 缓存原始 API 数组（缓存一天）
+          try {
+            await doubanCacheService.set(cacheKey, responseData, 24 * 60 * 60 * 1000);
+          } catch (cacheError) {
+            console.log('缓存 Bangumi 数据失败:', cacheError);
+          }
 
           // 解析所有星期数据
           const calendarData = responseData.map((item) => 
