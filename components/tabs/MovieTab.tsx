@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Dimensions, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Text, Dimensions, useWindowDimensions, findNodeHandle } from 'react-native';
 import { useState, useMemo, useRef, useEffect, useCallback, forwardRef } from 'react';
 import FilterSelector from '../FilterSelector';
 import VideoCard from '../VideoCard';
@@ -89,6 +89,16 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
   const rowRefs = useRef<Map<number, any>>(new Map());
   const loadingTriggeredForPageRef = useRef<number>(1); // 记录已触发加载的页码
+  const regionSelectorRef = useRef<any>(null);
+  const [regionSelectorHandle, setRegionSelectorHandle] = useState<number | null>(null);
+
+  // 获取地区筛选器的节点句柄
+  useEffect(() => {
+    if (regionSelectorRef.current) {
+      const handle = findNodeHandle(regionSelectorRef.current);
+      setRegionSelectorHandle(handle);
+    }
+  }, [selectedRegion]); // 当选中项改变时更新
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
@@ -280,12 +290,14 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>地区</Text>
           <FilterSelector
+            ref={regionSelectorRef}
             options={REGION_OPTIONS}
             selectedKey={selectedRegion}
             focusedKey={focusedRegionKey}
             onFocus={(key) => handleFilterFocus(key, setFocusedRegionKey)}
             onBlur={() => setFocusedRegionKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedRegion)}
+            nextFocusUp={firstSelectorRef?.current}
           />
         </View>
       </View>
@@ -335,6 +347,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
                         coverUrl={movie.poster}
                         onPress={() => console.log('Pressed:', movie.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
+                        nextFocusUp={rowIndex === 0 ? (regionSelectorHandle ?? undefined) : undefined}
                       />
                     </View>
                   ))}

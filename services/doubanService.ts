@@ -223,7 +223,6 @@ class DoubanService {
     const start = page * pageLimit;
     const apiUrl = this.buildApiUrl(dataSourceKey, kind, category, type, start, pageLimit);
 
-    console.log(apiUrl)
     try {
       const headers: Record<string, string> = {
         'User-Agent':

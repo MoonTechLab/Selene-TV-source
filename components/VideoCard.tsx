@@ -43,14 +43,6 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
     // 循环距离：文本宽度 + 固定间距（使用 ref 获取最新值）
     const loopDistance = titleWidthRef.current + TEXT_GAP;
     
-    console.log('🔄 [VideoCard] 启动滚动动画:', {
-      title: title.substring(0, 20) + '...',
-      titleWidth: titleWidthRef.current,
-      TEXT_GAP,
-      loopDistance,
-      containerWidth,
-    });
-    
     // 先延迟1秒
     Animated.sequence([
       Animated.delay(1000),
@@ -282,7 +274,7 @@ const styles = StyleSheet.create({
     zIndex: -999,
     pointerEvents: 'none',
     flexDirection: 'row',
-    maxWidth: 1000,
+    maxWidth: 5000,
   },
   errorOverlay: {
     position: 'absolute',

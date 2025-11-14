@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Dimensions, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Text, Dimensions, useWindowDimensions, findNodeHandle } from 'react-native';
 import { useState, useMemo, useRef, useEffect, useCallback, forwardRef } from 'react';
 import FilterSelector from '../FilterSelector';
 import VideoCard from '../VideoCard';
@@ -81,6 +81,16 @@ const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) =>
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
   const rowRefs = useRef<Map<number, any>>(new Map());
   const loadingTriggeredForPageRef = useRef<number>(1);
+  const typeSelectorRef = useRef<any>(null);
+  const [typeSelectorHandle, setTypeSelectorHandle] = useState<number | null>(null);
+
+  // 获取类型筛选器的节点句柄
+  useEffect(() => {
+    if (typeSelectorRef.current) {
+      const handle = findNodeHandle(typeSelectorRef.current);
+      setTypeSelectorHandle(handle);
+    }
+  }, [selectedType]); // 当选中项改变时更新
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
@@ -270,12 +280,14 @@ const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) =>
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>类型</Text>
           <FilterSelector
+            ref={typeSelectorRef}
             options={TYPE_OPTIONS}
             selectedKey={selectedType}
             focusedKey={focusedTypeKey}
             onFocus={(key) => handleFilterFocus(key, setFocusedTypeKey)}
             onBlur={() => setFocusedTypeKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedType)}
+            nextFocusUp={firstSelectorRef?.current}
           />
         </View>
       </View>
@@ -325,6 +337,7 @@ const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) =>
                         coverUrl={item.poster}
                         onPress={() => console.log('Pressed:', item.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
+                        nextFocusUp={rowIndex === 0 ? (typeSelectorHandle ?? undefined) : undefined}
                       />
                     </View>
                   ))}

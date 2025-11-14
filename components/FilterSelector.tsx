@@ -1,6 +1,8 @@
 import { StyleSheet, Text, Pressable, Animated, TVFocusGuideView, findNodeHandle } from 'react-native';
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 interface FilterOption {
   key: string;
   label: string;
@@ -13,14 +15,16 @@ interface FilterSelectorProps {
   onFocus: (key: string) => void;
   onBlur: () => void;
   onSelect: (key: string) => void;
+  nextFocusUp?: any;
 }
 
 const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
-  const { options, selectedKey, focusedKey, onFocus, onBlur, onSelect } = props;
+  const { options, selectedKey, focusedKey, onFocus, onBlur, onSelect, nextFocusUp } = props;
   
   // 为每个选项创建 ref
   const optionRefs = useRef<Record<string, any>>({});
   const [preferredFocusTarget, setPreferredFocusTarget] = useState<number | null>(null);
+  const [nextFocusUpHandle, setNextFocusUpHandle] = useState<number | null>(null);
 
   // 暴露当前选中项的引用给父组件
   useImperativeHandle(ref, () => {
@@ -56,6 +60,16 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
     }
   }, [selectedKey]);
 
+  // 当 nextFocusUp 改变时，获取其节点句柄
+  useEffect(() => {
+    if (nextFocusUp) {
+      const handle = findNodeHandle(nextFocusUp);
+      setNextFocusUpHandle(handle);
+    } else {
+      setNextFocusUpHandle(null);
+    }
+  }, [nextFocusUp]);
+
   return (
     <TVFocusGuideView 
       style={styles.container}
@@ -66,33 +80,31 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
         const isFocused = focusedKey === option.key;
         
         return (
-          <Animated.View
+          <AnimatedPressable
             key={option.key}
-            style={{
-              transform: [{ scale: optionAnimations[option.key] }],
+            ref={(el) => {
+              optionRefs.current[option.key] = el;
             }}
+            style={[
+              styles.option,
+              isSelected && !isFocused && styles.optionSelected,
+              isFocused && styles.optionFocused,
+              {
+                transform: [{ scale: optionAnimations[option.key] }],
+              }
+            ]}
+            onFocus={() => onFocus(option.key)}
+            onBlur={onBlur}
+            onPress={() => onSelect(option.key)}
+            nextFocusUp={nextFocusUpHandle}
           >
-            <Pressable
-              ref={(el) => {
-                optionRefs.current[option.key] = el;
-              }}
-              style={[
-                styles.option,
-                isSelected && !isFocused && styles.optionSelected,
-                isFocused && styles.optionFocused,
-              ]}
-              onFocus={() => onFocus(option.key)}
-              onBlur={onBlur}
-              onPress={() => onSelect(option.key)}
-            >
-              <Text style={[
-                styles.optionText,
-                isFocused && styles.optionTextFocused
-              ]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          </Animated.View>
+            <Text style={[
+              styles.optionText,
+              isFocused && styles.optionTextFocused
+            ]}>
+              {option.label}
+            </Text>
+          </AnimatedPressable>
         );
       })}
     </TVFocusGuideView>

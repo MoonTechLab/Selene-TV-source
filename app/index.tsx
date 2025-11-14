@@ -19,6 +19,7 @@ const renderTabContent = (
   firstSectionTitleRef?: React.RefObject<any>,
   movieFirstSelectorRef?: React.RefObject<any>,
   seriesFirstSelectorRef?: React.RefObject<any>,
+  animeFirstSelectorRef?: React.RefObject<any>,
   varietyFirstSelectorRef?: React.RefObject<any>
 ) => {
   switch (tab) {
@@ -29,7 +30,7 @@ const renderTabContent = (
     case 'series':
       return <SeriesTab firstSelectorRef={seriesFirstSelectorRef} />;
     case 'anime':
-      return <AnimeTab />;
+      return <AnimeTab firstSelectorRef={animeFirstSelectorRef} />;
     case 'variety':
       return <VarietyTab firstSelectorRef={varietyFirstSelectorRef} />;
     case 'live':
@@ -53,6 +54,7 @@ export default function HomeScreen() {
   const firstSectionTitleRef = useRef<any>(null);
   const movieFirstSelectorRef = useRef<any>(null);
   const seriesFirstSelectorRef = useRef<any>(null);
+  const animeFirstSelectorRef = useRef<any>(null);
   const varietyFirstSelectorRef = useRef<any>(null);
   
   // 动画值
@@ -201,7 +203,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, varietyFirstSelectorRef)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef)}
           </Animated.View>
         </ScrollView>
       </ScrollContext.Provider>
