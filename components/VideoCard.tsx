@@ -1,6 +1,7 @@
 import { StyleSheet, View, Text, Pressable, Animated, Easing, useTVEventHandler } from 'react-native';
 import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import FastImage from 'react-native-fast-image';
+import { useScrollContext } from '@/contexts/ScrollContext';
 
 interface VideoCardProps {
   title: string;
@@ -23,6 +24,8 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
   const [isMeasured, setIsMeasured] = useState(false);
   const [measureKey, setMeasureKey] = useState(0);
   const needsScroll = titleWidth > containerWidth && containerWidth > 0;
+  const measureTextRef = useRef<Text>(null);
+  const { renderMeasureElement, clearMeasureElement } = useScrollContext();
   
   // 固定的文本间隔
   const TEXT_GAP = 40;
@@ -66,6 +69,34 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
     }).start();
   }, [scrollAnim]);
 
+  // 当聚焦时，在全局测量容器中渲染测量元素
+  useEffect(() => {
+    // 只在聚焦时才进行测量
+    if (!isFocused) {
+      return;
+    }
+    
+    const measureEl = (
+      <Text 
+        key={measureKey}
+        ref={measureTextRef}
+        style={styles.title}
+        onLayout={(e) => {
+          const width = e.nativeEvent.layout.width;
+          setTitleWidth(width);
+          setIsMeasured(true);
+        }}
+      >
+        {title}
+      </Text>
+    );
+    renderMeasureElement(measureEl);
+    
+    return () => {
+      clearMeasureElement();
+    };
+  }, [isFocused, measureKey, title, renderMeasureElement, clearMeasureElement]);
+
   const handleFocus = () => {
     // 先停止所有动画，防止快速移动时的状态冲突
     scrollAnim.stopAnimation(() => {
@@ -86,6 +117,7 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
   
   // 当测量完成后启动动画
   useEffect(() => {
+    
     if (isFocused && isMeasured && needsScroll) {
       // 停止之前的动画并重置
       scrollAnim.stopAnimation(() => {
@@ -153,7 +185,13 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
           </View>
           <View 
             style={styles.content}
-            onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+            onLayout={(e) => {
+              // 只在第一次或聚焦时测量容器宽度
+              if (containerWidth === 0 || isFocused) {
+                const width = e.nativeEvent.layout.width;
+                setContainerWidth(width);
+              }
+            }}
           >
             <View style={[
               styles.titleContainer,
@@ -171,6 +209,7 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
                           textAlign: 'left',
                           transform: [{ translateX: scrollAnim }],
                           left: 0,
+                          width: titleWidth,
                         },
                       ]}
                     >
@@ -183,6 +222,7 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
                         { 
                           transform: [{ translateX: scrollAnim }],
                           left: titleWidth + TEXT_GAP,
+                          width: titleWidth,
                         },
                       ]}
                     >
@@ -205,20 +245,6 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
           </View>
         </Pressable>
       </Animated.View>
-      {/* 隐藏的文本用于预测量完整宽度 - 始终渲染 */}
-      <View 
-        key={measureKey}
-        style={styles.measureContainer}
-        onLayout={(e) => {
-          const width = e.nativeEvent.layout.width;
-          setTitleWidth(width);
-          setIsMeasured(true);
-        }}
-      >
-        <Text style={styles.title}>
-          {title}
-        </Text>
-      </View>
     </>
   );
 }
@@ -264,17 +290,7 @@ const styles = StyleSheet.create({
   },
   titleScrolling: {
     position: 'absolute',
-    width: 500,
-  },
-  measureContainer: {
-    position: 'absolute',
-    opacity: 0,
-    left: 0,
-    top: 0,
-    zIndex: -999,
-    pointerEvents: 'none',
-    flexDirection: 'row',
-    maxWidth: 5000,
+    // width 将通过内联样式动态设置
   },
   errorOverlay: {
     position: 'absolute',

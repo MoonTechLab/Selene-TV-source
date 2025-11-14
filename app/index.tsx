@@ -1,6 +1,6 @@
-import { StyleSheet, ScrollView, BackHandler, Animated } from 'react-native';
+import { StyleSheet, ScrollView, BackHandler, Animated, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import TabSwitcher, { TabType } from '@/components/TabSwitcher';
 import HomeTab from '@/components/tabs/HomeTab';
 import MovieTab from '@/components/tabs/MovieTab';
@@ -50,12 +50,24 @@ export default function HomeScreen() {
   const [isSwitching, setIsSwitching] = useState(false);
   const timerRef = useRef<number | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const measureContainerRef = useRef<View>(null);
   const tabSwitcherRef = useRef<any>(null);
   const firstSectionTitleRef = useRef<any>(null);
   const movieFirstSelectorRef = useRef<any>(null);
   const seriesFirstSelectorRef = useRef<any>(null);
   const animeFirstSelectorRef = useRef<any>(null);
   const varietyFirstSelectorRef = useRef<any>(null);
+  
+  // 用于在全局测量容器中渲染测量元素
+  const [measureElement, setMeasureElement] = useState<React.ReactNode>(null);
+  
+  const renderMeasureElement = useCallback((element: React.ReactNode) => {
+    setMeasureElement(element);
+  }, []);
+  
+  const clearMeasureElement = useCallback(() => {
+    setMeasureElement(null);
+  }, []);
   
   // 动画值
   const translateX = useRef(new Animated.Value(0)).current;
@@ -173,7 +185,7 @@ export default function HomeScreen() {
       locations={[0, 0.4, 0.7, 1]}
       style={styles.container}
     >
-      <ScrollContext.Provider value={{ scrollViewRef }}>
+      <ScrollContext.Provider value={{ scrollViewRef, measureContainerRef, renderMeasureElement, clearMeasureElement }}>
         <ScrollView 
           ref={scrollViewRef}
           style={styles.scrollView}
@@ -206,6 +218,14 @@ export default function HomeScreen() {
             {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef)}
           </Animated.View>
         </ScrollView>
+        
+        {/* 全局测量容器 - 不受任何父容器宽度限制 */}
+        <View 
+          ref={measureContainerRef}
+          style={styles.globalMeasureContainer}
+        >
+          {measureElement}
+        </View>
       </ScrollContext.Provider>
     </LinearGradient>
   );
@@ -217,5 +237,15 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  globalMeasureContainer: {
+    position: 'absolute',
+    opacity: 0,
+    left: 0,
+    top: 0,
+    zIndex: -999,
+    pointerEvents: 'none',
+    flexDirection: 'row',
+    maxWidth: 5000,
   },
 });
