@@ -70,10 +70,11 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
       const animation = optionAnimations.current[option.value];
       if (animation) {
         const isFocused = focusedValue === option.value;
-        Animated.timing(animation, {
+        Animated.spring(animation, {
           toValue: isFocused ? 1.05 : 1,
-          duration: 300,
           useNativeDriver: true,
+          friction: 8,
+          tension: 100,
         }).start();
       }
     });

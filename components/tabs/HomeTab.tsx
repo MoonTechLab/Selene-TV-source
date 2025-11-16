@@ -76,6 +76,7 @@ export default function HomeTab({ firstSectionTitleRef }: HomeTabProps = {}) {
       id: item.id,
       title: item.title,
       coverUrl: item.poster,
+      from: 'douban' as const,
     }));
 
   // 将 Bangumi 数据转换为 RecommendSection 需要的格式
@@ -84,6 +85,7 @@ export default function HomeTab({ firstSectionTitleRef }: HomeTabProps = {}) {
       id: String(item.id),
       title: item.nameCn || item.name,
       coverUrl: item.images.large || item.images.common || item.images.medium || item.images.small || item.images.grid,
+      from: 'bangumi' as const,
     }));
 
   const hotMovieVideos = convertToVideos(hotMovies);

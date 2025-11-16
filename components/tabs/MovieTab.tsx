@@ -650,6 +650,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
                       <VideoCard
                         title={movie.title}
                         coverUrl={movie.poster}
+                        from="douban"
                         onPress={() => console.log('Pressed:', movie.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
                         nextFocusUp={rowIndex === 0 ? (regionSelectorHandle ?? undefined) : undefined}

@@ -80,10 +80,11 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
   useEffect(() => {
     tabs.forEach((tab) => {
       const isFocused = focusedTab === tab.key;
-      Animated.timing(tabAnimations[tab.key], {
+      Animated.spring(tabAnimations[tab.key], {
         toValue: isFocused ? 1.05 : 1,
-        duration: 300,
         useNativeDriver: true,
+        friction: 8,
+        tension: 100,
       }).start();
     });
   }, [focusedTab]);

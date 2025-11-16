@@ -45,10 +45,11 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
   useEffect(() => {
     options.forEach((option) => {
       const isFocused = focusedKey === option.key;
-      Animated.timing(optionAnimations[option.key], {
+      Animated.spring(optionAnimations[option.key], {
         toValue: isFocused ? 1.05 : 1,
-        duration: 300,
         useNativeDriver: true,
+        friction: 8,
+        tension: 100,
       }).start();
     });
   }, [focusedKey]);

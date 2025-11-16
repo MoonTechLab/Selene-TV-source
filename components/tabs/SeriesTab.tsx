@@ -670,6 +670,7 @@ const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) =>
                       <VideoCard
                         title={item.title}
                         coverUrl={item.poster}
+                        from="douban"
                         onPress={() => console.log('Pressed:', item.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
                         nextFocusUp={rowIndex === 0 ? (typeSelectorHandle ?? undefined) : undefined}

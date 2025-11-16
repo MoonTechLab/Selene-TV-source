@@ -749,6 +749,7 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
                         <VideoCard
                           title={title}
                           coverUrl={coverUrl}
+                          from={selectedCategory === 'new' ? 'bangumi' : 'douban'}
                           onPress={() => console.log('Pressed:', title)}
                           onFocus={() => handleCardFocus(rowIndex)}
                           nextFocusUp={rowIndex === 0 ? (weekdaySelectorHandle ?? undefined) : undefined}

@@ -6,6 +6,7 @@ import { useScrollContext } from '@/contexts/ScrollContext';
 interface VideoCardProps {
   title: string;
   coverUrl: string;
+  from?: 'douban' | 'bangumi';
   onPress?: () => void;
   onFocus?: (cardRef: any) => void;
   onBlur?: () => void;
@@ -14,7 +15,7 @@ interface VideoCardProps {
   nextFocusDown?: number;
 }
 
-function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
+function VideoCard({ title, coverUrl, from = 'douban', onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const cardRef = useRef<any>(null);
@@ -107,10 +108,11 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
     setIsMeasured(false);
     setMeasureKey(prev => prev + 1);
     setIsFocused(true);
-    Animated.timing(scaleAnim, {
+    Animated.spring(scaleAnim, {
       toValue: 1.08,
-      duration: 100,
       useNativeDriver: true,
+      friction: 8,
+      tension: 100,
     }).start();
     onFocusProp?.(cardRef.current);
   };
@@ -129,10 +131,11 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
 
   const handleBlur = () => {
     setIsFocused(false);
-    Animated.timing(scaleAnim, {
+    Animated.spring(scaleAnim, {
       toValue: 1,
-      duration: 100,
       useNativeDriver: true,
+      friction: 8,
+      tension: 100,
     }).start();
     stopScrollAnimation();
     onBlurProp?.();
@@ -328,6 +331,7 @@ export default memo(VideoCard, (prevProps, nextProps) => {
   return (
     prevProps.title === nextProps.title &&
     prevProps.coverUrl === nextProps.coverUrl &&
+    prevProps.from === nextProps.from &&
     prevProps.nextFocusUp === nextProps.nextFocusUp &&
     prevProps.nextFocusDown === nextProps.nextFocusDown
     // 注意：onPress、onFocus、onBlur 等函数引用可能每次都不同

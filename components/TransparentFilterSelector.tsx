@@ -49,10 +49,11 @@ const TransparentFilterSelector = forwardRef<any, TransparentFilterSelectorProps
       const animation = optionAnimations.current[option.key];
       if (animation) {
         const isFocused = focusedKey === option.key;
-        Animated.timing(animation, {
+        Animated.spring(animation, {
           toValue: isFocused ? 1.05 : 1,
-          duration: 300,
           useNativeDriver: true,
+          friction: 8,
+          tension: 100,
         }).start();
       }
     });

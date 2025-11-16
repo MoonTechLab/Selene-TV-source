@@ -8,6 +8,7 @@ interface VideoItem {
   id: string;
   title: string;
   coverUrl: string;
+  from?: 'douban' | 'bangumi';
 }
 
 interface RecommendSectionProps {
@@ -42,10 +43,11 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
   };
 
   const handleTitleFocus = () => {
-    Animated.timing(titleFocusAnim, {
+    Animated.spring(titleFocusAnim, {
       toValue: 1,
-      duration: 200,
       useNativeDriver: true,
+      friction: 8,
+      tension: 100,
     }).start();
 
     if (!mainScrollViewRef?.current || !titlePressableRef.current) return;
@@ -64,7 +66,7 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
   const handleTitleBlur = () => {
     Animated.timing(titleFocusAnim, {
       toValue: 0,
-      duration: 200,
+      duration: 150,
       useNativeDriver: true,
     }).start();
   };
@@ -162,6 +164,8 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
           onPress={onTitlePress}
           onFocus={handleTitleFocus}
           onBlur={handleTitleBlur}
+          android_disableSound={true}
+          style={{ backgroundColor: 'transparent' }}
         >
           <Animated.View
             style={[
@@ -169,8 +173,16 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
               {
                 backgroundColor: titleFocusAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.1)'],
+                  outputRange: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)'],
                 }),
+                transform: [
+                  {
+                    scale: titleFocusAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.1],
+                    }),
+                  },
+                ],
               },
             ]}
           >
@@ -206,6 +218,7 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
                 key={video.id}
                 title={video.title}
                 coverUrl={video.coverUrl}
+                from={video.from}
                 onFocus={(cardRef) => handleCardFocus(index, cardRef)}
                 onNavigateVertical={(direction) => {
                   if (direction === 'up') {

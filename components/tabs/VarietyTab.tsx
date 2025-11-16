@@ -659,6 +659,7 @@ const VarietyTab = forwardRef<any, VarietyTabProps>(({ firstSelectorRef }, ref) 
                       <VideoCard
                         title={show.title}
                         coverUrl={show.poster}
+                        from="douban"
                         onPress={() => console.log('Pressed:', show.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
                         nextFocusUp={rowIndex === 0 ? (regionSelectorHandle ?? undefined) : undefined}
