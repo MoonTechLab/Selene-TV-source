@@ -8,6 +8,7 @@ import {
   DoubanRecommendsParams,
 } from '@/types/douban';
 import doubanCacheService from './doubanCacheService';
+import UserDataService from './userDataService';
 
 /**
  * 豆瓣服务类
@@ -95,20 +96,19 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
-   * @param dataSourceKey - 数据源，默认 'direct'
    */
   async getHotMovies(params?: {
     pageLimit?: number;
     page?: number;
-    dataSourceKey?: DoubanDataSourceKey;
   }): Promise<ApiResponse<DoubanMovie[]>> {
+    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'movie',
       category: '热门',
       type: '全部',
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
-      dataSourceKey: params?.dataSourceKey ?? 'direct',
+      dataSourceKey,
     });
   }
 
@@ -117,20 +117,19 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
-   * @param dataSourceKey - 数据源，默认 'direct'
    */
   async getHotTvShows(params?: {
     pageLimit?: number;
     page?: number;
-    dataSourceKey?: DoubanDataSourceKey;
   }): Promise<ApiResponse<DoubanMovie[]>> {
+    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'tv',
       category: '最近热门',
       type: 'tv',
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
-      dataSourceKey: params?.dataSourceKey ?? 'direct',
+      dataSourceKey,
     });
   }
 
@@ -139,20 +138,19 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
-   * @param dataSourceKey - 数据源，默认 'direct'
    */
   async getHotShows(params?: {
     pageLimit?: number;
     page?: number;
-    dataSourceKey?: DoubanDataSourceKey;
   }): Promise<ApiResponse<DoubanMovie[]>> {
+    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'tv',
       category: 'show',
       type: 'show',
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
-      dataSourceKey: params?.dataSourceKey ?? 'direct',
+      dataSourceKey,
     });
   }
 
@@ -299,6 +297,7 @@ class DoubanService {
   async fetchDoubanRecommends(
     params: DoubanRecommendsParams
   ): Promise<ApiResponse<DoubanMovie[]>> {
+    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     const {
       kind,
       category = 'all',
@@ -310,7 +309,6 @@ class DoubanService {
       label = 'all',
       pageLimit = 20,
       page = 0,
-      dataSourceKey = 'direct',
     } = params;
 
     // 初始化缓存服务
