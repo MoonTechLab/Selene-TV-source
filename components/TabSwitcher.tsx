@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated, findNodeHandle } from 'react-native';
-import { Home, Film, Tv, Cat, Clover, User, Search, Radio } from 'lucide-react-native';
+import { Home, Film, Tv, Cat, Clover, Settings, Search, Radio } from 'lucide-react-native';
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 
 export type TabType = 'home' | 'movie' | 'series' | 'anime' | 'variety' | 'live' | 'mine' | 'search';
@@ -17,7 +17,7 @@ const tabs: TabItem[] = [
   { key: 'anime', label: '动漫', icon: Cat },
   { key: 'variety', label: '综艺', icon: Clover },
   { key: 'live', label: '直播', icon: Radio },
-  { key: 'mine', label: '我的', icon: User },
+  { key: 'mine', label: '设置', icon: Settings },
   { key: 'search', icon: Search },
 ];
 

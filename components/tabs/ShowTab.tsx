@@ -148,11 +148,11 @@ const calculateLayout = () => {
   };
 };
 
-interface VarietyTabProps {
+interface ShowTabProps {
   firstSelectorRef?: React.RefObject<any>;
 }
 
-const VarietyTab = forwardRef<any, VarietyTabProps>(({ firstSelectorRef }, ref) => {
+const ShowTab = forwardRef<any, ShowTabProps>(({ firstSelectorRef }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('recent');
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -709,9 +709,9 @@ const VarietyTab = forwardRef<any, VarietyTabProps>(({ firstSelectorRef }, ref) 
   );
 });
 
-VarietyTab.displayName = 'VarietyTab';
+ShowTab.displayName = 'VarietyTab';
 
-export default VarietyTab;
+export default ShowTab;
 
 const styles = StyleSheet.create({
   container: {

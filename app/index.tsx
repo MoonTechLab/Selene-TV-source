@@ -4,11 +4,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import TabSwitcher, { TabType } from '@/components/TabSwitcher';
 import HomeTab from '@/components/tabs/HomeTab';
 import MovieTab from '@/components/tabs/MovieTab';
-import SeriesTab from '@/components/tabs/SeriesTab';
+import TvTab from '@/components/tabs/TvTab';
 import AnimeTab from '@/components/tabs/AnimeTab';
-import VarietyTab from '@/components/tabs/VarietyTab';
+import ShowTab from '@/components/tabs/ShowTab';
 import LiveTab from '@/components/tabs/LiveTab';
-import MineTab from '@/components/tabs/MineTab';
+import SettingsTab from '@/components/tabs/SettingsTab';
 import SearchTab from '@/components/tabs/SearchTab';
 import { ScrollContext } from '@/contexts/ScrollContext';
 
@@ -28,15 +28,15 @@ const renderTabContent = (
     case 'movie':
       return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
     case 'series':
-      return <SeriesTab firstSelectorRef={seriesFirstSelectorRef} />;
+      return <TvTab firstSelectorRef={seriesFirstSelectorRef} />;
     case 'anime':
       return <AnimeTab firstSelectorRef={animeFirstSelectorRef} />;
     case 'variety':
-      return <VarietyTab firstSelectorRef={varietyFirstSelectorRef} />;
+      return <ShowTab firstSelectorRef={varietyFirstSelectorRef} />;
     case 'live':
       return <LiveTab />;
     case 'mine':
-      return <MineTab />;
+      return <SettingsTab />;
     case 'search':
       return <SearchTab />;
     default:

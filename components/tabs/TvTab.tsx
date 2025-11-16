@@ -161,11 +161,11 @@ const calculateLayout = () => {
   };
 };
 
-interface SeriesTabProps {
+interface TvTabProps {
   firstSelectorRef?: React.RefObject<any>;
 }
 
-const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) => {
+const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('popular');
   const [selectedType, setSelectedType] = useState('all');
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -720,9 +720,9 @@ const SeriesTab = forwardRef<any, SeriesTabProps>(({ firstSelectorRef }, ref) =>
   );
 });
 
-SeriesTab.displayName = 'SeriesTab';
+TvTab.displayName = 'SeriesTab';
 
-export default SeriesTab;
+export default TvTab;
 
 const styles = StyleSheet.create({
   container: {

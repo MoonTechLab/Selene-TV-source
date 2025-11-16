@@ -1,9 +1,9 @@
 import { StyleSheet, View, Text } from 'react-native';
 
-export default function MineTab() {
+export default function SettingsTab() {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>我的内容</Text>
+      <Text style={styles.label}>设置</Text>
     </View>
   );
 }
