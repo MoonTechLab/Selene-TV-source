@@ -5,6 +5,7 @@ import {
   DoubanItem,
   DoubanDataSourceKey,
   DoubanKind,
+  DoubanRecommendsParams,
 } from '@/types/douban';
 import doubanCacheService from './doubanCacheService';
 
@@ -286,6 +287,223 @@ class DoubanService {
       }
       return ApiResponseHelper.error(
         `豆瓣数据请求异常: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * 获取豆瓣推荐数据（新版筛选逻辑）
+   * 
+   * @param params - 推荐数据请求参数
+   */
+  async fetchDoubanRecommends(
+    params: DoubanRecommendsParams
+  ): Promise<ApiResponse<DoubanMovie[]>> {
+    const {
+      kind,
+      category = 'all',
+      format = 'all',
+      region = 'all',
+      year = 'all',
+      platform = 'all',
+      sort = 'T',
+      label = 'all',
+      pageLimit = 20,
+      page = 0,
+      dataSourceKey = 'direct',
+    } = params;
+
+    // 初始化缓存服务
+    await this.initCache();
+
+    // 生成缓存键
+    const cacheKey = doubanCacheService.generateDoubanRecommendsCacheKey({
+      kind,
+      category,
+      format,
+      region,
+      year,
+      platform,
+      sort,
+      label,
+      pageLimit,
+      page,
+    });
+
+    // 尝试从缓存获取数据（存取均为已处理后的 DoubanMovie 列表）
+    try {
+      const cachedData = await doubanCacheService.get<DoubanMovie[]>(
+        cacheKey,
+        (raw) => {
+          if (!Array.isArray(raw)) {
+            throw new Error('Invalid cache data format');
+          }
+          return raw.map((m: any) => ({
+            id: m.id?.toString() || '',
+            title: m.title?.toString() || '',
+            poster: m.poster?.toString() || '',
+            rate: m.rate?.toString(),
+            year: m.year?.toString() || '',
+          }));
+        }
+      );
+
+      if (cachedData) {
+        return ApiResponseHelper.success(cachedData);
+      }
+    } catch (e) {
+      // 缓存读取失败，继续执行网络请求
+      console.log('读取缓存失败:', e);
+    }
+
+    // 处理筛选参数，将 'all' 转换为空字符串
+    const categoryParam = category === 'all' ? '' : category;
+    const formatParam = format === 'all' ? '' : format;
+    const regionParam = region === 'all' ? '' : region;
+    const yearParam = year === 'all' ? '' : year;
+    const platformParam = platform === 'all' ? '' : platform;
+    const labelParam = label === 'all' ? '' : label;
+    const sortParam = sort === 'T' ? '' : sort;
+
+    // 构建 selected_categories
+    const selectedCategories: Record<string, string> = {
+      '类型': categoryParam,
+    };
+    if (formatParam) {
+      selectedCategories['形式'] = formatParam;
+    }
+    if (regionParam) {
+      selectedCategories['地区'] = regionParam;
+    }
+
+    // 构建 tags 数组
+    const tags: string[] = [];
+    if (categoryParam) {
+      tags.push(categoryParam);
+    }
+    if (!categoryParam && formatParam) {
+      tags.push(formatParam);
+    }
+    if (labelParam) {
+      tags.push(labelParam);
+    }
+    if (regionParam) {
+      tags.push(regionParam);
+    }
+    if (yearParam) {
+      tags.push(yearParam);
+    }
+    if (platformParam) {
+      tags.push(platformParam);
+    }
+
+    // 根据数据源选项构建不同的基础URL
+    let baseUrl: string;
+    switch (dataSourceKey) {
+      case 'cdn_tencent':
+        baseUrl = `https://m.douban.cmliussss.net/rexxar/api/v2/${kind}/recommend`;
+        break;
+      case 'cdn_aliyun':
+        baseUrl = `https://m.douban.cmliussss.com/rexxar/api/v2/${kind}/recommend`;
+        break;
+      case 'direct':
+      default:
+        baseUrl = `https://m.douban.com/rexxar/api/v2/${kind}/recommend`;
+        break;
+    }
+
+    // 构建查询参数
+    const queryParams: Record<string, string> = {
+      refresh: '0',
+      start: (page * pageLimit).toString(),
+      count: pageLimit.toString(),
+      selected_categories: JSON.stringify(selectedCategories),
+      uncollect: 'false',
+      score_range: '0,10',
+      tags: tags.join(','),
+    };
+
+    if (sortParam) {
+      queryParams.sort = sortParam;
+    }
+
+    const urlParams = new URLSearchParams(queryParams);
+    let targetUrl = `${baseUrl}?${urlParams.toString()}`;
+
+    // 如果使用 CORS 代理，包装 URL
+    if (dataSourceKey === 'cors_proxy') {
+      targetUrl = `https://ciao-cors.is-an.org/${encodeURIComponent(targetUrl)}`;
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Referer': 'https://movie.douban.com/',
+        'Accept': 'application/json, text/plain, */*',
+      };
+
+      // 如果使用 CORS 代理，添加 Origin 头
+      if (dataSourceKey === 'cors_proxy') {
+        headers['Origin'] = this.getUniqueOrigin();
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(targetUrl, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        try {
+          const data: any = await response.json();
+
+          // 验证数据结构
+          if (!data || !Array.isArray(data.items)) {
+            return ApiResponseHelper.error(
+              `豆瓣推荐数据格式错误: ${JSON.stringify(Object.keys(data || {}))}`
+            );
+          }
+
+          // 过滤并转换数据
+          const filteredItems = data.items
+            .filter((item: any) => item.type === 'movie' || item.type === 'tv')
+            .map((item: any) => this.parseItemToMovie(item));
+
+          // 缓存成功的结果（保存已处理后的 DoubanMovie 列表），缓存时间为 6 小时
+          try {
+            await doubanCacheService.set(cacheKey, filteredItems, 6 * 60 * 60 * 1000);
+          } catch (cacheError) {
+            console.log('缓存数据失败:', cacheError);
+          }
+
+          return ApiResponseHelper.success(filteredItems, response.status);
+        } catch (parseError) {
+          return ApiResponseHelper.error(
+            `豆瓣推荐数据解析失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+          );
+        }
+      } else {
+        console.log(`获取豆瓣推荐数据失败: ${response.status}`);
+        return ApiResponseHelper.error(
+          `获取豆瓣推荐数据失败: ${response.status}`,
+          response.status
+        );
+      }
+    } catch (error) {
+      console.log(
+        `豆瓣推荐数据请求异常: ${error instanceof Error ? error.message : String(error)}`
+      );
+      if (error instanceof Error && error.name === 'AbortError') {
+        return ApiResponseHelper.error('豆瓣推荐数据请求超时');
+      }
+      return ApiResponseHelper.error(
+        `豆瓣推荐数据请求异常: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

@@ -206,6 +206,7 @@ export default function HomeScreen() {
             firstSectionTitleRef={firstSectionTitleRef}
             movieFirstSelectorRef={movieFirstSelectorRef}
             seriesFirstSelectorRef={seriesFirstSelectorRef}
+            animeFirstSelectorRef={animeFirstSelectorRef}
             varietyFirstSelectorRef={varietyFirstSelectorRef}
           />
 

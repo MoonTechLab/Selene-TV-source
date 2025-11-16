@@ -30,6 +30,7 @@ interface TabSwitcherProps {
   firstSectionTitleRef?: React.RefObject<any>;
   movieFirstSelectorRef?: React.RefObject<any>;
   seriesFirstSelectorRef?: React.RefObject<any>;
+  animeFirstSelectorRef?: React.RefObject<any>;
   varietyFirstSelectorRef?: React.RefObject<any>;
 }
 
@@ -46,6 +47,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
   firstSectionTitleRef,
   movieFirstSelectorRef,
   seriesFirstSelectorRef,
+  animeFirstSelectorRef,
   varietyFirstSelectorRef
 }, ref) => {
   const hasFocus = focusedTab !== null;
@@ -100,6 +102,9 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
       case 'series':
         targetRef = seriesFirstSelectorRef?.current;
         break;
+      case 'anime':
+        targetRef = animeFirstSelectorRef?.current;
+        break;
       case 'variety':
         targetRef = varietyFirstSelectorRef?.current;
         break;
@@ -111,7 +116,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
     } else {
       setNextFocusNodeHandle(null);
     }
-  }, [activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, varietyFirstSelectorRef]);
+  }, [activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef]);
 
   // 监听 activeTab 变化，更新节点句柄
   useEffect(() => {

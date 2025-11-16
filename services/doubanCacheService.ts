@@ -262,11 +262,19 @@ class DoubanCacheService {
               const expiration = Number(jsonData.expiration);
               
               if (Date.now() - timestamp > expiration) {
-                item.delete();
+                try {
+                  if (item.exists) {
+                    item.delete();
+                  }
+                } catch (_) {}
               }
             } catch (e) {
               // 如果文件损坏，直接删除
-              item.delete();
+              try {
+                if (item.exists) {
+                  item.delete();
+                }
+              } catch (_) {}
             }
           }
         }
@@ -289,7 +297,11 @@ class DoubanCacheService {
         const items = this.cacheDir.list();
         for (const item of items) {
           if (item instanceof File) {
-            item.delete();
+            try {
+              if (item.exists) {
+                item.delete();
+              }
+            } catch (_) {}
           }
         }
       }

@@ -16,15 +16,17 @@ interface FilterSelectorProps {
   onBlur: () => void;
   onSelect: (key: string) => void;
   nextFocusUp?: any;
+  nextFocusDownMap?: Record<string, any>; // 为每个选项指定不同的 nextFocusDown
 }
 
 const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
-  const { options, selectedKey, focusedKey, onFocus, onBlur, onSelect, nextFocusUp } = props;
+  const { options, selectedKey, focusedKey, onFocus, onBlur, onSelect, nextFocusUp, nextFocusDownMap } = props;
   
   // 为每个选项创建 ref
   const optionRefs = useRef<Record<string, any>>({});
   const [preferredFocusTarget, setPreferredFocusTarget] = useState<number | null>(null);
   const [nextFocusUpHandle, setNextFocusUpHandle] = useState<number | null>(null);
+  const [nextFocusDownHandles, setNextFocusDownHandles] = useState<Record<string, number | null>>({});
 
   // 暴露当前选中项的引用给父组件
   useImperativeHandle(ref, () => {
@@ -70,6 +72,25 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
     }
   }, [nextFocusUp]);
 
+  // 当 nextFocusDownMap 改变时，获取各个选项的 nextFocusDown 节点句柄
+  useEffect(() => {
+    if (nextFocusDownMap) {
+      const handles: Record<string, number | null> = {};
+      Object.keys(nextFocusDownMap).forEach((key) => {
+        const target = nextFocusDownMap[key];
+        if (target) {
+          const handle = findNodeHandle(target);
+          handles[key] = handle;
+        } else {
+          handles[key] = null;
+        }
+      });
+      setNextFocusDownHandles(handles);
+    } else {
+      setNextFocusDownHandles({});
+    }
+  }, [nextFocusDownMap]);
+
   return (
     <TVFocusGuideView 
       style={styles.container}
@@ -97,6 +118,7 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
             onBlur={onBlur}
             onPress={() => onSelect(option.key)}
             nextFocusUp={nextFocusUpHandle}
+            nextFocusDown={nextFocusDownHandles[option.key] ?? undefined}
           >
             <Text style={[
               styles.optionText,

@@ -1,12 +1,15 @@
 import { StyleSheet, View, Text, Dimensions, useWindowDimensions, findNodeHandle } from 'react-native';
 import { useState, useMemo, useRef, useEffect, useCallback, forwardRef } from 'react';
 import FilterSelector from '../FilterSelector';
+import TransparentFilterSelector from '../TransparentFilterSelector';
+import FilterDialog, { SelectorOption } from '../FilterDialog';
 import VideoCard from '../VideoCard';
 import VideoCardSkeleton from '../VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
 import doubanService from '@/services/doubanService';
 
 const CATEGORY_OPTIONS = [
+  { key: 'all', label: '全部' },
   { key: 'popular', label: '热门电影' },
   { key: 'latest', label: '最新电影' },
   { key: 'douban', label: '豆瓣高分' },
@@ -19,6 +22,91 @@ const REGION_OPTIONS = [
   { key: 'western', label: '欧美' },
   { key: 'korean', label: '韩国' },
   { key: 'japanese', label: '日本' },
+];
+
+// 全部分类的筛选选项
+const FILTER_OPTIONS = [
+  { key: 'type', label: '类型' },
+  { key: 'region', label: '地区' },
+  { key: 'year', label: '年代' },
+  { key: 'sort', label: '排序' },
+];
+
+const MOVIE_TYPE_OPTIONS: SelectorOption[] = [
+  { label: '全部', value: 'all' },
+  { label: '喜剧', value: 'comedy' },
+  { label: '爱情', value: 'romance' },
+  { label: '动作', value: 'action' },
+  { label: '科幻', value: 'sci-fi' },
+  { label: '悬疑', value: 'suspense' },
+  { label: '犯罪', value: 'crime' },
+  { label: '惊悚', value: 'thriller' },
+  { label: '冒险', value: 'adventure' },
+  { label: '音乐', value: 'music' },
+  { label: '历史', value: 'history' },
+  { label: '奇幻', value: 'fantasy' },
+  { label: '恐怖', value: 'horror' },
+  { label: '战争', value: 'war' },
+  { label: '传记', value: 'biography' },
+  { label: '歌舞', value: 'musical' },
+  { label: '武侠', value: 'wuxia' },
+  { label: '情色', value: 'erotic' },
+  { label: '灾难', value: 'disaster' },
+  { label: '西部', value: 'western' },
+  { label: '纪录片', value: 'documentary' },
+  { label: '短片', value: 'short' },
+];
+
+const MOVIE_REGION_OPTIONS: SelectorOption[] = [
+  { label: '全部', value: 'all' },
+  { label: '华语', value: 'chinese' },
+  { label: '欧美', value: 'western' },
+  { label: '韩国', value: 'korean' },
+  { label: '日本', value: 'japanese' },
+  { label: '中国大陆', value: 'mainland_china' },
+  { label: '美国', value: 'usa' },
+  { label: '中国香港', value: 'hong_kong' },
+  { label: '中国台湾', value: 'taiwan' },
+  { label: '英国', value: 'uk' },
+  { label: '法国', value: 'france' },
+  { label: '德国', value: 'germany' },
+  { label: '意大利', value: 'italy' },
+  { label: '西班牙', value: 'spain' },
+  { label: '印度', value: 'india' },
+  { label: '泰国', value: 'thailand' },
+  { label: '俄罗斯', value: 'russia' },
+  { label: '加拿大', value: 'canada' },
+  { label: '澳大利亚', value: 'australia' },
+  { label: '爱尔兰', value: 'ireland' },
+  { label: '瑞典', value: 'sweden' },
+  { label: '巴西', value: 'brazil' },
+  { label: '丹麦', value: 'denmark' },
+];
+
+const MOVIE_YEAR_OPTIONS: SelectorOption[] = [
+  { label: '全部', value: 'all' },
+  { label: '2020年代', value: '2020s' },
+  { label: '2025', value: '2025' },
+  { label: '2024', value: '2024' },
+  { label: '2023', value: '2023' },
+  { label: '2022', value: '2022' },
+  { label: '2021', value: '2021' },
+  { label: '2020', value: '2020' },
+  { label: '2019', value: '2019' },
+  { label: '2010年代', value: '2010s' },
+  { label: '2000年代', value: '2000s' },
+  { label: '90年代', value: '1990s' },
+  { label: '80年代', value: '1980s' },
+  { label: '70年代', value: '1970s' },
+  { label: '60年代', value: '1960s' },
+  { label: '更早', value: 'earlier' },
+];
+
+const MOVIE_SORT_OPTIONS: SelectorOption[] = [
+  { label: '综合排序', value: 'T' },
+  { label: '近期热度', value: 'U' },
+  { label: '首映时间', value: 'R' },
+  { label: '高分优先', value: 'S' },
 ];
 
 // 分类和地区的 value map（value 就是其文本）
@@ -75,6 +163,19 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
   const [focusedRegionKey, setFocusedRegionKey] = useState<string | null>(null);
   
+  // 全部分类的筛选状态
+  const [focusedFilterKey, setFocusedFilterKey] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState('all');
+  const [selectedAllRegion, setSelectedAllRegion] = useState('all');
+  const [selectedYear, setSelectedYear] = useState('all');
+  const [selectedSort, setSelectedSort] = useState('T');
+  
+  // 筛选对话框状态
+  const [filterDialogVisible, setFilterDialogVisible] = useState(false);
+  const [currentFilterType, setCurrentFilterType] = useState<string | null>(null);
+  const filterDialogRef = useRef<any>(null);
+  const transparentFilterRef = useRef<any>(null);
+  
   // 数据状态
   const [movies, setMovies] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -105,8 +206,11 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
 
   // 获取当前筛选状态
   const getCurrentFilterState = useCallback(() => {
+    if (selectedCategory === 'all') {
+      return `all-${selectedType}-${selectedAllRegion}-${selectedYear}-${selectedSort}`;
+    }
     return `${selectedCategory}-${selectedRegion}`;
-  }, [selectedCategory, selectedRegion]);
+  }, [selectedCategory, selectedRegion, selectedType, selectedAllRegion, selectedYear, selectedSort]);
 
   // 加载数据
   const loadData = useCallback(async (isRefresh: boolean = false) => {
@@ -126,40 +230,115 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
     }
 
     try {
-      const result = await doubanService.getCategoryData({
-        kind: 'movie',
-        category: CATEGORY_VALUE_MAP[selectedCategory],
-        type: REGION_VALUE_MAP[selectedRegion],
-        page: currentPage,
-        pageLimit,
-      });
-
-      // 检查当前筛选状态是否仍然与发起请求时一致
-      const currentFilterState = getCurrentFilterState();
-      if (requestFilterState !== currentFilterState) {
-        return;
-      }
-
-      if (result.success && result.data) {
-        setMovies(prev => {
-          const newMovies = isRefresh ? result.data! : [...prev, ...result.data!];
-          return newMovies;
-        });
-        setPage(currentPage + 1);
+      let allMovies: any[] = [];
+      
+      if (selectedCategory === 'all') {
+        // 全部分类：使用 fetchDoubanRecommends API
+        const typeOption = MOVIE_TYPE_OPTIONS.find(opt => opt.value === selectedType);
+        const regionOption = MOVIE_REGION_OPTIONS.find(opt => opt.value === selectedAllRegion);
+        const yearOption = MOVIE_YEAR_OPTIONS.find(opt => opt.value === selectedYear);
         
-        // 只有当返回的数据为空时才停止分页
-        if (result.data.length === 0) {
-          setHasMore(false);
+        const baseParams = {
+          kind: 'movie' as const,
+          category: selectedType === 'all' ? 'all' : typeOption?.label,
+          region: selectedAllRegion === 'all' ? 'all' : regionOption?.label,
+          year: selectedYear === 'all' ? 'all' : yearOption?.label,
+          sort: selectedSort,
+          pageLimit,
+        };
+        
+        // 首次加载时加载两页数据
+        if (isRefresh) {
+          const [result1, result2] = await Promise.all([
+            doubanService.fetchDoubanRecommends({ ...baseParams, page: 0 }),
+            doubanService.fetchDoubanRecommends({ ...baseParams, page: 1 }),
+          ]);
+          
+          // 检查当前筛选状态是否仍然与发起请求时一致
+          const currentFilterState = getCurrentFilterState();
+          if (requestFilterState !== currentFilterState) {
+            return;
+          }
+          
+          if (result1.success && result1.data) {
+            allMovies = [...result1.data];
+          }
+          if (result2.success && result2.data) {
+            allMovies = [...allMovies, ...result2.data];
+          }
+          
+          if (allMovies.length > 0) {
+            setMovies(allMovies);
+            setPage(2); // 已加载两页，下次从第3页开始
+            setHasMore(true);
+          } else {
+            setMovies([]);
+            setHasMore(false);
+            if (!result1.success) {
+              setErrorMessage(result1.error || '加载失败');
+            }
+          }
+        } else {
+          // 非首次加载，正常加载单页
+          const result = await doubanService.fetchDoubanRecommends({
+            ...baseParams,
+            page: currentPage,
+          });
+          
+          // 检查当前筛选状态是否仍然与发起请求时一致
+          const currentFilterState = getCurrentFilterState();
+          if (requestFilterState !== currentFilterState) {
+            return;
+          }
+          
+          if (result.success && result.data) {
+            setMovies(prev => [...prev, ...result.data!]);
+            setPage(currentPage + 1);
+            
+            if (result.data.length === 0) {
+              setHasMore(false);
+            }
+          } else {
+            setErrorMessage(result.error || '加载失败');
+          }
         }
       } else {
-        setErrorMessage(result.error || '加载失败');
+        // 其他分类：使用原有逻辑
+        const result = await doubanService.getCategoryData({
+          kind: 'movie',
+          category: CATEGORY_VALUE_MAP[selectedCategory],
+          type: REGION_VALUE_MAP[selectedRegion],
+          page: currentPage,
+          pageLimit,
+        });
+        
+        // 检查当前筛选状态是否仍然与发起请求时一致
+        const currentFilterState = getCurrentFilterState();
+        if (requestFilterState !== currentFilterState) {
+          return;
+        }
+
+        if (result.success && result.data) {
+          setMovies(prev => {
+            const newMovies = isRefresh ? result.data! : [...prev, ...result.data!];
+            return newMovies;
+          });
+          setPage(currentPage + 1);
+          
+          // 只有当返回的数据为空时才停止分页
+          if (result.data.length === 0) {
+            setHasMore(false);
+          }
+        } else {
+          setErrorMessage(result.error || '加载失败');
+        }
       }
     } catch (error) {
       setErrorMessage('加载失败');
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, hasMore, page, selectedCategory, selectedRegion, getCurrentFilterState, pageLimit]);
+  }, [isLoading, hasMore, page, selectedCategory, selectedRegion, selectedType, selectedAllRegion, selectedYear, selectedSort, getCurrentFilterState, pageLimit]);
 
 
 
@@ -168,6 +347,16 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
     loadData(true);
   }, []);
 
+  // 当切换到"全部"分类时，重置所有筛选项
+  useEffect(() => {
+    if (selectedCategory === 'all') {
+      setSelectedType('all');
+      setSelectedAllRegion('all');
+      setSelectedYear('all');
+      setSelectedSort('T');
+    }
+  }, [selectedCategory]);
+
   // 当筛选条件改变时，重新加载数据
   useEffect(() => {
     setMovies([]);
@@ -175,7 +364,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
     setHasMore(true);
     loadingTriggeredForPageRef.current = 0; // 重置加载触发标记
     loadData(true);
-  }, [selectedCategory, selectedRegion]);
+  }, [selectedCategory, selectedRegion, selectedType, selectedAllRegion, selectedYear, selectedSort]);
 
   // 将数据分组为行
   const rows = useMemo(() => {
@@ -212,6 +401,86 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
 
   const handleFilterSelect = (key: string, setter: (key: string) => void) => {
     setter(key);
+  };
+
+  // 处理全部分类的筛选项聚焦
+  const handleAllFilterFocus = (key: string) => {
+    setFocusedFilterKey(key);
+    // 滚动到顶部
+    if (mainScrollViewRef?.current) {
+      mainScrollViewRef.current.scrollTo({ y: 0, animated: true });
+    }
+    // 重置当前行
+    currentRowRef.current = -1;
+  };
+
+  // 处理全部分类的筛选项选择（打开对话框）
+  const handleAllFilterSelect = (key: string) => {
+    setCurrentFilterType(key);
+    setFilterDialogVisible(true);
+  };
+
+  // 获取当前筛选对话框的选项和选中值
+  const getCurrentFilterOptions = () => {
+    switch (currentFilterType) {
+      case 'type':
+        return { options: MOVIE_TYPE_OPTIONS, selectedValue: selectedType, title: '类型' };
+      case 'region':
+        return { options: MOVIE_REGION_OPTIONS, selectedValue: selectedAllRegion, title: '地区' };
+      case 'year':
+        return { options: MOVIE_YEAR_OPTIONS, selectedValue: selectedYear, title: '年代' };
+      case 'sort':
+        return { options: MOVIE_SORT_OPTIONS, selectedValue: selectedSort, title: '排序' };
+      default:
+        return { options: [], selectedValue: '', title: '' };
+    }
+  };
+
+  // 处理筛选对话框的选择
+  const handleFilterDialogSelect = (value: string) => {
+    switch (currentFilterType) {
+      case 'type':
+        setSelectedType(value);
+        break;
+      case 'region':
+        setSelectedAllRegion(value);
+        break;
+      case 'year':
+        setSelectedYear(value);
+        break;
+      case 'sort':
+        setSelectedSort(value);
+        break;
+    }
+  };
+
+  // 获取筛选项显示的值
+  const getFilterDisplayValue = (key: string) => {
+    let value = '';
+    let options: SelectorOption[] = [];
+    
+    switch (key) {
+      case 'type':
+        value = selectedType;
+        options = MOVIE_TYPE_OPTIONS;
+        break;
+      case 'region':
+        value = selectedAllRegion;
+        options = MOVIE_REGION_OPTIONS;
+        break;
+      case 'year':
+        value = selectedYear;
+        options = MOVIE_YEAR_OPTIONS;
+        break;
+      case 'sort':
+        value = selectedSort;
+        options = MOVIE_SORT_OPTIONS;
+        break;
+    }
+    
+    // 查找对应的 label
+    const option = options.find(opt => opt.value === value);
+    return option?.label || '';
   };
 
   const handleCardFocus = (rowIndex: number) => {
@@ -268,6 +537,8 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
   // 计算底部 padding：让最后一行能居中，需要预留 (屏幕高度/2 - 卡片高度/2)
   const bottomPadding = Math.max(0, (screenHeight / 2) - 75); // 75 是卡片高度的一半
 
+  const filterConfig = getCurrentFilterOptions();
+
   return (
     <View style={[styles.container, { paddingHorizontal: layout.horizontalPadding, paddingBottom: bottomPadding }]}>
       {/* 筛选区域 */}
@@ -283,24 +554,58 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
             onFocus={(key) => handleFilterFocus(key, setFocusedCategoryKey)}
             onBlur={() => setFocusedCategoryKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedCategory)}
+            nextFocusDownMap={{
+              all: transparentFilterRef?.current,
+            }}
           />
         </View>
 
-        {/* 地区筛选行 */}
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>地区</Text>
-          <FilterSelector
-            ref={regionSelectorRef}
-            options={REGION_OPTIONS}
-            selectedKey={selectedRegion}
-            focusedKey={focusedRegionKey}
-            onFocus={(key) => handleFilterFocus(key, setFocusedRegionKey)}
-            onBlur={() => setFocusedRegionKey(null)}
-            onSelect={(key) => handleFilterSelect(key, setSelectedRegion)}
-            nextFocusUp={firstSelectorRef?.current}
-          />
-        </View>
+        {/* 根据选中的分类显示不同的筛选行 */}
+        {selectedCategory === 'all' ? (
+          // 全部分类：显示透明筛选器
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>筛选</Text>
+            <TransparentFilterSelector
+              ref={transparentFilterRef}
+              options={FILTER_OPTIONS.map(opt => ({
+                ...opt,
+                selectedValue: getFilterDisplayValue(opt.key)
+              }))}
+              focusedKey={focusedFilterKey}
+              onFocus={handleAllFilterFocus}
+              onBlur={() => setFocusedFilterKey(null)}
+              onSelect={handleAllFilterSelect}
+              nextFocusUp={firstSelectorRef?.current}
+            />
+          </View>
+        ) : (
+          // 其他分类：显示地区筛选
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>地区</Text>
+            <FilterSelector
+              ref={regionSelectorRef}
+              options={REGION_OPTIONS}
+              selectedKey={selectedRegion}
+              focusedKey={focusedRegionKey}
+              onFocus={(key) => handleFilterFocus(key, setFocusedRegionKey)}
+              onBlur={() => setFocusedRegionKey(null)}
+              onSelect={(key) => handleFilterSelect(key, setSelectedRegion)}
+              nextFocusUp={firstSelectorRef?.current}
+            />
+          </View>
+        )}
       </View>
+
+      {/* 筛选对话框 */}
+      <FilterDialog
+        ref={filterDialogRef}
+        visible={filterDialogVisible}
+        title={filterConfig.title}
+        options={filterConfig.options}
+        selectedValue={filterConfig.selectedValue}
+        onSelect={handleFilterDialogSelect}
+        onClose={() => setFilterDialogVisible(false)}
+      />
 
       {/* 内容区域 - 网格布局 */}
       <View style={styles.contentSection}>

@@ -166,7 +166,10 @@ function VideoCard({ title, coverUrl, onPress, onFocus: onFocusProp, onBlur: onB
           nextFocusUp={nextFocusUp}
           nextFocusDown={nextFocusDown}
         >
-          <View style={styles.cover}>
+          <View style={[
+            styles.cover,
+            isFocused && styles.coverFocused
+          ]}>
             <FastImage 
               source={{ 
                 uri: coverUrl,
@@ -262,11 +265,20 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 6,
     backgroundColor: '#2a2a2a',
-    overflow: 'hidden',
+  },
+  coverFocused: {
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 1,
+    elevation: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   coverImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 6,
   },
   content: {
     marginTop: 6,

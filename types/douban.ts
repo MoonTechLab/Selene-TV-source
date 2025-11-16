@@ -44,3 +44,18 @@ export type DoubanDataSourceKey = 'direct' | 'cdn_tencent' | 'cdn_aliyun' | 'cor
 
 // 内容类型
 export type DoubanKind = 'movie' | 'tv';
+
+// 豆瓣推荐数据请求参数
+export interface DoubanRecommendsParams {
+  kind: DoubanKind;
+  category?: string;
+  format?: string;
+  region?: string;
+  year?: string;
+  platform?: string;
+  sort?: string;
+  label?: string;
+  pageLimit?: number;
+  page?: number;
+  dataSourceKey?: DoubanDataSourceKey;
+}
