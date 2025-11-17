@@ -1,5 +1,5 @@
 import { StyleSheet, Text, ScrollView, Pressable, TVFocusGuideView, useWindowDimensions, findNodeHandle, BackHandler, Animated } from 'react-native';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import VideoCard from './VideoCard';
 import VideoCardSkeleton from './VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
@@ -8,6 +8,7 @@ import { VideoInfo } from '@/types/entities';
 interface FavoriteSectionProps {
   title: string;
   videos: VideoInfo[];
+  playRecords?: VideoInfo[];
   onTitlePress?: () => void;
   titleRef?: React.RefObject<any>;
   nextSectionTitleRef?: React.RefObject<any>;
@@ -15,7 +16,7 @@ interface FavoriteSectionProps {
   loading?: boolean;
 }
 
-export default function FavoriteSection({ title, videos, onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false }: FavoriteSectionProps) {
+export default function FavoriteSection({ title, videos, playRecords = [], onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false }: FavoriteSectionProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionRef = useRef<any>(null);
   const titlePressableRef = useRef<any>(null);
@@ -27,6 +28,31 @@ export default function FavoriteSection({ title, videos, onTitlePress, titleRef,
   const [titleNodeHandle, setTitleNodeHandle] = useState<number | null>(null);
   const [nextSectionTitleNodeHandle, setNextSectionTitleNodeHandle] = useState<number | null>(null);
   const titleFocusAnim = useRef(new Animated.Value(0)).current;
+
+  // 合并播放记录的 index 到收藏项
+  const mergedVideos = useMemo(() => {
+    if (!playRecords || playRecords.length === 0) {
+      return videos;
+    }
+
+    // 创建播放记录的 Map，key 为 source+id
+    const playRecordMap = new Map<string, number>();
+    playRecords.forEach(record => {
+      const key = `${record.source}_${record.id}`;
+      playRecordMap.set(key, record.index);
+    });
+
+    // 合并 index
+    return videos.map(video => {
+      const key = `${video.source}_${video.id}`;
+      const recordIndex = playRecordMap.get(key);
+      
+      if (recordIndex !== undefined) {
+        return { ...video, index: recordIndex };
+      }
+      return video;
+    });
+  }, [videos, playRecords]);
 
   const resetScroll = () => {
     if (scrollViewRef.current) {
@@ -207,7 +233,7 @@ export default function FavoriteSection({ title, videos, onTitlePress, titleRef,
               <VideoCardSkeleton key={`skeleton-${index}`} />
             ))
           ) : (
-            videos.map((video, index) => (
+            mergedVideos.map((video, index) => (
               <VideoCard
                 key={`fav_${video.source}_${video.id}`}
                 videoInfo={video}
@@ -233,7 +259,7 @@ export default function FavoriteSection({ title, videos, onTitlePress, titleRef,
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 18,
   },
   titleWrapper: {
     flexDirection: 'row',

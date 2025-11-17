@@ -210,6 +210,7 @@ export default function PlayRecordSection({ title, videos, onTitlePress, titleRe
             videos.map((video, index) => (
               <VideoCard
                 key={`pr_${video.source}_${video.id}`}
+                from='playrecord'
                 videoInfo={video}
                 onFocus={(cardRef) => handleCardFocus(index, cardRef)}
                 onNavigateVertical={(direction) => {
@@ -232,7 +233,7 @@ export default function PlayRecordSection({ title, videos, onTitlePress, titleRe
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 18,
   },
   titleWrapper: {
     flexDirection: 'row',

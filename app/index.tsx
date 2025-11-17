@@ -24,11 +24,12 @@ const renderTabContent = (
   seriesFirstSelectorRef?: React.RefObject<any>,
   animeFirstSelectorRef?: React.RefObject<any>,
   varietyFirstSelectorRef?: React.RefObject<any>,
-  onFirstSectionTitleReady?: (nodeHandle: number | null) => void
+  onFirstSectionTitleReady?: (nodeHandle: number | null) => void,
+  onTabChange?: (tab: TabType) => void
 ) => {
   switch (tab) {
     case 'home':
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
     case 'movie':
       return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
     case 'series':
@@ -44,7 +45,7 @@ const renderTabContent = (
     case 'search':
       return <SearchTab />;
     default:
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
   }
 };
 
@@ -157,7 +158,7 @@ export default function HomeScreen() {
     return () => backHandler.remove();
   }, []);
 
-  const animateTabChange = (newTab: TabType) => {
+  const animateTabChange = (newTab: TabType, onComplete?: () => void) => {
     const currentIndex = TAB_ORDER.indexOf(previousTabRef.current);
     const newIndex = TAB_ORDER.indexOf(newTab);
     const direction = newIndex > currentIndex ? 1 : -1; // 1: 向右, -1: 向左
@@ -196,7 +197,12 @@ export default function HomeScreen() {
             duration: 100,
             useNativeDriver: true,
           }),
-        ]).start();
+        ]).start(() => {
+          // 动画完成后执行回调
+          if (onComplete) {
+            onComplete();
+          }
+        });
       });
     });
   };
@@ -240,7 +246,18 @@ export default function HomeScreen() {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    animateTabChange(tab);
+    
+    // 滚动到顶部
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    
+    // 执行动画，完成后聚焦到对应的 tab
+    animateTabChange(tab, () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          tabSwitcherRef.current?.focusToCurrent();
+        });
+      });
+    });
     setIsSwitching(false);
   };
 
@@ -285,7 +302,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady, handleTabChange)}
           </Animated.View>
         </ScrollView>
         

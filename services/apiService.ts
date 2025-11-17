@@ -353,10 +353,15 @@ class ApiService {
         const favorites: FavoriteItem[] = [];
 
         // 将Map转换为List并按save_time降序排序
-        Object.entries(data).forEach(([id, itemData]) => {
+        Object.entries(data).forEach(([key, itemData]) => {
+          // 从key中分离source和id，格式为 "source+id"
+          const parts = key.split('+');
+          const source = parts.length > 1 ? parts[0] : '';
+          const id = parts.length > 1 ? parts[1] : key;
+          
           favorites.push({
             id,
-            source: itemData.source,
+            source: source,
             title: itemData.title,
             sourceName: itemData.source_name,
             year: itemData.year,

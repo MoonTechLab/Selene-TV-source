@@ -670,6 +670,7 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
                     >
                       <VideoCard
                         videoInfo={doubanMovieToVideoInfo(item)}
+                        from='douban'
                         onPress={() => console.log('Pressed:', item.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
                         nextFocusUp={rowIndex === 0 ? (typeSelectorHandle ?? undefined) : undefined}

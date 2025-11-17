@@ -16,7 +16,21 @@ interface VideoCardProps {
 }
 
 function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
-  const { title, cover: coverUrl } = videoInfo;
+  const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate } = videoInfo;
+  const showSourceName = (from === 'playrecord' || from === 'favorite') && sourceName;
+  const showEpisodeBadge = (from === 'playrecord' || from === 'favorite') && totalEpisodes > 1;
+  const showRateBadge = (from === 'bangumi' || from === 'douban') && rate && rate !== '0';
+
+  // 徽章文本逻辑
+  const getBadgeText = () => {
+    if (from === 'playrecord') {
+      return `${index}/${totalEpisodes}`;
+    }
+    if (from === 'favorite') {
+      return index > 0 ? `${index}/${totalEpisodes}` : `${totalEpisodes}`;
+    }
+    return '';
+  };
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const cardRef = useRef<any>(null);
@@ -189,6 +203,16 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                 // setImageError(true);
               }}
             />
+            {showEpisodeBadge && (
+              <View style={styles.episodeBadge}>
+                <Text style={styles.episodeBadgeText}>{getBadgeText()}</Text>
+              </View>
+            )}
+            {showRateBadge && (
+              <View style={styles.rateBadge}>
+                <Text style={styles.rateBadgeText}>{rate}</Text>
+              </View>
+            )}
           </View>
           <View 
             style={styles.content}
@@ -249,6 +273,11 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                 </Text>
               )}
             </View>
+            {showSourceName && (
+              <View style={styles.sourceNameContainer}>
+                <Text style={styles.sourceName}>{sourceName}</Text>
+              </View>
+            )}
           </View>
         </Pressable>
       </Animated.View>
@@ -322,6 +351,51 @@ const styles = StyleSheet.create({
     color: '#ff6b6b',
     fontSize: 10,
     textAlign: 'center',
+  },
+  sourceNameContainer: {
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceName: {
+    fontSize: 9,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  episodeBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  episodeBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  rateBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E91E63',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rateBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });
 

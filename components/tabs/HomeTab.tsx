@@ -13,9 +13,10 @@ import { PlayRecord, playRecordToVideoInfo, FavoriteItem, favoriteItemToVideoInf
 interface HomeTabProps {
   firstSectionTitleRef?: React.RefObject<any>;
   onFirstSectionTitleReady?: (nodeHandle: number | null) => void;
+  onTabChange?: (tab: 'movie' | 'series' | 'anime' | 'variety') => void;
 }
 
-export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady }: HomeTabProps = {}) {
+export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady, onTabChange }: HomeTabProps = {}) {
   const favoriteTitleRef = useRef<any>(null);
   const movieTitleRef = useRef<any>(null);
   const seriesTitleRef = useRef<any>(null);
@@ -124,6 +125,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         <FavoriteSection 
           title="我的收藏" 
           videos={favoriteVideos}
+          playRecords={playRecordVideos}
           loading={loading}
           titleRef={showPlayRecords ? favoriteTitleRef : firstSectionTitleRef}
           nextSectionTitleRef={movieTitleRef}
@@ -132,20 +134,25 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
       <RecommendSection 
         title="热门电影" 
         videos={hotMovieVideos}
+        from="douban"
         loading={loading}
         titleRef={movieTitleRef}
         nextSectionTitleRef={seriesTitleRef}
+        onTitlePress={() => onTabChange?.('movie')}
       />
       <RecommendSection 
         title="热门剧集" 
         videos={hotTvShowVideos}
+        from="douban"
         loading={loading}
         titleRef={seriesTitleRef}
         nextSectionTitleRef={animeTitleRef}
+        onTitlePress={() => onTabChange?.('series')}
       />
       <RecommendSection 
         title="新番放送" 
         videos={todayBangumiVideos}
+        from="bangumi"
         loading={loading}
         titleRef={animeTitleRef}
         nextSectionTitleRef={varietyTitleRef}
@@ -153,6 +160,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
       <RecommendSection
         title="热门综艺" 
         videos={hotShowVideos}
+        from="douban"
         loading={loading}
         titleRef={varietyTitleRef}
         isLast={true}

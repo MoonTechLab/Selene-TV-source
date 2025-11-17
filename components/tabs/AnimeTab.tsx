@@ -737,6 +737,9 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
                       ? bangumiItemToVideoInfo(item)
                       : doubanMovieToVideoInfo(item);
                     
+                    // 根据一级分类设置 from 参数
+                    const from = selectedCategory === 'new' ? 'bangumi' : 'douban';
+                    
                     return (
                       <View 
                         key={item.id}
@@ -747,6 +750,7 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
                       >
                         <VideoCard
                           videoInfo={videoInfo}
+                          from={from}
                           onPress={() => console.log('Pressed:', videoInfo.title)}
                           onFocus={() => handleCardFocus(rowIndex)}
                           nextFocusUp={rowIndex === 0 ? (weekdaySelectorHandle ?? undefined) : undefined}

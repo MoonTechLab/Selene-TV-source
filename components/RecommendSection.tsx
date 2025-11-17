@@ -8,6 +8,7 @@ import { VideoInfo } from '@/types/entities';
 interface RecommendSectionProps {
   title: string;
   videos: VideoInfo[];
+  from?: string;
   onTitlePress?: () => void;
   titleRef?: React.RefObject<any>;
   nextSectionTitleRef?: React.RefObject<any>;
@@ -15,7 +16,7 @@ interface RecommendSectionProps {
   loading?: boolean;
 }
 
-export default function RecommendSection({ title, videos, onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false }: RecommendSectionProps) {
+export default function RecommendSection({ title, videos, from, onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false }: RecommendSectionProps) {
   const scrollViewRef = useRef<ScrollView>(null);
   const sectionRef = useRef<any>(null);
   const titlePressableRef = useRef<any>(null);
@@ -211,6 +212,7 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
               <VideoCard
                 key={`${video.source}_${video.id}`}
                 videoInfo={video}
+                from={from}
                 onFocus={(cardRef) => handleCardFocus(index, cardRef)}
                 onNavigateVertical={(direction) => {
                   if (direction === 'up') {
