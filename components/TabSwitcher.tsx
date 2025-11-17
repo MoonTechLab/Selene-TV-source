@@ -11,6 +11,7 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
+  { key: 'search', icon: Search },
   { key: 'home', label: '首页', icon: Home },
   { key: 'movie', label: '电影', icon: Film },
   { key: 'series', label: '剧集', icon: Tv },
@@ -18,7 +19,6 @@ const tabs: TabItem[] = [
   { key: 'variety', label: '综艺', icon: Clover },
   { key: 'live', label: '直播', icon: Radio },
   { key: 'mine', label: '设置', icon: Settings },
-  { key: 'search', icon: Search },
 ];
 
 interface TabSwitcherProps {

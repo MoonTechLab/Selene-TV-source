@@ -96,7 +96,6 @@ class UserDataCacheService {
     // 先检查缓存
     const cachedData = this.getCache<PlayRecord[]>(cacheKey);
     if (cachedData !== null) {
-      console.log('cache!')
       return DataOperationResult.success(cachedData);
     }
 

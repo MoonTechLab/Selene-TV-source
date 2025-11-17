@@ -15,7 +15,7 @@ import { ScrollContext } from '@/contexts/ScrollContext';
 import AppDataService from '@/services/appDataService';
 import ToastService from '@/services/toastService';
 
-const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
+const TAB_ORDER: TabType[] = ['search', 'home', 'movie', 'series', 'anime', 'variety', 'live', 'mine'];
 
 const renderTabContent = (
   tab: TabType, 
