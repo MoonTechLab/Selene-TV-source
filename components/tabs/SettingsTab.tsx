@@ -1,6 +1,7 @@
-import { StyleSheet, View, Text, Modal, FlatList, TextInput, Pressable, Animated } from 'react-native';
+import { StyleSheet, View, Text, Modal, FlatList, TextInput, Pressable, Animated, ActivityIndicator } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import UserDataService from '../../services/userDataService';
+import ToastService from '../../services/toastService';
 
 const DOUBAN_DATA_SOURCES = [
   '直连',
@@ -17,14 +18,27 @@ const DOUBAN_IMAGE_SOURCES = [
 ];
 
 export default function SettingsTab() {
+  const [hasLogin, setHasLogin] = useState(true);
   const [doubanDataSource, setDoubanDataSource] = useState('直连');
   const [doubanImageSource, setDoubanImageSource] = useState('直连');
   const [m3u8ProxyUrl, setM3u8ProxyUrl] = useState('');
   
+  // 用户信息
+  const [username, setUsername] = useState('');
+  const [serverUrl, setServerUrl] = useState('');
+  const [userRole, setUserRole] = useState('user');
+  
   const [showDataSourceModal, setShowDataSourceModal] = useState(false);
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
   const [showProxyModal, setShowProxyModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [tempProxyUrl, setTempProxyUrl] = useState('');
+  
+  // 登录表单数据
+  const [loginServerUrl, setLoginServerUrl] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
   const [focusedModalItem, setFocusedModalItem] = useState<string | null>(null);
@@ -33,6 +47,7 @@ export default function SettingsTab() {
   const [dataSourceModalVisible, setDataSourceModalVisible] = useState(false);
   const [imageSourceModalVisible, setImageSourceModalVisible] = useState(false);
   const [proxyModalVisible, setProxyModalVisible] = useState(false);
+  const [loginModalVisible, setLoginModalVisible] = useState(false);
 
   // 动画值
   const dataSourceScale = useRef(new Animated.Value(0.8)).current;
@@ -47,11 +62,17 @@ export default function SettingsTab() {
   const proxyOpacity = useRef(new Animated.Value(0)).current;
   const proxyOverlayOpacity = useRef(new Animated.Value(0)).current;
 
+  const loginScale = useRef(new Animated.Value(0.8)).current;
+  const loginOpacity = useRef(new Animated.Value(0)).current;
+  const loginOverlayOpacity = useRef(new Animated.Value(0)).current;
+
   // 设置项聚焦动画
   const settingItemAnimations = useRef({
+    login: new Animated.Value(1),
     dataSource: new Animated.Value(1),
     imageSource: new Animated.Value(1),
     proxy: new Animated.Value(1),
+    logout: new Animated.Value(1),
   }).current;
 
   // Modal 选项聚焦动画
@@ -71,7 +92,7 @@ export default function SettingsTab() {
 
   // 处理设置项聚焦动画
   useEffect(() => {
-    ['dataSource', 'imageSource', 'proxy'].forEach((item) => {
+    ['login', 'dataSource', 'imageSource', 'proxy', 'logout'].forEach((item) => {
       const isFocused = focusedItem === item;
       Animated.spring(settingItemAnimations[item as keyof typeof settingItemAnimations], {
         toValue: isFocused ? 1.02 : 1,
@@ -96,13 +117,148 @@ export default function SettingsTab() {
   }, [focusedModalItem, modalItemAnimations]);
 
   const loadSettings = async () => {
+    const isLoggedIn = await UserDataService.isLoggedIn();
     const dataSource = await UserDataService.getDoubanDataSourceDisplayName();
     const imageSource = await UserDataService.getDoubanImageSourceDisplayName();
     const proxyUrl = await UserDataService.getM3u8ProxyUrl();
     
+    setHasLogin(isLoggedIn);
     setDoubanDataSource(dataSource);
     setDoubanImageSource(imageSource);
     setM3u8ProxyUrl(proxyUrl);
+    
+    // 如果已登录，加载用户信息
+    if (isLoggedIn) {
+      const userData = await UserDataService.getAllUserData();
+      setUsername(userData.username || '');
+      setServerUrl(userData.serverUrl || '');
+      const role = UserDataService.parseRoleFromCookies(userData.cookies);
+      setUserRole(role);
+    }
+  };
+
+  const handleLogin = () => {
+    setShowLoginModal(true);
+  };
+
+  // 处理 URL：移除末尾斜杠，添加 http:// 前缀（如果需要）
+  const processUrl = (url: string): string => {
+    let processedUrl = url.trim();
+    
+    // 移除末尾的斜杠
+    if (processedUrl.endsWith('/')) {
+      processedUrl = processedUrl.slice(0, -1);
+    }
+    
+    // 如果没有协议前缀，添加 http://
+    if (!processedUrl.startsWith('http://') && !processedUrl.startsWith('https://')) {
+      processedUrl = 'http://' + processedUrl;
+    }
+    
+    return processedUrl;
+  };
+
+  // 从响应头中解析 cookies
+  const parseCookies = (response: Response): string => {
+    const setCookieHeader = response.headers.get('set-cookie');
+    if (!setCookieHeader) return '';
+    
+    // 解析多个 cookie
+    const cookies = setCookieHeader.split(',').map(cookie => {
+      const parts = cookie.split(';');
+      return parts[0].trim();
+    }).join('; ');
+    
+    return cookies;
+  };
+
+  // 表单验证
+  const isFormValid = (): boolean => {
+    return !!(
+      loginServerUrl.trim() &&
+      loginUsername.trim() &&
+      loginPassword.trim()
+    );
+  };
+
+
+
+  const handleLoginSubmit = async () => {
+    // 表单验证
+    if (!isFormValid()) {
+      ToastService.error('请填写完整的登录信息');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 处理 URL
+      const baseUrl = processUrl(loginServerUrl);
+      const loginUrl = `${baseUrl}/api/login`;
+
+      // 发送登录请求
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: loginUsername,
+          password: loginPassword,
+        }),
+      });
+
+      setIsLoading(false);
+
+      // 根据状态码处理不同情况
+      switch (response.status) {
+        case 200:
+          // 解析并保存 cookies
+          const cookies = parseCookies(response);
+
+          // 保存用户数据
+          await UserDataService.saveUserData({
+            serverUrl: baseUrl,
+            username: loginUsername,
+            password: loginPassword,
+            cookies: cookies,
+          });
+
+          // 关闭弹窗并更新登录状态
+          setShowLoginModal(false);
+          setHasLogin(true);
+          
+          // 更新用户信息
+          setUsername(loginUsername);
+          setServerUrl(baseUrl);
+          const role = UserDataService.parseRoleFromCookies(cookies);
+          setUserRole(role);
+          
+          // 清空表单
+          setLoginServerUrl('');
+          setLoginUsername('');
+          setLoginPassword('');
+
+          ToastService.success('登录成功！');
+          break;
+
+        case 401:
+          ToastService.error('用户名或密码错误');
+          break;
+
+        case 500:
+          ToastService.error('服务器错误');
+          break;
+
+        default:
+          ToastService.error('网络异常');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('登录错误:', error);
+      ToastService.error('网络异常');
+    }
   };
 
   // 数据源 Modal 动画
@@ -159,6 +315,24 @@ export default function SettingsTab() {
     }
   }, [showProxyModal, proxyModalVisible, proxyScale, proxyOpacity, proxyOverlayOpacity]);
 
+  // 登录 Modal 动画
+  useEffect(() => {
+    if (showLoginModal) {
+      setLoginModalVisible(true);
+      Animated.parallel([
+        Animated.spring(loginScale, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+        Animated.spring(loginOpacity, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+        Animated.spring(loginOverlayOpacity, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+      ]).start();
+    } else if (loginModalVisible) {
+      Animated.parallel([
+        Animated.spring(loginScale, { toValue: 0.8, useNativeDriver: true, friction: 12, tension: 200 }),
+        Animated.spring(loginOpacity, { toValue: 0, useNativeDriver: true, friction: 12, tension: 200 }),
+        Animated.spring(loginOverlayOpacity, { toValue: 0, useNativeDriver: true, friction: 12, tension: 200 }),
+      ]).start(() => setLoginModalVisible(false));
+    }
+  }, [showLoginModal, loginModalVisible, loginScale, loginOpacity, loginOverlayOpacity]);
+
   const handleDataSourceSelect = async (source: string) => {
     await UserDataService.saveDoubanDataSource(source);
     setDoubanDataSource(source);
@@ -182,10 +356,103 @@ export default function SettingsTab() {
     setShowProxyModal(true);
   };
 
+  const handleLogout = async () => {
+    await UserDataService.clearPasswordAndCookies();
+    setHasLogin(false);
+    setUsername('');
+    setServerUrl('');
+    setUserRole('user');
+    ToastService.success('已登出');
+  };
+
+  // 从 serverUrl 中提取域名
+  const extractDomain = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname;
+    } catch {
+      return url;
+    }
+  };
+
+  // 获取角色显示文本
+  const getRoleText = (role: string): string => {
+    switch (role) {
+      case 'owner':
+        return '站长';
+      case 'admin':
+        return '管理';
+      case 'user':
+        return '用户';
+      default:
+        return '用户';
+    }
+  };
+
+  // 获取角色颜色
+  const getRoleColor = (role: string): string => {
+    switch (role) {
+      case 'owner':
+        return '#9b59b6'; // 紫色
+      case 'admin':
+        return '#f39c12'; // 黄色
+      case 'user':
+        return '#27ae60'; // 绿色
+      default:
+        return '#27ae60';
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.settingsGroup}>
+    <>
+      <View style={styles.container}>
+        <View style={styles.content}>
+          {/* 用户信息 - 仅在已登录时显示 */}
+          {hasLogin && (
+            <View style={styles.userInfoContainer}>
+              <Text style={styles.userInfoLabel}>当前用户</Text>
+              <View style={styles.usernameRow}>
+                <Text style={styles.username}>{username}</Text>
+                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(userRole) }]}>
+                  <Text style={styles.roleText}>{getRoleText(userRole)}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.settingsGroup}>
+          {/* 登录实例 - 仅在已登录时显示 */}
+          {hasLogin && (
+            <View style={styles.serverInfoItem}>
+              <Text style={styles.serverInfoLabel}>登录实例</Text>
+              <Text style={styles.serverInfoValue}>{extractDomain(serverUrl)}</Text>
+            </View>
+          )}
+
+          {/* 登录选项 - 仅在未登录时显示 */}
+          {!hasLogin && (
+            <Animated.View style={{ transform: [{ scale: settingItemAnimations.login }] }}>
+              <Pressable
+                style={[
+                  styles.settingItem,
+                  focusedItem === 'login' && styles.settingItemFocused
+                ]}
+                onPress={handleLogin}
+                onFocus={() => setFocusedItem('login')}
+                onBlur={() => setFocusedItem(null)}
+              >
+                <Text style={[
+                  styles.settingLabel,
+                  focusedItem === 'login' && styles.settingLabelFocused
+                ]}>登录</Text>
+                <Text style={[
+                  styles.settingValue,
+                  focusedItem === 'login' && styles.settingValueFocused
+                ]}>点击登录</Text>
+              </Pressable>
+            </Animated.View>
+          )}
+
           {/* 豆瓣数据源 */}
           <Animated.View style={{ transform: [{ scale: settingItemAnimations.dataSource }] }}>
             <Pressable
@@ -253,6 +520,33 @@ export default function SettingsTab() {
               </Text>
             </Pressable>
           </Animated.View>
+
+          {/* 登出选项 - 仅在已登录时显示 */}
+          {hasLogin && (
+            <Animated.View style={{ transform: [{ scale: settingItemAnimations.logout }] }}>
+              <Pressable
+                style={[
+                  styles.settingItem,
+                  styles.logoutItem,
+                  focusedItem === 'logout' && styles.logoutItemFocused
+                ]}
+                onPress={handleLogout}
+                onFocus={() => setFocusedItem('logout')}
+                onBlur={() => setFocusedItem(null)}
+              >
+                <Text style={[
+                  styles.settingLabel,
+                  styles.logoutLabel,
+                  focusedItem === 'logout' && styles.logoutLabelFocused
+                ]}>登出</Text>
+                <Text style={[
+                  styles.settingValue,
+                  styles.logoutValue,
+                  focusedItem === 'logout' && styles.logoutValueFocused
+                ]}>退出登录</Text>
+              </Pressable>
+            </Animated.View>
+          )}
         </View>
       </View>
 
@@ -429,7 +723,95 @@ export default function SettingsTab() {
           </Animated.View>
         </Animated.View>
       </Modal>
-    </View>
+
+      {/* 登录弹窗 */}
+      <Modal
+        visible={loginModalVisible}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => !isLoading && setShowLoginModal(false)}
+      >
+        <Animated.View style={[styles.modalOverlay, { opacity: loginOverlayOpacity }]}>
+          <Animated.View style={[styles.modalContent, { transform: [{ scale: loginScale }], opacity: loginOpacity }]}>
+            <Text style={styles.modalTitle}>登录</Text>
+            <TextInput
+              style={styles.input}
+              value={loginServerUrl}
+              onChangeText={setLoginServerUrl}
+              placeholder="服务器地址"
+              placeholderTextColor="#666"
+              autoFocus={true}
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              value={loginUsername}
+              onChangeText={setLoginUsername}
+              placeholder="用户名"
+              placeholderTextColor="#666"
+              editable={!isLoading}
+            />
+            <TextInput
+              style={styles.input}
+              value={loginPassword}
+              onChangeText={setLoginPassword}
+              placeholder="密码"
+              placeholderTextColor="#666"
+              secureTextEntry={true}
+              editable={!isLoading}
+            />
+            {isLoading && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={styles.loadingText}>登录中...</Text>
+              </View>
+            )}
+            <View style={styles.modalButtons}>
+              <Animated.View style={{ flex: 1, transform: [{ scale: getModalItemAnimation('login-cancel') }] }}>
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    focusedModalItem === 'login-cancel' && styles.modalButtonFocused,
+                    isLoading && styles.modalButtonDisabled,
+                  ]}
+                  onPress={() => !isLoading && setShowLoginModal(false)}
+                  onFocus={() => setFocusedModalItem('login-cancel')}
+                  onBlur={() => setFocusedModalItem(null)}
+                  disabled={isLoading}
+                >
+                  <Text style={[
+                    styles.modalButtonText,
+                    focusedModalItem === 'login-cancel' && styles.modalButtonTextFocused,
+                    isLoading && styles.modalButtonTextDisabled,
+                  ]}>取消</Text>
+                </Pressable>
+              </Animated.View>
+              <Animated.View style={{ flex: 1, transform: [{ scale: getModalItemAnimation('login-confirm') }] }}>
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    focusedModalItem === 'login-confirm' && styles.modalButtonFocused,
+                    isLoading && styles.modalButtonDisabled,
+                  ]}
+                  onPress={handleLoginSubmit}
+                  onFocus={() => setFocusedModalItem('login-confirm')}
+                  onBlur={() => setFocusedModalItem(null)}
+                  disabled={isLoading}
+                >
+                  <Text style={[
+                    styles.modalButtonText,
+                    focusedModalItem === 'login-confirm' && styles.modalButtonTextFocused,
+                    isLoading && styles.modalButtonTextDisabled,
+                  ]}>登录</Text>
+                </Pressable>
+              </Animated.View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      </View>
+    </>
   );
 }
 
@@ -437,12 +819,60 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-    paddingTop: 80,
+    paddingTop: 40,
     alignItems: 'center',
   },
   content: {
     alignItems: 'center',
     overflow: 'visible',
+  },
+  userInfoContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  userInfoLabel: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 8,
+  },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  username: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  roleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  serverInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 50,
+    width: 600,
+  },
+  serverInfoLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  serverInfoValue: {
+    fontSize: 13,
+    color: '#888',
+    maxWidth: 320,
   },
   settingsGroup: {
     gap: 14,
@@ -561,5 +991,40 @@ const styles = StyleSheet.create({
   },
   modalButtonTextFocused: {
     color: '#0a0a0a',
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalButtonTextDisabled: {
+    opacity: 0.5,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#ffffff',
+  },
+  logoutItem: {
+    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+  },
+  logoutItemFocused: {
+    backgroundColor: 'rgba(231, 76, 60, 0.95)',
+  },
+  logoutLabel: {
+    color: '#e74c3c',
+  },
+  logoutLabelFocused: {
+    color: '#ffffff',
+  },
+  logoutValue: {
+    color: '#e74c3c',
+  },
+  logoutValueFocused: {
+    color: '#ffffff',
   },
 });

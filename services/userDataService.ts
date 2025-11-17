@@ -234,6 +234,53 @@ class UserDataService {
     const url = await AsyncStorage.getItem(this._m3u8ProxyUrlKey);
     return url || '';
   }
+
+  // 从 cookies 中解析用户角色
+  static parseRoleFromCookies(cookies: string | null): string {
+    if (!cookies || cookies.trim() === '') {
+      return 'user';
+    }
+
+    try {
+      // 解析 cookies 字符串
+      const cookieMap: Record<string, string> = {};
+      const cookiePairs = cookies.split(';');
+      
+      for (const cookie of cookiePairs) {
+        const trimmed = cookie.trim();
+        const firstEqualIndex = trimmed.indexOf('=');
+        
+        if (firstEqualIndex > 0) {
+          const key = trimmed.substring(0, firstEqualIndex);
+          const value = trimmed.substring(firstEqualIndex + 1);
+          
+          if (key && value) {
+            cookieMap[key] = value;
+          }
+        }
+      }
+
+      const authCookie = cookieMap['auth'];
+      if (!authCookie) {
+        return 'user';
+      }
+
+      // 处理可能的双重编码
+      let decoded = decodeURIComponent(authCookie);
+      // 如果解码后仍然包含 %，说明是双重编码，需要再次解码
+      if (decoded.includes('%')) {
+        decoded = decodeURIComponent(decoded);
+      }
+
+      const authData = JSON.parse(decoded);
+      const role = authData.role as string | undefined;
+      
+      return role ?? 'user';
+    } catch (e) {
+      // 解析失败时默认为 user
+      return 'user';
+    }
+  }
 }
 
 export default UserDataService;

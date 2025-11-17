@@ -10,6 +10,7 @@ import ShowTab from '@/components/tabs/ShowTab';
 import LiveTab from '@/components/tabs/LiveTab';
 import SettingsTab from '@/components/tabs/SettingsTab';
 import SearchTab from '@/components/tabs/SearchTab';
+import Toast from '@/components/Toast';
 import { ScrollContext } from '@/contexts/ScrollContext';
 
 const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
@@ -228,6 +229,9 @@ export default function HomeScreen() {
           {measureElement}
         </View>
       </ScrollContext.Provider>
+
+      {/* 全局 Toast */}
+      <Toast />
     </LinearGradient>
   );
 }
