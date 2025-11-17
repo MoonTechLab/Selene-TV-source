@@ -137,7 +137,18 @@ export default function SettingsTab() {
     }
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    // 从存储中加载 serverUrl 和 username 用于回显
+    const userData = await UserDataService.getAllUserData();
+    if (userData.serverUrl) {
+      setLoginServerUrl(userData.serverUrl);
+    }
+    if (userData.username) {
+      setLoginUsername(userData.username);
+    }
+    // password 不回显，保持为空
+    setLoginPassword('');
+    
     setShowLoginModal(true);
   };
 
@@ -819,7 +830,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-    paddingTop: 40,
+    paddingTop: 30,
     alignItems: 'center',
   },
   content: {
@@ -828,30 +839,30 @@ const styles = StyleSheet.create({
   },
   userInfoContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   userInfoLabel: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#888',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   usernameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   username: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '600',
     color: '#ffffff',
   },
   roleBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   roleText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '600',
     color: '#ffffff',
   },
@@ -859,23 +870,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 50,
-    width: 600,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 40,
+    width: 480,
   },
   serverInfoLabel: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '500',
     color: '#ffffff',
   },
   serverInfoValue: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#888',
-    maxWidth: 320,
+    maxWidth: 260,
   },
   settingsGroup: {
-    gap: 14,
+    gap: 13,
     alignItems: 'center',
     overflow: 'visible',
   },
@@ -884,17 +895,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 50,
-    width: 600,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 40,
+    width: 480,
     zIndex: 1,
   },
   settingItemFocused: {
     backgroundColor: '#ffffff',
   },
   settingLabel: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '500',
     color: '#ffffff',
   },
@@ -902,9 +913,9 @@ const styles = StyleSheet.create({
     color: '#0a0a0a',
   },
   settingValue: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#888',
-    maxWidth: 320,
+    maxWidth: 260,
   },
   settingValueFocused: {
     color: '#0a0a0a',
@@ -917,67 +928,67 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 20,
-    width: 360,
-    maxHeight: 380,
+    borderRadius: 10,
+    padding: 16,
+    width: 300,
+    maxHeight: 320,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '600',
     color: '#ffffff',
-    marginBottom: 14,
+    marginBottom: 12,
     textAlign: 'center',
   },
   modalListContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     paddingVertical: 2,
   },
   modalItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 50,
-    marginBottom: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 40,
+    marginBottom: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   modalItemFocused: {
     backgroundColor: '#ffffff',
   },
   modalItemText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#ffffff',
   },
   modalItemTextFocused: {
     color: '#0a0a0a',
   },
   modalCloseButton: {
-    marginTop: 12,
-    paddingVertical: 10,
+    marginTop: 5,
+    paddingVertical: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
+    borderRadius: 6,
     alignItems: 'center',
   },
   modalCloseText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#ffffff',
     fontWeight: '500',
   },
   input: {
     backgroundColor: '#252525',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    fontSize: 13,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 11,
     color: '#ffffff',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   modalButton: {
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 6,
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
@@ -985,7 +996,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   modalButtonText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#ffffff',
     fontWeight: '500',
   },
@@ -1002,11 +1013,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-    gap: 8,
+    marginBottom: 12,
+    gap: 6,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#ffffff',
   },
   logoutItem: {

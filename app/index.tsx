@@ -12,6 +12,8 @@ import SettingsTab from '@/components/tabs/SettingsTab';
 import SearchTab from '@/components/tabs/SearchTab';
 import Toast from '@/components/Toast';
 import { ScrollContext } from '@/contexts/ScrollContext';
+import UserDataService from '@/services/userDataService';
+import ToastService from '@/services/toastService';
 
 const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
 
@@ -74,6 +76,67 @@ export default function HomeScreen() {
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const previousTabRef = useRef<TabType>(activeTab);
+
+  // 自动登录逻辑
+  useEffect(() => {
+    const autoLogin = async () => {
+      try {
+        const hasLogin = await UserDataService.isLoggedIn();
+        
+        if (hasLogin) {
+          const userData = await UserDataService.getAllUserData();
+          const { serverUrl, username, password } = userData;
+          
+          // 检查是否有完整的登录信息
+          if (serverUrl && username && password) {
+            const loginUrl = `${serverUrl}/api/login`;
+            
+            // 尝试登录
+            const response = await fetch(loginUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                username,
+                password,
+              }),
+            });
+            
+            if (response.status === 200) {
+              // 登录成功，解析并更新 cookies
+              const setCookieHeader = response.headers.get('set-cookie');
+              if (setCookieHeader) {
+                const cookies = setCookieHeader.split(',').map(cookie => {
+                  const parts = cookie.split(';');
+                  return parts[0].trim();
+                }).join('; ');
+                
+                // 更新存储的 cookies
+                await UserDataService.saveUserData({
+                  serverUrl,
+                  username,
+                  password,
+                  cookies,
+                });
+              }
+            } else {
+              // 登录失败，设置 hasLogin 为 false
+              await UserDataService.setHasLogin(false);
+              ToastService.error('自动登录失败');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('自动登录错误:', error);
+        // 登录失败，设置 hasLogin 为 false
+        await UserDataService.setHasLogin(false);
+        ToastService.error('自动登录失败');
+      }
+    };
+    
+    autoLogin();
+  }, []);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
