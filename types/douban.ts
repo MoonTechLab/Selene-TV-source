@@ -1,3 +1,5 @@
+import { VideoInfo } from './entities';
+
 // 豆瓣电影数据类型
 export interface DoubanMovie {
   id: string;
@@ -5,6 +7,28 @@ export interface DoubanMovie {
   poster: string;
   rate?: string;
   year: string;
+}
+
+/**
+ * 将豆瓣电影数据转换为 VideoInfo
+ */
+export function doubanMovieToVideoInfo(movie: DoubanMovie): VideoInfo {
+  return {
+    id: movie.id,
+    source: 'douban',
+    title: movie.title,
+    sourceName: '豆瓣',
+    year: movie.year || '',
+    cover: movie.poster,
+    index: 1,
+    totalEpisodes: 1,
+    playTime: 0,
+    totalTime: 0,
+    saveTime: Date.now(),
+    searchTitle: movie.title,
+    doubanId: movie.id,
+    rate: movie.rate,
+  };
 }
 
 // 豆瓣 API 响应类型

@@ -1,6 +1,6 @@
 import { StyleSheet, View, Text, Modal, FlatList, TextInput, Pressable, Animated, ActivityIndicator } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
-import UserDataService from '../../services/userDataService';
+import AppDataService from '../../services/appDataService';
 import ToastService from '../../services/toastService';
 
 const DOUBAN_DATA_SOURCES = [
@@ -117,10 +117,10 @@ export default function SettingsTab() {
   }, [focusedModalItem, modalItemAnimations]);
 
   const loadSettings = async () => {
-    const isLoggedIn = await UserDataService.isLoggedIn();
-    const dataSource = await UserDataService.getDoubanDataSourceDisplayName();
-    const imageSource = await UserDataService.getDoubanImageSourceDisplayName();
-    const proxyUrl = await UserDataService.getM3u8ProxyUrl();
+    const isLoggedIn = await AppDataService.isLoggedIn();
+    const dataSource = await AppDataService.getDoubanDataSourceDisplayName();
+    const imageSource = await AppDataService.getDoubanImageSourceDisplayName();
+    const proxyUrl = await AppDataService.getM3u8ProxyUrl();
     
     setHasLogin(isLoggedIn);
     setDoubanDataSource(dataSource);
@@ -129,17 +129,17 @@ export default function SettingsTab() {
     
     // 如果已登录，加载用户信息
     if (isLoggedIn) {
-      const userData = await UserDataService.getAllUserData();
+      const userData = await AppDataService.getAllUserData();
       setUsername(userData.username || '');
       setServerUrl(userData.serverUrl || '');
-      const role = UserDataService.parseRoleFromCookies(userData.cookies);
+      const role = AppDataService.parseRoleFromCookies(userData.cookies);
       setUserRole(role);
     }
   };
 
   const handleLogin = async () => {
     // 从存储中加载 serverUrl 和 username 用于回显
-    const userData = await UserDataService.getAllUserData();
+    const userData = await AppDataService.getAllUserData();
     if (userData.serverUrl) {
       setLoginServerUrl(userData.serverUrl);
     }
@@ -229,7 +229,7 @@ export default function SettingsTab() {
           const cookies = parseCookies(response);
 
           // 保存用户数据
-          await UserDataService.saveUserData({
+          await AppDataService.saveUserData({
             serverUrl: baseUrl,
             username: loginUsername,
             password: loginPassword,
@@ -243,7 +243,7 @@ export default function SettingsTab() {
           // 更新用户信息
           setUsername(loginUsername);
           setServerUrl(baseUrl);
-          const role = UserDataService.parseRoleFromCookies(cookies);
+          const role = AppDataService.parseRoleFromCookies(cookies);
           setUserRole(role);
           
           // 清空表单
@@ -345,19 +345,19 @@ export default function SettingsTab() {
   }, [showLoginModal, loginModalVisible, loginScale, loginOpacity, loginOverlayOpacity]);
 
   const handleDataSourceSelect = async (source: string) => {
-    await UserDataService.saveDoubanDataSource(source);
+    await AppDataService.saveDoubanDataSource(source);
     setDoubanDataSource(source);
     setShowDataSourceModal(false);
   };
 
   const handleImageSourceSelect = async (source: string) => {
-    await UserDataService.saveDoubanImageSource(source);
+    await AppDataService.saveDoubanImageSource(source);
     setDoubanImageSource(source);
     setShowImageSourceModal(false);
   };
 
   const handleProxyUrlSave = async () => {
-    await UserDataService.saveM3u8ProxyUrl(tempProxyUrl);
+    await AppDataService.saveM3u8ProxyUrl(tempProxyUrl);
     setM3u8ProxyUrl(tempProxyUrl);
     setShowProxyModal(false);
   };
@@ -368,7 +368,7 @@ export default function SettingsTab() {
   };
 
   const handleLogout = async () => {
-    await UserDataService.clearPasswordAndCookies();
+    await AppDataService.clearPasswordAndCookies();
     setHasLogin(false);
     setUsername('');
     setServerUrl('');

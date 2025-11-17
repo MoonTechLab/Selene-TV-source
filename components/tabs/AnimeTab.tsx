@@ -8,6 +8,8 @@ import VideoCardSkeleton from '../VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
 import bangumiService from '@/services/bangumiService';
 import doubanService from '@/services/doubanService';
+import { doubanMovieToVideoInfo } from '@/types/douban';
+import { bangumiItemToVideoInfo } from '@/types/bangumi';
 
 const CATEGORY_OPTIONS = [
   { key: 'new', label: '每日放送' },
@@ -730,13 +732,10 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
                   }}
                 >
                   {row.map((item, colIndex) => {
-                    // 根据数据来源判断字段
-                    const title = selectedCategory === 'new' 
-                      ? (item.nameCn || item.name)
-                      : item.title;
-                    const coverUrl = selectedCategory === 'new'
-                      ? (item.images?.large || item.images?.common || '')
-                      : item.poster;
+                    // 根据数据来源转换为 VideoInfo
+                    const videoInfo = selectedCategory === 'new' 
+                      ? bangumiItemToVideoInfo(item)
+                      : doubanMovieToVideoInfo(item);
                     
                     return (
                       <View 
@@ -747,10 +746,8 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
                         ]}
                       >
                         <VideoCard
-                          title={title}
-                          coverUrl={coverUrl}
-                          from={selectedCategory === 'new' ? 'bangumi' : 'douban'}
-                          onPress={() => console.log('Pressed:', title)}
+                          videoInfo={videoInfo}
+                          onPress={() => console.log('Pressed:', videoInfo.title)}
                           onFocus={() => handleCardFocus(rowIndex)}
                           nextFocusUp={rowIndex === 0 ? (weekdaySelectorHandle ?? undefined) : undefined}
                         />

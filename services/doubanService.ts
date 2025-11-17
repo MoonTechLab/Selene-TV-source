@@ -8,7 +8,7 @@ import {
   DoubanRecommendsParams,
 } from '@/types/douban';
 import doubanCacheService from './doubanCacheService';
-import UserDataService from './userDataService';
+import AppDataService from './appDataService';
 
 /**
  * 豆瓣服务类
@@ -101,7 +101,7 @@ class DoubanService {
     pageLimit?: number;
     page?: number;
   }): Promise<ApiResponse<DoubanMovie[]>> {
-    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
+    const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'movie',
       category: '热门',
@@ -122,7 +122,7 @@ class DoubanService {
     pageLimit?: number;
     page?: number;
   }): Promise<ApiResponse<DoubanMovie[]>> {
-    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
+    const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'tv',
       category: '最近热门',
@@ -143,7 +143,7 @@ class DoubanService {
     pageLimit?: number;
     page?: number;
   }): Promise<ApiResponse<DoubanMovie[]>> {
-    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
+    const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
       kind: 'tv',
       category: 'show',
@@ -297,7 +297,7 @@ class DoubanService {
   async fetchDoubanRecommends(
     params: DoubanRecommendsParams
   ): Promise<ApiResponse<DoubanMovie[]>> {
-    const dataSourceKey = await UserDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
+    const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     const {
       kind,
       category = 'all',

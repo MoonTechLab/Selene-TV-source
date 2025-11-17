@@ -12,7 +12,7 @@ import SettingsTab from '@/components/tabs/SettingsTab';
 import SearchTab from '@/components/tabs/SearchTab';
 import Toast from '@/components/Toast';
 import { ScrollContext } from '@/contexts/ScrollContext';
-import UserDataService from '@/services/userDataService';
+import AppDataService from '@/services/appDataService';
 import ToastService from '@/services/toastService';
 
 const TAB_ORDER: TabType[] = ['home', 'movie', 'series', 'anime', 'variety', 'live', 'mine', 'search'];
@@ -23,11 +23,12 @@ const renderTabContent = (
   movieFirstSelectorRef?: React.RefObject<any>,
   seriesFirstSelectorRef?: React.RefObject<any>,
   animeFirstSelectorRef?: React.RefObject<any>,
-  varietyFirstSelectorRef?: React.RefObject<any>
+  varietyFirstSelectorRef?: React.RefObject<any>,
+  onFirstSectionTitleReady?: (nodeHandle: number | null) => void
 ) => {
   switch (tab) {
     case 'home':
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} />;
     case 'movie':
       return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
     case 'series':
@@ -43,7 +44,7 @@ const renderTabContent = (
     case 'search':
       return <SearchTab />;
     default:
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} />;
+      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} />;
   }
 };
 
@@ -81,10 +82,10 @@ export default function HomeScreen() {
   useEffect(() => {
     const autoLogin = async () => {
       try {
-        const hasLogin = await UserDataService.isLoggedIn();
+        const hasLogin = await AppDataService.isLoggedIn();
         
         if (hasLogin) {
-          const userData = await UserDataService.getAllUserData();
+          const userData = await AppDataService.getAllUserData();
           const { serverUrl, username, password } = userData;
           
           // 检查是否有完整的登录信息
@@ -113,7 +114,7 @@ export default function HomeScreen() {
                 }).join('; ');
                 
                 // 更新存储的 cookies
-                await UserDataService.saveUserData({
+                await AppDataService.saveUserData({
                   serverUrl,
                   username,
                   password,
@@ -122,7 +123,7 @@ export default function HomeScreen() {
               }
             } else {
               // 登录失败，设置 hasLogin 为 false
-              await UserDataService.setHasLogin(false);
+              await AppDataService.setHasLogin(false);
               ToastService.error('自动登录失败');
             }
           }
@@ -130,7 +131,7 @@ export default function HomeScreen() {
       } catch (error) {
         console.error('自动登录错误:', error);
         // 登录失败，设置 hasLogin 为 false
-        await UserDataService.setHasLogin(false);
+        await AppDataService.setHasLogin(false);
         ToastService.error('自动登录失败');
       }
     };
@@ -243,6 +244,10 @@ export default function HomeScreen() {
     setIsSwitching(false);
   };
 
+  const handleFirstSectionTitleReady = useCallback((nodeHandle: number | null) => {
+    tabSwitcherRef.current?.updateFirstSectionTitleNodeHandle(nodeHandle);
+  }, []);
+
   return (
     <LinearGradient
       colors={['#0a0a0a', '#1a1a1a', '#0f0f0f', '#050505']}
@@ -280,7 +285,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady)}
           </Animated.View>
         </ScrollView>
         

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-class UserDataService {
+class AppDataService {
   private static readonly _serverUrlKey = 'server_url';
   private static readonly _usernameKey = 'username';
   private static readonly _passwordKey = 'password';
@@ -283,4 +283,4 @@ class UserDataService {
   }
 }
 
-export default UserDataService;
+export default AppDataService;

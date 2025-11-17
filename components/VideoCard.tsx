@@ -2,11 +2,11 @@ import { StyleSheet, View, Text, Pressable, Animated, Easing, useTVEventHandler 
 import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import FastImage from 'react-native-fast-image';
 import { useScrollContext } from '@/contexts/ScrollContext';
+import { VideoInfo } from '@/types/entities';
 
 interface VideoCardProps {
-  title: string;
-  coverUrl: string;
-  from?: 'douban' | 'bangumi';
+  videoInfo: VideoInfo;
+  from?: string;
   onPress?: () => void;
   onFocus?: (cardRef: any) => void;
   onBlur?: () => void;
@@ -15,7 +15,8 @@ interface VideoCardProps {
   nextFocusDown?: number;
 }
 
-function VideoCard({ title, coverUrl, from = 'douban', onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
+function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
+  const { title, cover: coverUrl } = videoInfo;
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const cardRef = useRef<any>(null);
@@ -329,9 +330,10 @@ export default memo(VideoCard, (prevProps, nextProps) => {
   // 返回 true 表示 props 相同，跳过渲染
   // 返回 false 表示 props 不同，需要重新渲染
   return (
-    prevProps.title === nextProps.title &&
-    prevProps.coverUrl === nextProps.coverUrl &&
-    prevProps.from === nextProps.from &&
+    prevProps.videoInfo.id === nextProps.videoInfo.id &&
+    prevProps.videoInfo.title === nextProps.videoInfo.title &&
+    prevProps.videoInfo.cover === nextProps.videoInfo.cover &&
+    prevProps.videoInfo.source === nextProps.videoInfo.source &&
     prevProps.nextFocusUp === nextProps.nextFocusUp &&
     prevProps.nextFocusDown === nextProps.nextFocusDown
     // 注意：onPress、onFocus、onBlur 等函数引用可能每次都不同

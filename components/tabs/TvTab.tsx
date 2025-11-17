@@ -7,6 +7,7 @@ import VideoCard from '../VideoCard';
 import VideoCardSkeleton from '../VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
 import doubanService from '@/services/doubanService';
+import { doubanMovieToVideoInfo } from '@/types/douban';
 
 const CATEGORY_OPTIONS = [
   { key: 'all', label: '全部' },
@@ -668,9 +669,7 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
                       ]}
                     >
                       <VideoCard
-                        title={item.title}
-                        coverUrl={item.poster}
-                        from="douban"
+                        videoInfo={doubanMovieToVideoInfo(item)}
                         onPress={() => console.log('Pressed:', item.title)}
                         onFocus={() => handleCardFocus(rowIndex)}
                         nextFocusUp={rowIndex === 0 ? (typeSelectorHandle ?? undefined) : undefined}

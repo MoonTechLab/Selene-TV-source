@@ -32,10 +32,20 @@ interface TabSwitcherProps {
   seriesFirstSelectorRef?: React.RefObject<any>;
   animeFirstSelectorRef?: React.RefObject<any>;
   varietyFirstSelectorRef?: React.RefObject<any>;
+  onFirstSectionTitleReady?: (nodeHandle: number | null) => void;
+  onMovieFirstSelectorReady?: (nodeHandle: number | null) => void;
+  onSeriesFirstSelectorReady?: (nodeHandle: number | null) => void;
+  onAnimeFirstSelectorReady?: (nodeHandle: number | null) => void;
+  onVarietyFirstSelectorReady?: (nodeHandle: number | null) => void;
 }
 
 export interface TabSwitcherRef {
   focusToCurrent: () => void;
+  updateFirstSectionTitleNodeHandle: (handle: number | null) => void;
+  updateMovieFirstSelectorNodeHandle: (handle: number | null) => void;
+  updateSeriesFirstSelectorNodeHandle: (handle: number | null) => void;
+  updateAnimeFirstSelectorNodeHandle: (handle: number | null) => void;
+  updateVarietyFirstSelectorNodeHandle: (handle: number | null) => void;
 }
 
 const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({ 
@@ -48,13 +58,22 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
   movieFirstSelectorRef,
   seriesFirstSelectorRef,
   animeFirstSelectorRef,
-  varietyFirstSelectorRef
+  varietyFirstSelectorRef,
+  onFirstSectionTitleReady,
+  onMovieFirstSelectorReady,
+  onSeriesFirstSelectorReady,
+  onAnimeFirstSelectorReady,
+  onVarietyFirstSelectorReady
 }, ref) => {
   const hasFocus = focusedTab !== null;
   const tabRefs = useRef<Record<TabType, any>>({} as Record<TabType, any>);
   const [shouldFocusCurrent, setShouldFocusCurrent] = useState(true); // 初始为 true，启动时聚焦当前 tab
   const [focusTarget, setFocusTarget] = useState<TabType>(activeTab);
-  const [nextFocusNodeHandle, setNextFocusNodeHandle] = useState<number | null>(null);
+  const [firstSectionTitleNodeHandle, setFirstSectionTitleNodeHandle] = useState<number | null>(null);
+  const [movieFirstSelectorNodeHandle, setMovieFirstSelectorNodeHandle] = useState<number | null>(null);
+  const [seriesFirstSelectorNodeHandle, setSeriesFirstSelectorNodeHandle] = useState<number | null>(null);
+  const [animeFirstSelectorNodeHandle, setAnimeFirstSelectorNodeHandle] = useState<number | null>(null);
+  const [varietyFirstSelectorNodeHandle, setVarietyFirstSelectorNodeHandle] = useState<number | null>(null);
   
   // 为每个 tab 创建动画值
   const tabAnimations = useRef(
@@ -74,8 +93,54 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
         setShouldFocusCurrent(false);
       }, 200);
     },
+    updateFirstSectionTitleNodeHandle: (handle: number | null) => {
+      setFirstSectionTitleNodeHandle(handle);
+    },
+    updateMovieFirstSelectorNodeHandle: (handle: number | null) => {
+      setMovieFirstSelectorNodeHandle(handle);
+    },
+    updateSeriesFirstSelectorNodeHandle: (handle: number | null) => {
+      setSeriesFirstSelectorNodeHandle(handle);
+    },
+    updateAnimeFirstSelectorNodeHandle: (handle: number | null) => {
+      setAnimeFirstSelectorNodeHandle(handle);
+    },
+    updateVarietyFirstSelectorNodeHandle: (handle: number | null) => {
+      setVarietyFirstSelectorNodeHandle(handle);
+    },
   }));
   
+  // 暴露回调函数给父组件，让子组件在 ref 准备好后调用
+  useEffect(() => {
+    if (onFirstSectionTitleReady) {
+      onFirstSectionTitleReady(firstSectionTitleNodeHandle);
+    }
+  }, [firstSectionTitleNodeHandle, onFirstSectionTitleReady]);
+
+  useEffect(() => {
+    if (onMovieFirstSelectorReady) {
+      onMovieFirstSelectorReady(movieFirstSelectorNodeHandle);
+    }
+  }, [movieFirstSelectorNodeHandle, onMovieFirstSelectorReady]);
+
+  useEffect(() => {
+    if (onSeriesFirstSelectorReady) {
+      onSeriesFirstSelectorReady(seriesFirstSelectorNodeHandle);
+    }
+  }, [seriesFirstSelectorNodeHandle, onSeriesFirstSelectorReady]);
+
+  useEffect(() => {
+    if (onAnimeFirstSelectorReady) {
+      onAnimeFirstSelectorReady(animeFirstSelectorNodeHandle);
+    }
+  }, [animeFirstSelectorNodeHandle, onAnimeFirstSelectorReady]);
+
+  useEffect(() => {
+    if (onVarietyFirstSelectorReady) {
+      onVarietyFirstSelectorReady(varietyFirstSelectorNodeHandle);
+    }
+  }, [varietyFirstSelectorNodeHandle, onVarietyFirstSelectorReady]);
+
   // 处理焦点变化时的动画
   useEffect(() => {
     tabs.forEach((tab) => {
@@ -89,52 +154,23 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
     });
   }, [focusedTab]);
 
-  // 更新节点句柄的函数
-  const updateNodeHandle = useCallback(() => {
-    let targetRef = null;
-    
+  // 根据当前 activeTab 获取对应的 nextFocusDown
+  const getNextFocusDown = useCallback(() => {
     switch (activeTab) {
       case 'home':
-        targetRef = firstSectionTitleRef?.current;
-        break;
+        return firstSectionTitleNodeHandle;
       case 'movie':
-        targetRef = movieFirstSelectorRef?.current;
-        break;
+        return movieFirstSelectorNodeHandle;
       case 'series':
-        targetRef = seriesFirstSelectorRef?.current;
-        break;
+        return seriesFirstSelectorNodeHandle;
       case 'anime':
-        targetRef = animeFirstSelectorRef?.current;
-        break;
+        return animeFirstSelectorNodeHandle;
       case 'variety':
-        targetRef = varietyFirstSelectorRef?.current;
-        break;
+        return varietyFirstSelectorNodeHandle;
+      default:
+        return undefined;
     }
-    
-    if (targetRef) {
-      const handle = findNodeHandle(targetRef);
-      setNextFocusNodeHandle(handle);
-    } else {
-      setNextFocusNodeHandle(null);
-    }
-  }, [activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef]);
-
-  // 监听 activeTab 变化，更新节点句柄
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      updateNodeHandle();
-    }, 150); // 等待动画完成后再获取节点句柄
-
-    return () => clearTimeout(timer);
-  }, [activeTab, updateNodeHandle]);
-
-  // 当焦点回到 TabSwitcher 时（focusedTab 不为 null），重新获取节点句柄
-  useEffect(() => {
-    if (focusedTab !== null) {
-      // 用户正在 TabSwitcher 上，重新获取最新的节点句柄
-      updateNodeHandle();
-    }
-  }, [focusedTab, updateNodeHandle]);
+  }, [activeTab, firstSectionTitleNodeHandle, movieFirstSelectorNodeHandle, seriesFirstSelectorNodeHandle, animeFirstSelectorNodeHandle, varietyFirstSelectorNodeHandle]);
   
   return (
     <View style={styles.navContainer}>
@@ -171,11 +207,7 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
                 onPress={() => onTabChange(tab.key)}
                 onBlur={() => onTabFocus(null as any)}
                 hasTVPreferredFocus={tab.key === focusTarget && shouldFocusCurrent}
-                nextFocusDown={
-                  isSwitching 
-                    ? tabRefs.current[tab.key] 
-                    : nextFocusNodeHandle ?? undefined
-                }
+                nextFocusDown={isSwitching ? tabRefs.current[tab.key] : (tab.key === activeTab ? getNextFocusDown() : undefined)}
               >
                 {({ focused }) => (
                   <>

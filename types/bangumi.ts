@@ -58,6 +58,41 @@ export interface BangumiItem {
 }
 
 /**
+ * 获取最佳图片 URL
+ */
+export function getBestImageUrl(images: BangumiImages): string {
+  return images.large || images.common || images.medium || images.small || images.grid;
+}
+
+/**
+ * 将 Bangumi 项目数据转换为 VideoInfo
+ */
+export function bangumiItemToVideoInfo(item: BangumiItem): VideoInfo {
+  const title = item.nameCn || item.name;
+  const year = item.airDate ? item.airDate.split('-')[0] : '';
+  const rate = item.rating.score > 0 ? item.rating.score.toFixed(1) : undefined;
+
+  return {
+    id: item.id.toString(),
+    source: 'bangumi',
+    title,
+    sourceName: 'Bangumi',
+    year,
+    cover: getBestImageUrl(item.images),
+    index: 1,
+    totalEpisodes: 1,
+    playTime: 0,
+    totalTime: 0,
+    saveTime: Date.now(),
+    searchTitle: title,
+    bangumiId: item.id,
+    rate,
+  };
+}
+
+import { VideoInfo } from './entities';
+
+/**
  * Bangumi 日历响应数据模型
  */
 export interface BangumiCalendarResponse {

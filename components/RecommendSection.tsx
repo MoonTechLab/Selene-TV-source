@@ -3,17 +3,11 @@ import { useRef, useState, useEffect } from 'react';
 import VideoCard from './VideoCard';
 import VideoCardSkeleton from './VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
-
-interface VideoItem {
-  id: string;
-  title: string;
-  coverUrl: string;
-  from?: 'douban' | 'bangumi';
-}
+import { VideoInfo } from '@/types/entities';
 
 interface RecommendSectionProps {
   title: string;
-  videos: VideoItem[];
+  videos: VideoInfo[];
   onTitlePress?: () => void;
   titleRef?: React.RefObject<any>;
   nextSectionTitleRef?: React.RefObject<any>;
@@ -215,10 +209,8 @@ export default function RecommendSection({ title, videos, onTitlePress, titleRef
           ) : (
             videos.map((video, index) => (
               <VideoCard
-                key={video.id}
-                title={video.title}
-                coverUrl={video.coverUrl}
-                from={video.from}
+                key={`${video.source}_${video.id}`}
+                videoInfo={video}
                 onFocus={(cardRef) => handleCardFocus(index, cardRef)}
                 onNavigateVertical={(direction) => {
                   if (direction === 'up') {
