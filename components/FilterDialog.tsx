@@ -22,6 +22,12 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
   const [focusedValue, setFocusedValue] = useState<string | null>(null);
   const optionRefs = useRef<Record<string, any>>({});
   const [preferredFocusTarget, setPreferredFocusTarget] = useState<number | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  // 对话框弹出动画
+  const dialogScale = useRef(new Animated.Value(0.8)).current;
+  const dialogOpacity = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   
   // 为每个选项创建动画值
   const optionAnimations = useRef<Record<string, Animated.Value>>({});
@@ -45,9 +51,32 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
     }
   }), [options]);
 
-  // 当对话框打开时，设置首选焦点目标
+  // 当对话框打开/关闭时，执行弹出动画
   useEffect(() => {
     if (visible) {
+      setModalVisible(true);
+      // 弹出动画
+      Animated.parallel([
+        Animated.spring(dialogScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 10,
+          tension: 150,
+        }),
+        Animated.spring(dialogOpacity, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 10,
+          tension: 150,
+        }),
+        Animated.spring(overlayOpacity, {
+          toValue: 1,
+          useNativeDriver: true,
+          friction: 10,
+          tension: 150,
+        }),
+      ]).start();
+      
       // 优先聚焦到选中项，如果没有选中项则聚焦第一项
       const targetValue = selectedValue || options[0]?.value;
       const targetRef = optionRefs.current[targetValue];
@@ -59,10 +88,34 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
           targetRef.focus?.();
         }, 100);
       }
-    } else {
-      setFocusedValue(null);
+    } else if (modalVisible) {
+      // 隐藏动画 - 快速缩小到 0.8
+      Animated.parallel([
+        Animated.spring(dialogScale, {
+          toValue: 0.8,
+          useNativeDriver: true,
+          friction: 12,
+          tension: 200,
+        }),
+        Animated.spring(dialogOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 12,
+          tension: 200,
+        }),
+        Animated.spring(overlayOpacity, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 12,
+          tension: 200,
+        }),
+      ]).start(() => {
+        // 动画完成后关闭 Modal
+        setModalVisible(false);
+        setFocusedValue(null);
+      });
     }
-  }, [visible, selectedValue, options]);
+  }, [visible, selectedValue, options, dialogScale, dialogOpacity, modalVisible]);
 
   // 处理焦点变化时的动画
   useEffect(() => {
@@ -85,18 +138,14 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
     onClose();
   };
 
-  if (!visible) {
-    return null;
-  }
-
   return (
     <Modal
-      visible={visible}
+      visible={modalVisible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
         <Pressable 
           style={styles.dialogWrapper}
           onPress={(e) => {
@@ -104,7 +153,15 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
             e.stopPropagation();
           }}
         >
-          <View style={styles.dialog}>
+          <Animated.View 
+            style={[
+              styles.dialog,
+              {
+                transform: [{ scale: dialogScale }],
+                opacity: dialogOpacity,
+              }
+            ]}
+          >
             <Text style={styles.title}>{title}</Text>
             <TVFocusGuideView 
               style={styles.optionsContainer}
@@ -145,9 +202,9 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
                 );
               })}
             </TVFocusGuideView>
-          </View>
+          </Animated.View>
         </Pressable>
-      </View>
+      </Animated.View>
     </Modal>
   );
 });
