@@ -2,7 +2,7 @@ import { StyleSheet, ScrollView, BackHandler, Animated, View } from 'react-nativ
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import TabSwitcher, { TabType } from '@/components/TabSwitcher';
-import HomeTab from '@/components/tabs/HomeTab';
+import HomeTab, { HomeTabRef } from '@/components/tabs/HomeTab';
 import MovieTab from '@/components/tabs/MovieTab';
 import TvTab from '@/components/tabs/TvTab';
 import AnimeTab from '@/components/tabs/AnimeTab';
@@ -25,11 +25,12 @@ const renderTabContent = (
   animeFirstSelectorRef?: React.RefObject<any>,
   varietyFirstSelectorRef?: React.RefObject<any>,
   onFirstSectionTitleReady?: (nodeHandle: number | null) => void,
-  onTabChange?: (tab: TabType) => void
+  onTabChange?: (tab: TabType) => void,
+  homeTabRef?: React.RefObject<HomeTabRef | null>
 ) => {
   switch (tab) {
     case 'home':
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
+      return <HomeTab ref={homeTabRef} firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
     case 'movie':
       return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
     case 'series':
@@ -45,7 +46,7 @@ const renderTabContent = (
     case 'search':
       return <SearchTab />;
     default:
-      return <HomeTab firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
+      return <HomeTab ref={homeTabRef} firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
   }
 };
 
@@ -62,6 +63,9 @@ export default function HomeScreen() {
   const seriesFirstSelectorRef = useRef<any>(null);
   const animeFirstSelectorRef = useRef<any>(null);
   const varietyFirstSelectorRef = useRef<any>(null);
+  
+  // Tab 组件的 refs（仅首页需要 ref）
+  const homeTabRef = useRef<HomeTabRef>(null);
   
   // 用于在全局测量容器中渲染测量元素
   const [measureElement, setMeasureElement] = useState<React.ReactNode>(null);
@@ -236,8 +240,11 @@ export default function HomeScreen() {
   };
 
   const handleTabChange = (tab: TabType) => {
-    // 如果点按的是当前已激活的 tab，不响应
+    // 如果点按的是当前已激活的 tab，调用刷新方法（仅首页）
     if (tab === activeTab) {
+      if (tab === 'home') {
+        homeTabRef.current?.refresh();
+      }
       return;
     }
     
@@ -302,7 +309,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady, handleTabChange)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady, handleTabChange, homeTabRef)}
           </Animated.View>
         </ScrollView>
         

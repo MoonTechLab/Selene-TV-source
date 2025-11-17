@@ -16,10 +16,12 @@ interface VideoCardProps {
 }
 
 function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
-  const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate } = videoInfo;
+  const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate, playTime, totalTime } = videoInfo;
   const showSourceName = (from === 'playrecord' || from === 'favorite') && sourceName;
   const showEpisodeBadge = (from === 'playrecord' || from === 'favorite') && totalEpisodes > 1;
   const showRateBadge = (from === 'bangumi' || from === 'douban') && rate && rate !== '0';
+  const showProgressBar = from === 'playrecord' && totalTime > 0;
+  const progressPercentage = showProgressBar ? Math.min((playTime / totalTime) * 100, 100) : 0;
 
   // 徽章文本逻辑
   const getBadgeText = () => {
@@ -213,6 +215,13 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                 <Text style={styles.rateBadgeText}>{rate}</Text>
               </View>
             )}
+            {showProgressBar && (
+              <View style={styles.progressBarContainer}>
+                <View style={styles.progressBarBackground}>
+                  <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                </View>
+              </View>
+            )}
           </View>
           <View 
             style={styles.content}
@@ -396,6 +405,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  progressBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    overflow: 'hidden',
+  },
+  progressBarBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', // 半透明白色 - 未播放部分
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#4CAF50', // 绿色 - 已播放部分（与集数徽章相同）
   },
 });
 

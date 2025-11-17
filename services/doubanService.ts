@@ -96,10 +96,12 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
+   * @param forceSource - 是否强制从源获取，默认false
    */
   async getHotMovies(params?: {
     pageLimit?: number;
     page?: number;
+    forceSource?: boolean;
   }): Promise<ApiResponse<DoubanMovie[]>> {
     const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
@@ -109,6 +111,7 @@ class DoubanService {
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
       dataSourceKey,
+      forceSource: params?.forceSource ?? false,
     });
   }
 
@@ -117,10 +120,12 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
+   * @param forceSource - 是否强制从源获取，默认false
    */
   async getHotTvShows(params?: {
     pageLimit?: number;
     page?: number;
+    forceSource?: boolean;
   }): Promise<ApiResponse<DoubanMovie[]>> {
     const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
@@ -130,6 +135,7 @@ class DoubanService {
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
       dataSourceKey,
+      forceSource: params?.forceSource ?? false,
     });
   }
 
@@ -138,10 +144,12 @@ class DoubanService {
    * 
    * @param pageLimit - 每页数量，默认25
    * @param page - 起始页码，默认0
+   * @param forceSource - 是否强制从源获取，默认false
    */
   async getHotShows(params?: {
     pageLimit?: number;
     page?: number;
+    forceSource?: boolean;
   }): Promise<ApiResponse<DoubanMovie[]>> {
     const dataSourceKey = await AppDataService.getDoubanDataSourceKey() as DoubanDataSourceKey;
     return this.getCategoryData({
@@ -151,6 +159,7 @@ class DoubanService {
       pageLimit: params?.pageLimit ?? 25,
       page: params?.page ?? 0,
       dataSourceKey,
+      forceSource: params?.forceSource ?? false,
     });
   }
 
@@ -171,6 +180,7 @@ class DoubanService {
     pageLimit?: number;
     page?: number;
     dataSourceKey?: DoubanDataSourceKey;
+    forceSource?: boolean;
   }): Promise<ApiResponse<DoubanMovie[]>> {
     const {
       kind,
@@ -179,6 +189,7 @@ class DoubanService {
       pageLimit = 25,
       page = 0,
       dataSourceKey = 'direct',
+      forceSource = false,
     } = params;
 
     // 初始化缓存服务
@@ -193,30 +204,32 @@ class DoubanService {
       page,
     });
 
-    // 尝试从缓存获取数据（存取均为已处理后的 DoubanMovie 列表）
-    try {
-      const cachedData = await doubanCacheService.get<DoubanMovie[]>(
-        cacheKey,
-        (raw) => {
-          if (!Array.isArray(raw)) {
-            throw new Error('Invalid cache data format');
+    // 如果不强制从源获取，尝试从缓存获取数据
+    if (!forceSource) {
+      try {
+        const cachedData = await doubanCacheService.get<DoubanMovie[]>(
+          cacheKey,
+          (raw) => {
+            if (!Array.isArray(raw)) {
+              throw new Error('Invalid cache data format');
+            }
+            return raw.map((m: any) => ({
+              id: m.id?.toString() || '',
+              title: m.title?.toString() || '',
+              poster: m.poster?.toString() || '',
+              rate: m.rate?.toString(),
+              year: m.year?.toString() || '',
+            }));
           }
-          return raw.map((m: any) => ({
-            id: m.id?.toString() || '',
-            title: m.title?.toString() || '',
-            poster: m.poster?.toString() || '',
-            rate: m.rate?.toString(),
-            year: m.year?.toString() || '',
-          }));
-        }
-      );
+        );
 
-      if (cachedData) {
-        return ApiResponseHelper.success(cachedData);
+        if (cachedData) {
+          return ApiResponseHelper.success(cachedData);
+        }
+      } catch (e) {
+        // 缓存读取失败，继续执行网络请求
+        console.log('读取缓存失败:', e);
       }
-    } catch (e) {
-      // 缓存读取失败，继续执行网络请求
-      console.log('读取缓存失败:', e);
     }
 
     const start = page * pageLimit;

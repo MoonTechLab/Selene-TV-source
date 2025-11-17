@@ -259,7 +259,7 @@ export default function FavoriteSection({ title, videos, playRecords = [], onTit
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 18,
+    marginBottom: 16,
   },
   titleWrapper: {
     flexDirection: 'row',

@@ -121,49 +121,53 @@ class BangumiService {
 
   /**
    * 获取当天的新番放送（根据当前星期几）
+   * @param forceSource - 是否强制从源获取，默认false
    */
-  async getTodayCalendar(): Promise<ApiResponse<BangumiItem[]>> {
+  async getTodayCalendar(forceSource: boolean = false): Promise<ApiResponse<BangumiItem[]>> {
     const now = new Date();
     // JavaScript: 0 (Sunday) - 6 (Saturday)
     // Bangumi API: 1 (Monday) - 7 (Sunday)
     const weekday = now.getDay() === 0 ? 7 : now.getDay();
-    return this.getCalendarByWeekday(weekday);
+    return this.getCalendarByWeekday(weekday, forceSource);
   }
 
   /**
    * 获取指定星期的新番放送
    * @param weekday - 星期几 (1..7, Monday..Sunday)
+   * @param forceSource - 是否强制从源获取，默认false
    */
-  async getCalendarByWeekday(weekday: number): Promise<ApiResponse<BangumiItem[]>> {
+  async getCalendarByWeekday(weekday: number, forceSource: boolean = false): Promise<ApiResponse<BangumiItem[]>> {
     await this.initCache();
 
     // 接口级缓存：缓存原始 API 数组，固定键，不含参数
     const cacheKey = 'bangumi_calendar_raw_v1';
 
-    // 先尝试读取原始数组缓存
-    try {
-      const cachedRaw = await doubanCacheService.get<any[]>(
-        cacheKey,
-        (raw) => {
-          if (!Array.isArray(raw)) {
-            throw new Error('Invalid cache data format');
+    // 如果不强制从源获取，先尝试读取原始数组缓存
+    if (!forceSource) {
+      try {
+        const cachedRaw = await doubanCacheService.get<any[]>(
+          cacheKey,
+          (raw) => {
+            if (!Array.isArray(raw)) {
+              throw new Error('Invalid cache data format');
+            }
+            return raw;
           }
-          return raw;
+        );
+
+        if (cachedRaw && cachedRaw.length > 0) {
+          // 解析所有星期数据
+          const calendar = cachedRaw.map((item) => this.parseCalendarResponse(item));
+
+          // 查找目标星期的数据
+          const targetDay = calendar.find((day) => day.weekday.id === weekday);
+          const items = targetDay?.items || [];
+
+          return ApiResponseHelper.success(items);
         }
-      );
-
-      if (cachedRaw && cachedRaw.length > 0) {
-        // 解析所有星期数据
-        const calendar = cachedRaw.map((item) => this.parseCalendarResponse(item));
-
-        // 查找目标星期的数据
-        const targetDay = calendar.find((day) => day.weekday.id === weekday);
-        const items = targetDay?.items || [];
-
-        return ApiResponseHelper.success(items);
+      } catch (_) {
+        // 缓存读取失败，继续执行网络请求
       }
-    } catch (_) {
-      // 缓存读取失败，继续执行网络请求
     }
 
     try {

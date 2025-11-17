@@ -233,7 +233,7 @@ export default function PlayRecordSection({ title, videos, onTitlePress, titleRe
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 18,
+    marginBottom: 16,
   },
   titleWrapper: {
     flexDirection: 'row',

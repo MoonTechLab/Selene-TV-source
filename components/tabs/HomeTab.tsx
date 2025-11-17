@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, findNodeHandle } from 'react-native';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import RecommendSection from '../RecommendSection';
 import PlayRecordSection from '../PlayRecordSection';
 import FavoriteSection from '../FavoriteSection';
@@ -16,7 +16,11 @@ interface HomeTabProps {
   onTabChange?: (tab: 'movie' | 'series' | 'anime' | 'variety') => void;
 }
 
-export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady, onTabChange }: HomeTabProps = {}) {
+export interface HomeTabRef {
+  refresh: (forceSource?: boolean) => void;
+}
+
+const HomeTab = forwardRef<HomeTabRef, HomeTabProps>(({ firstSectionTitleRef, onFirstSectionTitleReady, onTabChange }, ref) => {
   const favoriteTitleRef = useRef<any>(null);
   const movieTitleRef = useRef<any>(null);
   const seriesTitleRef = useRef<any>(null);
@@ -29,14 +33,27 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
   const [hotTvShows, setHotTvShows] = useState<DoubanMovie[]>([]);
   const [hotShows, setHotShows] = useState<DoubanMovie[]>([]);
   const [todayBangumi, setTodayBangumi] = useState<BangumiItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPlayRecords, setShowPlayRecords] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
+  
+  // 独立的 loading 状态
+  const [loadingUserData, setLoadingUserData] = useState(true);
+  const [loadingMovies, setLoadingMovies] = useState(true);
+  const [loadingTvShows, setLoadingTvShows] = useState(true);
+  const [loadingShows, setLoadingShows] = useState(true);
+  const [loadingBangumi, setLoadingBangumi] = useState(true);
 
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // 暴露刷新方法
+  useImperativeHandle(ref, () => ({
+    refresh: () => {
+      loadAllData(true);
+    },
+  }));
 
   // 当第一个 section 的 titleRef 准备好后，通知父组件
   useEffect(() => {
@@ -46,21 +63,21 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
     }
   }, [firstSectionTitleRef?.current, onFirstSectionTitleReady, showPlayRecords, showFavorites]);
 
-  const loadAllData = async () => {
-    setLoading(true);
+  const loadAllData = async (forceSource: boolean = false) => {
     setError(null);
+    
+    // 设置所有 loading 状态为 true
+    setLoadingUserData(true);
+    setLoadingMovies(true);
+    setLoadingTvShows(true);
+    setLoadingShows(true);
+    setLoadingBangumi(true);
 
-    try {
-      // 并行加载所有数据
-      const [playRecordsRes, favoritesRes, moviesRes, tvShowsRes, showsRes, bangumiRes] = await Promise.all([
-        userDataCacheService.getPlayRecords(),
-        userDataCacheService.getFavorites(),
-        doubanService.getHotMovies({ pageLimit: 25, page: 0 }),
-        doubanService.getHotTvShows({ pageLimit: 25, page: 0 }),
-        doubanService.getHotShows({ pageLimit: 25, page: 0 }),
-        bangumiService.getTodayCalendar(),
-      ]);
-
+    // 加载播放记录和收藏（一起加载）
+    Promise.all([
+      userDataCacheService.getPlayRecords(forceSource),
+      userDataCacheService.getFavorites(forceSource),
+    ]).then(([playRecordsRes, favoritesRes]) => {
       if (playRecordsRes.success && playRecordsRes.data && playRecordsRes.data.length > 0) {
         setPlayRecords(playRecordsRes.data);
         setShowPlayRecords(true);
@@ -74,27 +91,56 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
       } else {
         setShowFavorites(false);
       }
+    }).catch(() => {
+      setShowPlayRecords(false);
+      setShowFavorites(false);
+    }).finally(() => {
+      setLoadingUserData(false);
+    });
 
+    // 加载热门电影
+    doubanService.getHotMovies({ pageLimit: 25, page: 0, forceSource }).then((moviesRes) => {
       if (moviesRes.success && moviesRes.data) {
         setHotMovies(moviesRes.data);
       }
+    }).catch(() => {
+      // 忽略错误
+    }).finally(() => {
+      setLoadingMovies(false);
+    });
 
+    // 加载热门剧集
+    doubanService.getHotTvShows({ pageLimit: 25, page: 0, forceSource }).then((tvShowsRes) => {
       if (tvShowsRes.success && tvShowsRes.data) {
         setHotTvShows(tvShowsRes.data);
       }
+    }).catch(() => {
+      // 忽略错误
+    }).finally(() => {
+      setLoadingTvShows(false);
+    });
 
+    // 加载热门综艺
+    doubanService.getHotShows({ pageLimit: 25, page: 0, forceSource }).then((showsRes) => {
       if (showsRes.success && showsRes.data) {
         setHotShows(showsRes.data);
       }
+    }).catch(() => {
+      // 忽略错误
+    }).finally(() => {
+      setLoadingShows(false);
+    });
 
+    // 加载新番放送
+    bangumiService.getTodayCalendar(forceSource).then((bangumiRes) => {
       if (bangumiRes.success && bangumiRes.data) {
         setTodayBangumi(bangumiRes.data);
       }
-    } catch (err) {
-      // setError('加载异常');
-    }
-
-    setLoading(false);
+    }).catch(() => {
+      // 忽略错误
+    }).finally(() => {
+      setLoadingBangumi(false);
+    });
   };
 
   // 转换数据为 VideoInfo 格式
@@ -116,7 +162,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         <PlayRecordSection 
           title="继续观看" 
           videos={playRecordVideos}
-          loading={loading}
+          loading={loadingUserData}
           titleRef={firstSectionTitleRef}
           nextSectionTitleRef={showFavorites ? favoriteTitleRef : movieTitleRef}
         />
@@ -126,7 +172,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
           title="我的收藏" 
           videos={favoriteVideos}
           playRecords={playRecordVideos}
-          loading={loading}
+          loading={loadingUserData}
           titleRef={showPlayRecords ? favoriteTitleRef : firstSectionTitleRef}
           nextSectionTitleRef={movieTitleRef}
         />
@@ -135,7 +181,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         title="热门电影" 
         videos={hotMovieVideos}
         from="douban"
-        loading={loading}
+        loading={loadingMovies}
         titleRef={movieTitleRef}
         nextSectionTitleRef={seriesTitleRef}
         onTitlePress={() => onTabChange?.('movie')}
@@ -144,7 +190,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         title="热门剧集" 
         videos={hotTvShowVideos}
         from="douban"
-        loading={loading}
+        loading={loadingTvShows}
         titleRef={seriesTitleRef}
         nextSectionTitleRef={animeTitleRef}
         onTitlePress={() => onTabChange?.('series')}
@@ -153,7 +199,7 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         title="新番放送" 
         videos={todayBangumiVideos}
         from="bangumi"
-        loading={loading}
+        loading={loadingBangumi}
         titleRef={animeTitleRef}
         nextSectionTitleRef={varietyTitleRef}
       />
@@ -161,13 +207,17 @@ export default function HomeTab({ firstSectionTitleRef, onFirstSectionTitleReady
         title="热门综艺" 
         videos={hotShowVideos}
         from="douban"
-        loading={loading}
+        loading={loadingShows}
         titleRef={varietyTitleRef}
         isLast={true}
       />
     </View>
   );
-}
+});
+
+HomeTab.displayName = 'HomeTab';
+
+export default HomeTab;
 
 const styles = StyleSheet.create({
   container: {

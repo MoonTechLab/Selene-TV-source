@@ -90,8 +90,13 @@ class UserDataCacheService {
   /**
    * 获取播放记录（优先从缓存）
    */
-  async getPlayRecords(): Promise<DataOperationResult<PlayRecord[]>> {
+  async getPlayRecords(forceSource: boolean = false): Promise<DataOperationResult<PlayRecord[]>> {
     const cacheKey = 'play_records';
+    
+    // 如果强制从源获取，直接走接口
+    if (forceSource) {
+      return await this.getPlayRecordsDirect();
+    }
     
     // 先检查缓存
     const cachedData = this.getCache<PlayRecord[]>(cacheKey);
@@ -271,8 +276,13 @@ class UserDataCacheService {
   /**
    * 获取收藏夹（优先从缓存）
    */
-  async getFavorites(): Promise<DataOperationResult<FavoriteItem[]>> {
+  async getFavorites(forceSource: boolean = false): Promise<DataOperationResult<FavoriteItem[]>> {
     const cacheKey = 'favorites';
+    
+    // 如果强制从源获取，直接走接口
+    if (forceSource) {
+      return await this.getFavoritesDirect();
+    }
     
     // 先检查缓存
     const cachedData = this.getCache<FavoriteItem[]>(cacheKey);
