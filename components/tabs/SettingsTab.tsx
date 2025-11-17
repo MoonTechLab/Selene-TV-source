@@ -2,6 +2,7 @@ import { StyleSheet, View, Text, Modal, FlatList, TextInput, Pressable, Animated
 import { useState, useEffect, useRef } from 'react';
 import AppDataService from '../../services/appDataService';
 import ToastService from '../../services/toastService';
+import userDataCacheService from '../../services/userDataCacheService';
 
 const DOUBAN_DATA_SOURCES = [
   '直连',
@@ -369,6 +370,7 @@ export default function SettingsTab() {
 
   const handleLogout = async () => {
     await AppDataService.clearPasswordAndCookies();
+    userDataCacheService.clearAllCache();
     setHasLogin(false);
     setUsername('');
     setServerUrl('');

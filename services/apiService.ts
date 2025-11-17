@@ -74,6 +74,11 @@ class ApiService {
       throw new Error('服务器地址未配置，请先登录');
     }
 
+    const cookies = await this._getCookies();
+    if (!cookies) {
+        throw new Error('未登录，请先登录');
+    }
+
     // 确保baseUrl不以/结尾，endpoint以/开头
     const cleanBaseUrl = baseUrl.endsWith('/')
       ? baseUrl.substring(0, baseUrl.length - 1)
@@ -341,26 +346,10 @@ class ApiService {
    */
   static async getFavorites(): Promise<ApiResponse<FavoriteItem[]>> {
     try {
-      const baseUrl = await this._getBaseUrl();
-      if (!baseUrl) {
-        return ApiResponse.error('服务器地址未配置');
-      }
+      const response = await this.get<Record<string, any>>('/api/favorites');
 
-      const cookies = await this._getCookies();
-      if (!cookies) {
-        return ApiResponse.error('用户未登录');
-      }
-
-      const response = await this._fetchWithTimeout(`${baseUrl}/api/favorites`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Cookie': cookies,
-        },
-      });
-
-      if (response.status === 200) {
-        const data = await response.json() as Record<string, any>;
+      if (response.success && response.data) {
+        const data = response.data;
         const favorites: FavoriteItem[] = [];
 
         // 将Map转换为List并按save_time降序排序
@@ -381,14 +370,9 @@ class ApiService {
         // 按save_time降序排序
         favorites.sort((a, b) => b.saveTime - a.saveTime);
 
-        return ApiResponse.success(favorites, response.status);
-      } else if (response.status === 401) {
-        // 未授权
-        await AppDataService.setHasLogin(false);
-        toastService.error('登录状态失效，请重新登录');
-        return ApiResponse.error('登录状态失效，请重新登录', response.status);
+        return ApiResponse.success(favorites, response.statusCode);
       } else {
-        return ApiResponse.error(`获取收藏夹失败: ${response.status}`, response.status);
+        return ApiResponse.error(response.message || '获取收藏夹失败');
       }
     } catch (e) {
       return ApiResponse.error(
