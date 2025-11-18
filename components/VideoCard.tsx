@@ -17,7 +17,7 @@ interface VideoCardProps {
 
 function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
   const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate, playTime, totalTime } = videoInfo;
-  const showSourceName = (from === 'playrecord' || from === 'favorite') && sourceName;
+  const showSourceName = (from === 'playrecord' || from === 'favorite' || from === 'search') && sourceName;
   const showEpisodeBadge = (from === 'playrecord' || from === 'favorite') && totalEpisodes > 1;
   const showRateBadge = (from === 'bangumi' || from === 'douban') && rate && rate !== '0';
   const showProgressBar = from === 'playrecord' && totalTime > 0;
