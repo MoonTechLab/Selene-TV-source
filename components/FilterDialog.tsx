@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, Modal, Animated, TVFocusGuideView, findNodeHandle } from 'react-native';
+import { StyleSheet, Text, Pressable, Modal, Animated, TVFocusGuideView, findNodeHandle, ScrollView, useWindowDimensions } from 'react-native';
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -23,6 +23,9 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
   const optionRefs = useRef<Record<string, any>>({});
   const [preferredFocusTarget, setPreferredFocusTarget] = useState<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const optionsContainerRef = useRef<any>(null);
   
   // 对话框弹出动画
   const dialogScale = useRef(new Animated.Value(0.8)).current;
@@ -117,7 +120,7 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
     }
   }, [visible, selectedValue, options, dialogScale, dialogOpacity, modalVisible]);
 
-  // 处理焦点变化时的动画
+  // 处理焦点变化时的动画和滚动
   useEffect(() => {
     options.forEach((option) => {
       const animation = optionAnimations.current[option.value];
@@ -131,7 +134,30 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
         }).start();
       }
     });
-  }, [focusedValue, options]);
+
+    // 当焦点改变时，滚动使聚焦项居中
+    if (focusedValue && scrollViewRef.current && optionsContainerRef.current) {
+      const focusedRef = optionRefs.current[focusedValue];
+      if (focusedRef) {
+        // 延迟测量，确保布局已完成
+        requestAnimationFrame(() => {
+          focusedRef.measureLayout(
+            optionsContainerRef.current,
+            (_x: number, y: number, _width: number, height: number) => {
+              // 计算滚动位置，使聚焦项居中
+              const scrollViewHeight = screenHeight * 0.6 - 19.4 * 2 - 14.6 - 13; // 减去 padding 和 title
+              const scrollToY = Math.max(0, y - (scrollViewHeight / 2) + (height / 2));
+              
+              scrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
+            },
+            () => {
+              // 测量失败时的回调
+            }
+          );
+        });
+      }
+    }
+  }, [focusedValue, options, screenHeight]);
 
   const handleSelect = (value: string) => {
     onSelect(value);
@@ -159,49 +185,60 @@ const FilterDialog = forwardRef<any, FilterDialogProps>((props, ref) => {
               {
                 transform: [{ scale: dialogScale }],
                 opacity: dialogOpacity,
+                maxHeight: screenHeight * 0.75,
+                minHeight: screenHeight * 0.3,
+                width: screenWidth * 0.6,
               }
             ]}
           >
             <Text style={styles.title}>{title}</Text>
-            <TVFocusGuideView 
-              style={styles.optionsContainer}
-              destinations={preferredFocusTarget ? [preferredFocusTarget] : undefined}
-              autoFocus
+            <ScrollView 
+              ref={scrollViewRef}
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={true}
             >
-              {options.map((option) => {
-                const isSelected = selectedValue === option.value;
-                const isFocused = focusedValue === option.value;
-                const animation = optionAnimations.current[option.value] || new Animated.Value(1);
-                
-                return (
-                  <AnimatedPressable
-                    key={option.value}
-                    ref={(el) => {
-                      optionRefs.current[option.value] = el;
-                    }}
-                    style={[
-                      styles.option,
-                      isSelected && !isFocused && styles.optionSelected,
-                      isFocused && styles.optionFocused,
-                      {
-                        transform: [{ scale: animation }],
-                      }
-                    ]}
-                    onFocus={() => setFocusedValue(option.value)}
-                    onBlur={() => setFocusedValue(null)}
-                    onPress={() => handleSelect(option.value)}
-                    hasTVPreferredFocus={option.value === (selectedValue || options[0]?.value)}
-                  >
-                    <Text style={[
-                      styles.optionText,
-                      isFocused && styles.optionTextFocused
-                    ]}>
-                      {option.label}
-                    </Text>
-                  </AnimatedPressable>
-                );
-              })}
-            </TVFocusGuideView>
+              <TVFocusGuideView 
+                ref={optionsContainerRef}
+                style={styles.optionsContainer}
+                destinations={preferredFocusTarget ? [preferredFocusTarget] : undefined}
+                autoFocus
+              >
+                {options.map((option) => {
+                  const isSelected = selectedValue === option.value;
+                  const isFocused = focusedValue === option.value;
+                  const animation = optionAnimations.current[option.value] || new Animated.Value(1);
+                  
+                  return (
+                    <AnimatedPressable
+                      key={option.value}
+                      ref={(el) => {
+                        optionRefs.current[option.value] = el;
+                      }}
+                      style={[
+                        styles.option,
+                        isSelected && !isFocused && styles.optionSelected,
+                        isFocused && styles.optionFocused,
+                        {
+                          transform: [{ scale: animation }],
+                        }
+                      ]}
+                      onFocus={() => setFocusedValue(option.value)}
+                      onBlur={() => setFocusedValue(null)}
+                      onPress={() => handleSelect(option.value)}
+                      hasTVPreferredFocus={option.value === (selectedValue || options[0]?.value)}
+                    >
+                      <Text style={[
+                        styles.optionText,
+                        isFocused && styles.optionTextFocused
+                      ]}>
+                        {option.label}
+                      </Text>
+                    </AnimatedPressable>
+                  );
+                })}
+              </TVFocusGuideView>
+            </ScrollView>
           </Animated.View>
         </Pressable>
       </Animated.View>
@@ -226,26 +263,34 @@ const styles = StyleSheet.create({
   },
   dialog: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 24,
-    minWidth: 400,
-    maxWidth: 600,
+    borderRadius: 9.7,
+    paddingTop: 19.4,
+    paddingLeft: 19.4,
+    paddingRight: 19.4,
+    maxWidth: 486,
   },
   title: {
-    fontSize: 18,
+    fontSize: 14.6,
     fontWeight: '600',
     color: '#ffffff',
-    marginBottom: 16,
+    marginBottom: 13,
+  },
+  scrollView: {
+    maxHeight: '100%',
+  },
+  scrollContent: {
+    paddingBottom: 19.4,
   },
   optionsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    padding: 2.6,
+    gap: 7.8,
   },
   option: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 6.5,
+    borderRadius: 6.5,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   optionSelected: {
@@ -255,7 +300,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   optionText: {
-    fontSize: 14,
+    fontSize: 11.3,
     fontWeight: '600',
     color: '#ffffff',
   },

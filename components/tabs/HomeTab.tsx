@@ -221,7 +221,7 @@ export default HomeTab;
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 5,
+    paddingTop: 10,
   },
   errorContainer: {
     padding: 20,

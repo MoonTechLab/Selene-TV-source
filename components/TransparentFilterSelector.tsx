@@ -25,11 +25,30 @@ const TransparentFilterSelector = forwardRef<any, TransparentFilterSelectorProps
   // 为每个选项创建 ref
   const optionRefs = useRef<Record<string, any>>({});
   const [nextFocusUpHandle, setNextFocusUpHandle] = useState<number | null>(null);
+  const [shouldFocusFirst, setShouldFocusFirst] = useState(false);
 
-  // 暴露第一个选项的引用给父组件
-  useImperativeHandle(ref, () => {
-    return optionRefs.current[options[0]?.key] || null;
-  }, [options]);
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      setShouldFocusFirst(true);
+      // 重置状态，以便下次可以再次触发
+      setTimeout(() => setShouldFocusFirst(false), 100);
+    },
+    getFirstOptionRef: () => {
+      return optionRefs.current[options[0]?.key] || null;
+    }
+  }), [options]);
+  
+  // 当 shouldFocusFirst 变化时，尝试聚焦第一个选项
+  useEffect(() => {
+    if (shouldFocusFirst) {
+      const firstOption = options[0];
+      const optionRef = optionRefs.current[firstOption?.key];
+      if (optionRef && typeof optionRef.focus === 'function') {
+        optionRef.focus();
+      }
+    }
+  }, [shouldFocusFirst, options]);
   
   // 为每个选项创建动画值
   const optionAnimations = useRef<Record<string, Animated.Value>>({});
@@ -75,6 +94,8 @@ const TransparentFilterSelector = forwardRef<any, TransparentFilterSelectorProps
         const isFocused = focusedKey === option.key;
         const hasSelection = option.selectedValue && option.selectedValue !== '全部';
         
+        const isFirstOption = option.key === options[0]?.key;
+        
         return (
           <AnimatedPressable
             key={option.key}
@@ -92,6 +113,7 @@ const TransparentFilterSelector = forwardRef<any, TransparentFilterSelectorProps
             onBlur={onBlur}
             onPress={() => onSelect(option.key)}
             nextFocusUp={nextFocusUpHandle}
+            hasTVPreferredFocus={isFirstOption && shouldFocusFirst}
           >
             <>
               <Text style={[
