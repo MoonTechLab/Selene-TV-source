@@ -204,7 +204,12 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
                   focused && styles.tabItemFocused,
                 ]}
                 onFocus={() => onTabFocus(tab.key)}
-                onPress={() => onTabChange(tab.key)}
+                onPress={() => {
+                  // 只有在不是当前激活标签时才触发切换
+                  if (tab.key !== activeTab) {
+                    onTabChange(tab.key);
+                  }
+                }}
                 onBlur={() => onTabFocus(null as any)}
                 hasTVPreferredFocus={tab.key === focusTarget && shouldFocusCurrent}
                 nextFocusDown={isSwitching ? tabRefs.current[tab.key] : (tab.key === activeTab ? getNextFocusDown() : undefined)}

@@ -59,6 +59,7 @@ export default function HomeScreen() {
   const [focusedTab, setFocusedTab] = useState<TabType | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const focusedTabRef = useRef<TabType | null>(null); // 追踪最新的焦点状态
   const scrollViewRef = useRef<ScrollView>(null);
   const measureContainerRef = useRef<View>(null);
   const tabSwitcherRef = useRef<any>(null);
@@ -217,6 +218,7 @@ export default function HomeScreen() {
 
   const handleTabFocus = (tab: TabType | null) => {
     setFocusedTab(tab);
+    focusedTabRef.current = tab; // 同步更新 ref
     
     if (tab === null) {
       setIsSwitching(false);
@@ -238,7 +240,21 @@ export default function HomeScreen() {
     setIsSwitching(true);
     
     timerRef.current = setTimeout(() => {
-      animateTabChange(tab);
+      // 使用 ref 中的最新焦点状态，而不是闭包中的 tab
+      const latestFocusedTab = focusedTabRef.current;
+      
+      // 如果焦点已经移走（null）或焦点就是当前激活的 tab，不切换
+      if (latestFocusedTab === null) {
+        setIsSwitching(false);
+        return;
+      }
+      
+      setActiveTab(currentTab => {
+        if (latestFocusedTab !== currentTab) {
+          animateTabChange(latestFocusedTab);
+        }
+        return currentTab;
+      });
       setIsSwitching(false);
     }, 500);
   };
@@ -261,18 +277,18 @@ export default function HomeScreen() {
   }, []);
 
   const handleTabChange = (tab: TabType) => {
+    // 清除定时器（无论是否切换都要清除，避免竞态条件）
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    
     // 如果点按的是当前已激活的 tab，调用刷新方法（仅首页）
     if (tab === activeTab) {
       if (tab === 'home') {
         homeTabRef.current?.refresh();
       }
       return;
-    }
-    
-    // 清除定时器
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
     }
     
     // 滚动到顶部
