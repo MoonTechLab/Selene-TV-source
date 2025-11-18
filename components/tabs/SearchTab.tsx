@@ -4,16 +4,23 @@ import { Search } from 'lucide-react-native';
 import userDataCacheService from '@/services/userDataCacheService';
 import SearchService, { SearchProgress } from '@/services/searchService';
 import { SearchResult } from '@/types/entities';
+import { 
+  AggregatedSearchResult, 
+  createAggregatedSearchResult, 
+  addResultToAggregated,
+  aggregatedSearchResultToVideoInfo,
+  generateAggregationKey
+} from '@/types/aggregatedSearchResult';
 import VideoCard from '../VideoCard';
 import VideoCardSkeleton from '../VideoCardSkeleton';
 import { useScrollContext } from '@/contexts/ScrollContext';
 
-const COLUMNS = 7;
-const CARD_WIDTH = 100;
+const COLUMNS = 8;
+const CARD_WIDTH = 90;
 const CARD_MARGIN_RIGHT = 20;
 const RENDER_BUFFER = 3;
 const ROW_GAP = 20;
-const ROW_HEIGHT = 150 + ROW_GAP;
+const ROW_HEIGHT = 135 + ROW_GAP;
 
 // 计算布局参数
 const calculateLayout = () => {
@@ -36,6 +43,9 @@ export default function SearchTab() {
   const [focusedItem, setFocusedItem] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const searchInputRef = useRef<TextInput>(null);
+  const searchButtonRef = useRef<any>(null);
+  const [searchButtonHandle, setSearchButtonHandle] = useState<number | null>(null);
+  const [searchInputHandle, setSearchInputHandle] = useState<number | null>(null);
 
   // 搜索结果相关状态
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -43,6 +53,11 @@ export default function SearchTab() {
   const [hasReceivedStart, setHasReceivedStart] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+
+  // 聚合结果映射，key为聚合键，value为聚合结果
+  const [aggregatedResults, setAggregatedResults] = useState<Map<string, AggregatedSearchResult>>(new Map());
+  // 按添加顺序排列的聚合键列表
+  const [orderedKeys, setOrderedKeys] = useState<string[]>([]);
 
   // 虚拟化相关
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
@@ -54,10 +69,47 @@ export default function SearchTab() {
   // 动画值
   const itemAnimations = useRef<Record<string, Animated.Value>>({}).current;
 
+  // 搜索历史项的位置信息
+  const historyItemPositions = useRef<Map<number, number>>(new Map());
+  const [firstRowMaxY, setFirstRowMaxY] = useState<number>(0);
 
+  // 获取搜索按钮和搜索输入框的节点句柄
+  useEffect(() => {
+    if (searchButtonRef.current) {
+      const handle = findNodeHandle(searchButtonRef.current);
+      setSearchButtonHandle(handle);
+    }
+    if (searchInputRef.current) {
+      const handle = findNodeHandle(searchInputRef.current);
+      setSearchInputHandle(handle);
+    }
+  }, [focusedItem]); // 当焦点改变时更新
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
+
+  // 更新聚合结果
+  const updateAggregatedResults = useCallback((results: SearchResult[]) => {
+    const newAggregatedResults = new Map<string, AggregatedSearchResult>();
+    const newOrderedKeys: string[] = [];
+
+    for (const result of results) {
+      const key = generateAggregationKey(result.title, result.year, result.episodes.length);
+
+      if (newAggregatedResults.has(key)) {
+        // 已存在，添加到现有聚合结果中
+        const existing = newAggregatedResults.get(key)!;
+        newAggregatedResults.set(key, addResultToAggregated(existing, result));
+      } else {
+        // 新的聚合结果
+        newAggregatedResults.set(key, createAggregatedSearchResult(result));
+        newOrderedKeys.push(key);
+      }
+    }
+
+    setAggregatedResults(newAggregatedResults);
+    setOrderedKeys(newOrderedKeys);
+  }, []);
 
   useEffect(() => {
     loadSearchHistory();
@@ -65,7 +117,12 @@ export default function SearchTab() {
     // 设置搜索事件监听器
     const unsubscribeResults = SearchService.addEventListener<SearchResult[]>('results', (results) => {
       if (results.length > 0) {
-        setSearchResults((prev) => [...prev, ...results]);
+        setSearchResults((prev) => {
+          const updated = [...prev, ...results];
+          // 实时更新聚合结果
+          updateAggregatedResults(updated);
+          return updated;
+        });
       }
     });
 
@@ -101,16 +158,37 @@ export default function SearchTab() {
       unsubscribeError();
       unsubscribeComplete();
     };
-  }, []);
+  }, [updateAggregatedResults]);
 
   const loadSearchHistory = async () => {
     setLoading(true);
     const result = await userDataCacheService.getSearchHistory();
     if (result.success && result.data) {
       setSearchHistory(result.data);
+      // 重置位置信息
+      historyItemPositions.current.clear();
+      setFirstRowMaxY(0);
     }
     setLoading(false);
   };
+
+  // 处理搜索历史项的布局测量
+  const handleHistoryItemLayout = useCallback((index: number, event: any) => {
+    const { y, height } = event.nativeEvent.layout;
+    historyItemPositions.current.set(index, y);
+
+    // 计算第一行的最大 Y 值
+    // 第一个元素的 Y 值作为基准
+    if (index === 0) {
+      setFirstRowMaxY(y + height);
+    } else if (historyItemPositions.current.has(0)) {
+      const firstItemY = historyItemPositions.current.get(0)!;
+      // 如果当前项的 Y 值与第一项相近（在同一行），更新最大 Y 值
+      if (Math.abs(y - firstItemY) < 5) {
+        setFirstRowMaxY(Math.max(firstRowMaxY, y + height));
+      }
+    }
+  }, [firstRowMaxY]);
 
   const getItemAnimation = (key: string) => {
     if (!itemAnimations[key]) {
@@ -143,6 +221,8 @@ export default function SearchTab() {
     
     // 重置搜索状态
     setSearchResults([]);
+    setAggregatedResults(new Map());
+    setOrderedKeys([]);
     setSearchProgress(null);
     setHasReceivedStart(false);
     setSearchError(null);
@@ -174,6 +254,8 @@ export default function SearchTab() {
     
     // 重置搜索状态
     setSearchResults([]);
+    setAggregatedResults(new Map());
+    setOrderedKeys([]);
     setSearchProgress(null);
     setHasReceivedStart(false);
     setSearchError(null);
@@ -200,14 +282,22 @@ export default function SearchTab() {
     return '0/0';
   };
 
-  // 将搜索结果分组为行
+  // 将聚合结果转换为 VideoInfo 数组
+  const aggregatedVideoInfos = useMemo(() => {
+    return orderedKeys.map(key => {
+      const aggregated = aggregatedResults.get(key)!;
+      return aggregatedSearchResultToVideoInfo(aggregated);
+    });
+  }, [orderedKeys, aggregatedResults]);
+
+  // 将聚合结果分组为行
   const rows = useMemo(() => {
     const result = [];
-    for (let i = 0; i < searchResults.length; i += COLUMNS) {
-      result.push(searchResults.slice(i, i + COLUMNS));
+    for (let i = 0; i < aggregatedVideoInfos.length; i += COLUMNS) {
+      result.push(aggregatedVideoInfos.slice(i, i + COLUMNS));
     }
     return result;
-  }, [searchResults]);
+  }, [aggregatedVideoInfos]);
 
   // 计算需要渲染的行范围（虚拟化）
   const visibleRows = useMemo(() => {
@@ -242,7 +332,7 @@ export default function SearchTab() {
   }, [mainScrollViewRef, screenHeight]);
 
   // 计算底部 padding
-  const bottomPadding = Math.max(0, (screenHeight / 2) - 75);
+  const bottomPadding = Math.max(0, (screenHeight / 2) - 67.5);
 
   return (
     <View style={[styles.container, { paddingHorizontal: layout.horizontalPadding, paddingBottom: bottomPadding }]}>
@@ -267,6 +357,7 @@ export default function SearchTab() {
         </View>
         <Animated.View style={{ transform: [{ scale: getItemAnimation('search-button') }] }}>
           <Pressable
+            ref={searchButtonRef}
             style={[
               styles.searchButton,
               isSearchDisabled && styles.searchButtonDisabled,
@@ -307,7 +398,7 @@ export default function SearchTab() {
               <Text style={styles.errorText}>{searchError}</Text>
             )}
             
-            {searchResults.length === 0 && !isSearching ? (
+            {aggregatedVideoInfos.length === 0 && !isSearching ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>暂无搜索结果</Text>
               </View>
@@ -336,32 +427,20 @@ export default function SearchTab() {
                         }
                       }}
                     >
-                      {row.map((result, colIndex) => (
+                      {row.map((videoInfo, colIndex) => (
                         <View 
-                          key={`${result.source}+${result.id}`}
+                          key={videoInfo.id}
                           style={[
                             styles.cardWrapper,
                             colIndex < COLUMNS - 1 ? { marginRight: layout.cardGap - CARD_MARGIN_RIGHT } : { marginRight: -CARD_MARGIN_RIGHT }
                           ]}
                         >
                           <VideoCard
-                            videoInfo={{
-                              id: result.id,
-                              source: result.source,
-                              title: result.title,
-                              sourceName: result.sourceName,
-                              year: result.year,
-                              cover: result.poster,
-                              index: 1,
-                              totalEpisodes: result.episodes.length,
-                              playTime: 0,
-                              totalTime: 0,
-                              saveTime: Date.now(),
-                              searchTitle: result.title,
-                            }}
+                            videoInfo={videoInfo}
                             from='search'
-                            onPress={() => console.log('Pressed:', result.title)}
+                            onPress={() => console.log('Pressed:', videoInfo.title)}
                             onFocus={() => handleCardFocus(rowIndex)}
+                            nextFocusUp={rowIndex === 0 ? (searchInputHandle ?? undefined) : undefined}
                           />
                         </View>
                       ))}
@@ -420,9 +499,18 @@ export default function SearchTab() {
                 {searchHistory.map((item, index) => {
                   const itemKey = `history-${index}`;
                   const animation = getItemAnimation(itemKey);
+                  
+                  // 通过实际测量判断是否在第一行
+                  const itemY = historyItemPositions.current.get(index);
+                  const firstItemY = historyItemPositions.current.get(0);
+                  const isFirstRow = itemY !== undefined && firstItemY !== undefined && Math.abs(itemY - firstItemY) < 5;
 
                   return (
-                    <Animated.View key={`${item}-${index}`} style={{ transform: [{ scale: animation }] }}>
+                    <Animated.View 
+                      key={`${item}-${index}`} 
+                      style={{ transform: [{ scale: animation }] }}
+                      onLayout={(e) => handleHistoryItemLayout(index, e)}
+                    >
                       <Pressable
                         style={[
                           styles.historyItem,
@@ -431,6 +519,7 @@ export default function SearchTab() {
                         onPress={() => handleHistoryItemPress(item)}
                         onFocus={() => setFocusedItem(itemKey)}
                         onBlur={() => setFocusedItem(null)}
+                        nextFocusUp={isFirstRow ? (searchInputHandle ?? undefined) : undefined}
                       >
                         <Text
                           style={[
@@ -457,13 +546,13 @@ export default function SearchTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 30,
+    paddingTop: 20,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 18,
     alignSelf: 'center',
   },
   searchInputWrapper: {

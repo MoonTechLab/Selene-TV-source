@@ -25,6 +25,10 @@ const renderTabContent = (
   animeFirstSelectorRef?: React.RefObject<any>,
   varietyFirstSelectorRef?: React.RefObject<any>,
   onFirstSectionTitleReady?: (nodeHandle: number | null) => void,
+  onMovieFirstSelectorReady?: (nodeHandle: number | null) => void,
+  onSeriesFirstSelectorReady?: (nodeHandle: number | null) => void,
+  onAnimeFirstSelectorReady?: (nodeHandle: number | null) => void,
+  onVarietyFirstSelectorReady?: (nodeHandle: number | null) => void,
   onTabChange?: (tab: TabType) => void,
   homeTabRef?: React.RefObject<HomeTabRef | null>
 ) => {
@@ -32,13 +36,13 @@ const renderTabContent = (
     case 'home':
       return <HomeTab ref={homeTabRef} firstSectionTitleRef={firstSectionTitleRef} onFirstSectionTitleReady={onFirstSectionTitleReady} onTabChange={onTabChange} />;
     case 'movie':
-      return <MovieTab firstSelectorRef={movieFirstSelectorRef} />;
+      return <MovieTab firstSelectorRef={movieFirstSelectorRef} onFirstSelectorReady={onMovieFirstSelectorReady} />;
     case 'series':
-      return <TvTab firstSelectorRef={seriesFirstSelectorRef} />;
+      return <TvTab firstSelectorRef={seriesFirstSelectorRef} onFirstSelectorReady={onSeriesFirstSelectorReady} />;
     case 'anime':
-      return <AnimeTab firstSelectorRef={animeFirstSelectorRef} />;
+      return <AnimeTab firstSelectorRef={animeFirstSelectorRef} onFirstSelectorReady={onAnimeFirstSelectorReady} />;
     case 'variety':
-      return <ShowTab firstSelectorRef={varietyFirstSelectorRef} />;
+      return <ShowTab firstSelectorRef={varietyFirstSelectorRef} onFirstSelectorReady={onVarietyFirstSelectorReady} />;
     case 'live':
       return <LiveTab />;
     case 'mine':
@@ -239,6 +243,23 @@ export default function HomeScreen() {
     }, 500);
   };
 
+  // 处理各个 Tab 的 firstSelector 准备就绪
+  const handleMovieFirstSelectorReady = useCallback((nodeHandle: number | null) => {
+    tabSwitcherRef.current?.updateMovieFirstSelectorNodeHandle(nodeHandle);
+  }, []);
+
+  const handleSeriesFirstSelectorReady = useCallback((nodeHandle: number | null) => {
+    tabSwitcherRef.current?.updateSeriesFirstSelectorNodeHandle(nodeHandle);
+  }, []);
+
+  const handleAnimeFirstSelectorReady = useCallback((nodeHandle: number | null) => {
+    tabSwitcherRef.current?.updateAnimeFirstSelectorNodeHandle(nodeHandle);
+  }, []);
+
+  const handleVarietyFirstSelectorReady = useCallback((nodeHandle: number | null) => {
+    tabSwitcherRef.current?.updateVarietyFirstSelectorNodeHandle(nodeHandle);
+  }, []);
+
   const handleTabChange = (tab: TabType) => {
     // 如果点按的是当前已激活的 tab，调用刷新方法（仅首页）
     if (tab === activeTab) {
@@ -301,6 +322,10 @@ export default function HomeScreen() {
             seriesFirstSelectorRef={seriesFirstSelectorRef}
             animeFirstSelectorRef={animeFirstSelectorRef}
             varietyFirstSelectorRef={varietyFirstSelectorRef}
+            onMovieFirstSelectorReady={handleMovieFirstSelectorReady}
+            onSeriesFirstSelectorReady={handleSeriesFirstSelectorReady}
+            onAnimeFirstSelectorReady={handleAnimeFirstSelectorReady}
+            onVarietyFirstSelectorReady={handleVarietyFirstSelectorReady}
           />
 
           <Animated.View
@@ -309,7 +334,7 @@ export default function HomeScreen() {
               transform: [{ translateX }],
             }}
           >
-            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady, handleTabChange, homeTabRef)}
+            {renderTabContent(activeTab, firstSectionTitleRef, movieFirstSelectorRef, seriesFirstSelectorRef, animeFirstSelectorRef, varietyFirstSelectorRef, handleFirstSectionTitleReady, handleMovieFirstSelectorReady, handleSeriesFirstSelectorReady, handleAnimeFirstSelectorReady, handleVarietyFirstSelectorReady, handleTabChange, homeTabRef)}
           </Animated.View>
         </ScrollView>
         

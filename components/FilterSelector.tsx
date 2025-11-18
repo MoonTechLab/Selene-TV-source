@@ -142,17 +142,17 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 18,
-    padding: 2,
-    gap: 4,
+    borderRadius: 16,
+    padding: 1.8,
+    gap: 3.6,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 28,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    height: 25,
+    paddingHorizontal: 10.8,
+    borderRadius: 13,
   },
   optionSelected: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   optionText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#ffffff',
   },

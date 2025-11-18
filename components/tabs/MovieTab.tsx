@@ -126,12 +126,12 @@ const REGION_VALUE_MAP: Record<string, string> = {
   japanese: '日本',
 };
 
-const COLUMNS = 7;
-const CARD_WIDTH = 100; // VideoCard 的宽度
+const COLUMNS = 8;
+const CARD_WIDTH = 90; // VideoCard 的宽度
 const CARD_MARGIN_RIGHT = 20; // VideoCard 自带的 marginRight
 const RENDER_BUFFER = 3; // 当前行上下各保留 3 行，共 7 行
 const ROW_GAP = 20; // 行间距
-const ROW_HEIGHT = 150 + ROW_GAP; // 行高：150(卡片) + 行间距
+const ROW_HEIGHT = 135 + ROW_GAP; // 行高：135(卡片) + 行间距
 
 // 计算布局参数
 const calculateLayout = () => {
@@ -156,9 +156,10 @@ const calculateLayout = () => {
 
 interface MovieTabProps {
   firstSelectorRef?: React.RefObject<any>;
+  onFirstSelectorReady?: (nodeHandle: number | null) => void;
 }
 
-const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
+const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef, onFirstSelectorReady }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('popular');
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -201,6 +202,14 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
       setRegionSelectorHandle(handle);
     }
   }, [selectedRegion]); // 当选中项改变时更新
+
+  // 通知父组件 firstSelector 已准备好
+  useEffect(() => {
+    if (firstSelectorRef?.current && onFirstSelectorReady) {
+      const handle = findNodeHandle(firstSelectorRef.current);
+      onFirstSelectorReady(handle);
+    }
+  }, [firstSelectorRef, onFirstSelectorReady, selectedCategory]);
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
@@ -536,7 +545,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef }, ref) => {
   };
 
   // 计算底部 padding：让最后一行能居中，需要预留 (屏幕高度/2 - 卡片高度/2)
-  const bottomPadding = Math.max(0, (screenHeight / 2) - 75); // 75 是卡片高度的一半
+  const bottomPadding = Math.max(0, (screenHeight / 2) - 67.5); // 67.5 是卡片高度的一半 (135/2)
 
   const filterConfig = getCurrentFilterOptions();
 
@@ -709,9 +718,9 @@ const styles = StyleSheet.create({
     // paddingBottom 通过动态计算设置为屏幕高度的一半
   },
   filterSection: {
-    paddingTop: 12,
-    paddingBottom: 20,
-    gap: 10,
+    paddingTop: 11,
+    paddingBottom: 18,
+    gap: 9,
   },
   filterRow: {
     flexDirection: 'row',
@@ -719,10 +728,10 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#ffffff',
-    width: 40,
+    width: 36,
   },
   contentSection: {
     gap: ROW_GAP,

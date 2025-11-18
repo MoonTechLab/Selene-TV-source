@@ -269,11 +269,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 0,
     alignSelf: 'flex-start',
-    marginLeft: 16,
+    marginLeft: 19,
     borderRadius: 6,
   },
   title: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
   },

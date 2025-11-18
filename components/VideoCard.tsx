@@ -16,10 +16,11 @@ interface VideoCardProps {
 }
 
 function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
-  const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate, playTime, totalTime } = videoInfo;
-  const showSourceName = (from === 'playrecord' || from === 'favorite' || from === 'search') && sourceName;
-  const showEpisodeBadge = (from === 'playrecord' || from === 'favorite') && totalEpisodes > 1;
+  const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate, playTime, totalTime, year } = videoInfo;
+  const showSourceName = (from === 'playrecord' || from === 'favorite') && sourceName;
+  const showEpisodeBadge = (from === 'playrecord' || from === 'favorite' || from === 'search') && totalEpisodes > 1;
   const showRateBadge = (from === 'bangumi' || from === 'douban') && rate && rate !== '0';
+  const showYearBadge = from === 'search' && year && year !== '0' && year.toLowerCase() !== 'unknown' && year.trim() !== '';
   const showProgressBar = from === 'playrecord' && totalTime > 0;
   const progressPercentage = showProgressBar ? Math.min((playTime / totalTime) * 100, 100) : 0;
 
@@ -31,7 +32,18 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     if (from === 'favorite') {
       return index > 0 ? `${index}/${totalEpisodes}` : `${totalEpisodes}`;
     }
+    if (from === 'search') {
+      return `${totalEpisodes}`;
+    }
     return '';
+  };
+
+  // 格式化评分，保留一位小数
+  const getFormattedRate = () => {
+    if (!rate) return '';
+    const numRate = parseFloat(rate);
+    if (isNaN(numRate)) return rate;
+    return numRate.toFixed(1);
   };
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -126,7 +138,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     setMeasureKey(prev => prev + 1);
     setIsFocused(true);
     Animated.spring(scaleAnim, {
-      toValue: 1.08,
+      toValue: 1.1,
       useNativeDriver: true,
       friction: 8,
       tension: 100,
@@ -205,6 +217,11 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                 // setImageError(true);
               }}
             />
+            {showYearBadge && (
+              <View style={styles.yearBadge}>
+                <Text style={styles.yearBadgeText}>{year}</Text>
+              </View>
+            )}
             {showEpisodeBadge && (
               <View style={styles.episodeBadge}>
                 <Text style={styles.episodeBadgeText}>{getBadgeText()}</Text>
@@ -212,7 +229,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
             )}
             {showRateBadge && (
               <View style={styles.rateBadge}>
-                <Text style={styles.rateBadgeText}>{rate}</Text>
+                <Text style={styles.rateBadgeText}>{getFormattedRate()}</Text>
               </View>
             )}
             {showProgressBar && (
@@ -296,30 +313,29 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
 
 const styles = StyleSheet.create({
   container: {
-    width: 100,
+    width: 90,
     marginRight: 20,
   },
   pressable: {
     width: '100%',
   },
   cover: {
-    width: 100,
-    height: 150,
+    width: 90,
+    height: 135,
     borderRadius: 6,
     backgroundColor: '#2a2a2a',
   },
   coverFocused: {
     shadowColor: '#ffffff',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 1,
-    elevation: 8,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    elevation: 12,
+    borderWidth: 0,
   },
   coverImage: {
-    width: '100%',
-    height: '100%',
+    width: 90,
+    height: 135,
     borderRadius: 6,
   },
   content: {
@@ -328,7 +344,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     overflow: 'hidden',
-    height: 16,
+    height: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -337,7 +353,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   title: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
@@ -358,7 +374,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#ff6b6b',
-    fontSize: 10,
+    fontSize: 9,
     textAlign: 'center',
   },
   sourceNameContainer: {
@@ -367,42 +383,56 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sourceName: {
-    fontSize: 9,
+    fontSize: 8,
     color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     borderWidth: 0.5,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 3,
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     paddingVertical: 1,
+  },
+  yearBadge: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    backgroundColor: '#2196F3',
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+  },
+  yearBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   episodeBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 3,
+    right: 3,
     backgroundColor: '#4CAF50',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
   },
   episodeBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     color: '#ffffff',
   },
   rateBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 3,
+    right: 3,
     backgroundColor: '#E91E63',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 11,
+    width: 22,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
   rateBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: '#ffffff',
   },
@@ -411,7 +441,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 4,
+    height: 3,
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 6,
     overflow: 'hidden',

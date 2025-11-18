@@ -140,12 +140,12 @@ const TYPE_VALUE_MAP: Record<string, string> = {
   documentary: 'tv_documentary',
 };
 
-const COLUMNS = 7;
-const CARD_WIDTH = 100;
+const COLUMNS = 8;
+const CARD_WIDTH = 90;
 const CARD_MARGIN_RIGHT = 20;
 const RENDER_BUFFER = 3;
 const ROW_GAP = 20;
-const ROW_HEIGHT = 150 + ROW_GAP;
+const ROW_HEIGHT = 135 + ROW_GAP;
 
 // 计算布局参数
 const calculateLayout = () => {
@@ -164,9 +164,10 @@ const calculateLayout = () => {
 
 interface TvTabProps {
   firstSelectorRef?: React.RefObject<any>;
+  onFirstSelectorReady?: (nodeHandle: number | null) => void;
 }
 
-const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
+const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef, onFirstSelectorReady }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('popular');
   const [selectedType, setSelectedType] = useState('all');
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -210,6 +211,14 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
       setTypeSelectorHandle(handle);
     }
   }, [selectedType]); // 当选中项改变时更新
+
+  // 通知父组件 firstSelector 已准备好
+  useEffect(() => {
+    if (firstSelectorRef?.current && onFirstSelectorReady) {
+      const handle = findNodeHandle(firstSelectorRef.current);
+      onFirstSelectorReady(handle);
+    }
+  }, [firstSelectorRef, onFirstSelectorReady, selectedCategory]);
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
@@ -556,7 +565,7 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef }, ref) => {
   };
 
   // 计算底部 padding：让最后一行能居中，需要预留 (屏幕高度/2 - 卡片高度/2)
-  const bottomPadding = Math.max(0, (screenHeight / 2) - 75);
+  const bottomPadding = Math.max(0, (screenHeight / 2) - 67.5);
 
   const filterConfig = getCurrentFilterOptions();
 
@@ -729,9 +738,9 @@ const styles = StyleSheet.create({
     // paddingBottom 通过动态计算设置为屏幕高度的一半
   },
   filterSection: {
-    paddingTop: 12,
-    paddingBottom: 20,
-    gap: 10,
+    paddingTop: 11,
+    paddingBottom: 18,
+    gap: 9,
   },
   filterRow: {
     flexDirection: 'row',
@@ -739,10 +748,10 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#ffffff',
-    width: 40,
+    width: 36,
   },
   contentSection: {
     gap: ROW_GAP,

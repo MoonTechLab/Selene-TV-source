@@ -101,7 +101,7 @@ const TransparentFilterSelector = forwardRef<any, TransparentFilterSelectorProps
                 {hasSelection ? option.selectedValue : option.label}
               </Text>
               <ChevronDown 
-                size={14} 
+                size={13} 
                 color={isFocused ? '#0a0a0a' : '#ffffff'}
                 style={styles.icon}
               />
@@ -121,23 +121,23 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: 'transparent',
-    borderRadius: 18,
-    padding: 2,
-    gap: 4,
+    borderRadius: 16,
+    padding: 1.8,
+    gap: 3.6,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 28,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    height: 25,
+    paddingHorizontal: 10.8,
+    borderRadius: 13,
   },
   optionFocused: {
     backgroundColor: '#ffffff',
   },
   optionText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#ffffff',
   },
@@ -145,6 +145,6 @@ const styles = StyleSheet.create({
     color: '#0a0a0a',
   },
   icon: {
-    marginLeft: 4,
+    marginLeft: 3,
   },
 });

@@ -197,12 +197,12 @@ const SORT_OPTIONS: SelectorOption[] = [
   { label: '高分优先', value: 'S' },
 ];
 
-const COLUMNS = 7;
-const CARD_WIDTH = 100; // VideoCard 的宽度
+const COLUMNS = 8;
+const CARD_WIDTH = 90; // VideoCard 的宽度
 const CARD_MARGIN_RIGHT = 20; // VideoCard 自带的 marginRight
 const RENDER_BUFFER = 3; // 当前行上下各保留 3 行，共 7 行
 const ROW_GAP = 20; // 行间距
-const ROW_HEIGHT = 150 + ROW_GAP; // 行高：150(卡片) + 行间距
+const ROW_HEIGHT = 135 + ROW_GAP; // 行高：135(卡片) + 行间距
 
 // 计算布局参数
 const calculateLayout = () => {
@@ -227,9 +227,10 @@ const calculateLayout = () => {
 
 interface AnimeTabProps {
   firstSelectorRef?: React.RefObject<any>;
+  onFirstSelectorReady?: (nodeHandle: number | null) => void;
 }
 
-const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
+const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef, onFirstSelectorReady }, ref) => {
   const [selectedCategory, setSelectedCategory] = useState('new');
   const [selectedWeekday, setSelectedWeekday] = useState(getCurrentWeekday());
   const [focusedCategoryKey, setFocusedCategoryKey] = useState<string | null>(null);
@@ -274,6 +275,14 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
   const rowRefs = useRef<Map<number, any>>(new Map());
   const loadingTriggeredForPageRef = useRef<number>(1);
+
+  // 通知父组件 firstSelector 已准备好
+  useEffect(() => {
+    if (firstSelectorRef?.current && onFirstSelectorReady) {
+      const handle = findNodeHandle(firstSelectorRef.current);
+      onFirstSelectorReady(handle);
+    }
+  }, [firstSelectorRef, onFirstSelectorReady, selectedCategory]);
 
   // 计算布局参数
   const layout = useMemo(() => calculateLayout(), []);
@@ -626,7 +635,7 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef }, ref) => {
   };
 
   // 计算底部 padding：让最后一行能居中，需要预留 (屏幕高度/2 - 卡片高度/2)
-  const bottomPadding = Math.max(0, (screenHeight / 2) - 75); // 75 是卡片高度的一半
+  const bottomPadding = Math.max(0, (screenHeight / 2) - 67.5); // 67.5 是卡片高度的一半 (135/2)
 
   const filterConfig = getCurrentFilterOptions();
 
@@ -810,9 +819,9 @@ const styles = StyleSheet.create({
     // paddingBottom 通过动态计算设置为屏幕高度的一半
   },
   filterSection: {
-    paddingTop: 12,
-    paddingBottom: 20,
-    gap: 10,
+    paddingTop: 11,
+    paddingBottom: 18,
+    gap: 9,
   },
   filterRow: {
     flexDirection: 'row',
@@ -820,10 +829,10 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   filterLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#ffffff',
-    width: 40,
+    width: 36,
   },
   contentSection: {
     gap: ROW_GAP,

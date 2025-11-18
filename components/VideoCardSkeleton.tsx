@@ -13,12 +13,12 @@ export default function VideoCardSkeleton() {
 
 const styles = StyleSheet.create({
   container: {
-    width: 100,
+    width: 90,
     marginRight: 20,
   },
   cover: {
-    width: 100,
-    height: 150,
+    width: 90,
+    height: 135,
     borderRadius: 6,
     backgroundColor: '#2a2a2a',
   },
@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
   },
   title: {
     width: '80%',
-    height: 12,
+    height: 11,
     borderRadius: 4,
     backgroundColor: '#2a2a2a',
   },

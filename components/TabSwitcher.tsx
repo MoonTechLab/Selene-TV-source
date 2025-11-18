@@ -258,13 +258,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 28,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    gap: 5,
+    height: 26,
+    paddingHorizontal: 10.8,
+    borderRadius: 13,
+    gap: 4.5,
   },
   tabItemIconOnly: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
   },
   tabItemActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
