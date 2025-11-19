@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated, findNodeHandle } from 'react-native';
+import { StyleSheet, View, Text, Pressable, TVFocusGuideView, Animated, findNodeHandle, BackHandler } from 'react-native';
 import { Home, Film, Tv, Cat, Clover, Settings, Search, Radio } from 'lucide-react-native';
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useCallback } from 'react';
 
@@ -153,6 +153,30 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
       }).start();
     });
   }, [focusedTab]);
+
+  // 使用 BackHandler 监听返回键
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // 只在 TabSwitcher 有焦点时处理
+      if (focusedTab !== null) {
+        // 如果当前激活的不是 home，先聚焦到 home tab，然后切换
+        if (activeTab !== 'home') {
+          // 先聚焦到 home tab
+          setFocusTarget('home');
+          setShouldFocusCurrent(true);
+          setTimeout(() => {
+            setShouldFocusCurrent(false);
+            // 聚焦后再切换 tab
+            onTabChange('home');
+          }, 10);
+          return true; // 阻止默认行为
+        }
+      }
+      return false; // 让事件继续传播
+    });
+
+    return () => backHandler.remove();
+  }, [focusedTab, activeTab, onTabChange]);
 
   // 根据当前 activeTab 获取对应的 nextFocusDown
   const getNextFocusDown = useCallback(() => {

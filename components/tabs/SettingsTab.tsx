@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import AppDataService from '../../services/appDataService';
 import ToastService from '../../services/toastService';
 import userDataCacheService from '../../services/userDataCacheService';
+import doubanCacheService from '../../services/doubanCacheService';
+import searchCacheService from '../../services/searchCacheService';
 
 const DOUBAN_DATA_SOURCES = [
   '直连',
@@ -73,6 +75,8 @@ export default function SettingsTab() {
     dataSource: new Animated.Value(1),
     imageSource: new Animated.Value(1),
     proxy: new Animated.Value(1),
+    clearDoubanCache: new Animated.Value(1),
+    clearUserDataCache: new Animated.Value(1),
     logout: new Animated.Value(1),
   }).current;
 
@@ -93,7 +97,7 @@ export default function SettingsTab() {
 
   // 处理设置项聚焦动画
   useEffect(() => {
-    ['login', 'dataSource', 'imageSource', 'proxy', 'logout'].forEach((item) => {
+    ['login', 'dataSource', 'imageSource', 'proxy', 'clearDoubanCache', 'clearUserDataCache', 'logout'].forEach((item) => {
       const isFocused = focusedItem === item;
       Animated.spring(settingItemAnimations[item as keyof typeof settingItemAnimations], {
         toValue: isFocused ? 1.02 : 1,
@@ -378,6 +382,27 @@ export default function SettingsTab() {
     ToastService.success('已登出');
   };
 
+  const handleClearDoubanCache = async () => {
+    try {
+      await doubanCacheService.clearAllCache();
+      searchCacheService.clearCache();
+      ToastService.success('豆瓣缓存已清空');
+    } catch (error) {
+      console.error('清空豆瓣缓存失败:', error);
+      ToastService.error('清空豆瓣缓存失败');
+    }
+  };
+
+  const handleClearUserDataCache = async () => {
+    try {
+      userDataCacheService.clearAllCache();
+      ToastService.success('用户数据缓存已清空');
+    } catch (error) {
+      console.error('清空用户数据缓存失败:', error);
+      ToastService.error('清空用户数据缓存失败');
+    }
+  };
+
   // 从 serverUrl 中提取域名
   const extractDomain = (url: string): string => {
     try {
@@ -534,6 +559,42 @@ export default function SettingsTab() {
             </Pressable>
           </Animated.View>
 
+          {/* 清空缓存选项 - 一行两个按钮 */}
+          <View style={styles.cacheButtonsRow}>
+            <Animated.View style={{ flex: 1, transform: [{ scale: settingItemAnimations.clearDoubanCache }] }}>
+              <Pressable
+                style={[
+                  styles.cacheButton,
+                  focusedItem === 'clearDoubanCache' && styles.cacheButtonFocused
+                ]}
+                onPress={handleClearDoubanCache}
+                onFocus={() => setFocusedItem('clearDoubanCache')}
+                onBlur={() => setFocusedItem(null)}
+              >
+                <Text style={[
+                  styles.cacheButtonText,
+                  focusedItem === 'clearDoubanCache' && styles.cacheButtonTextFocused
+                ]}>清空豆瓣缓存</Text>
+              </Pressable>
+            </Animated.View>
+            <Animated.View style={{ flex: 1, transform: [{ scale: settingItemAnimations.clearUserDataCache }] }}>
+              <Pressable
+                style={[
+                  styles.cacheButton,
+                  focusedItem === 'clearUserDataCache' && styles.cacheButtonFocused
+                ]}
+                onPress={handleClearUserDataCache}
+                onFocus={() => setFocusedItem('clearUserDataCache')}
+                onBlur={() => setFocusedItem(null)}
+              >
+                <Text style={[
+                  styles.cacheButtonText,
+                  focusedItem === 'clearUserDataCache' && styles.cacheButtonTextFocused
+                ]}>清空用户数据缓存</Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+
           {/* 登出选项 - 仅在已登录时显示 */}
           {hasLogin && (
             <Animated.View style={{ transform: [{ scale: settingItemAnimations.logout }] }}>
@@ -548,14 +609,8 @@ export default function SettingsTab() {
                 onBlur={() => setFocusedItem(null)}
               >
                 <Text style={[
-                  styles.settingLabel,
-                  styles.logoutLabel,
-                  focusedItem === 'logout' && styles.logoutLabelFocused
-                ]}>登出</Text>
-                <Text style={[
-                  styles.settingValue,
-                  styles.logoutValue,
-                  focusedItem === 'logout' && styles.logoutValueFocused
+                  styles.logoutText,
+                  focusedItem === 'logout' && styles.logoutTextFocused
                 ]}>退出登录</Text>
               </Pressable>
             </Animated.View>
@@ -1024,9 +1079,19 @@ const styles = StyleSheet.create({
   },
   logoutItem: {
     backgroundColor: 'rgba(231, 76, 60, 0.15)',
+    justifyContent: 'center',
   },
   logoutItemFocused: {
     backgroundColor: 'rgba(231, 76, 60, 0.95)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#e74c3c',
+    textAlign: 'center',
+  },
+  logoutTextFocused: {
+    color: '#ffffff',
   },
   logoutLabel: {
     color: '#e74c3c',
@@ -1038,6 +1103,30 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
   },
   logoutValueFocused: {
+    color: '#ffffff',
+  },
+  cacheButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: 480,
+  },
+  cacheButton: {
+    backgroundColor: 'rgba(243, 156, 18, 0.15)',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cacheButtonFocused: {
+    backgroundColor: 'rgba(243, 156, 18, 0.95)',
+  },
+  cacheButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#f39c12',
+  },
+  cacheButtonTextFocused: {
     color: '#ffffff',
   },
 });

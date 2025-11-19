@@ -575,7 +575,7 @@ const ShowTab = forwardRef<any, ShowTabProps>(({ firstSelectorRef, onFirstSelect
             onBlur={() => setFocusedCategoryKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedCategory)}
             nextFocusDownMap={{
-              all: transparentFilterRef?.current,
+              all: transparentFilterRef?.current?.getFirstOptionRef?.(),
             }}
           />
         </View>

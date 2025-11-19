@@ -565,7 +565,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef, onFirstSele
             onBlur={() => setFocusedCategoryKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedCategory)}
             nextFocusDownMap={{
-              all: transparentFilterRef?.current,
+              all: transparentFilterRef?.current?.getFirstOptionRef?.(),
             }}
           />
         </View>

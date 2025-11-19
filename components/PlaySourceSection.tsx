@@ -1,0 +1,300 @@
+import { StyleSheet, Text, ScrollView, Pressable, TVFocusGuideView, useWindowDimensions, findNodeHandle, BackHandler, Animated } from 'react-native';
+import { useRef, useState, useEffect } from 'react';
+import VideoCard from './VideoCard';
+import VideoCardSkeleton from './VideoCardSkeleton';
+import { useScrollContext } from '@/contexts/ScrollContext';
+import { VideoInfo } from '@/types/entities';
+
+interface PlaySourceSectionProps {
+    title: string;
+    videos: VideoInfo[];
+    from?: string;
+    onTitlePress?: () => void;
+    titleRef?: React.RefObject<any>;
+    nextSectionTitleRef?: React.RefObject<any>;
+    isLast?: boolean;
+    loading?: boolean;
+    selectedSourceKey?: string | null;
+    onSourceSelect?: (sourceKey: string) => void;
+}
+
+export default function PlaySourceSection({ title, videos, from, onTitlePress, titleRef, nextSectionTitleRef, isLast = false, loading = false, selectedSourceKey, onSourceSelect }: PlaySourceSectionProps) {
+    const scrollViewRef = useRef<ScrollView>(null);
+    const sectionRef = useRef<any>(null);
+    const titlePressableRef = useRef<any>(null);
+    const cardsWrapperRef = useRef<any>(null);
+    const { scrollViewRef: mainScrollViewRef, isPageFocusedRef } = useScrollContext();
+    const currentScrollX = useRef(0);
+    const hasScrolledVertically = useRef(false);
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    const [titleNodeHandle, setTitleNodeHandle] = useState<number | null>(null);
+    const [nextSectionTitleNodeHandle, setNextSectionTitleNodeHandle] = useState<number | null>(null);
+    const titleFocusAnim = useRef(new Animated.Value(0)).current;
+
+    const resetScroll = () => {
+        if (scrollViewRef.current) {
+            scrollViewRef.current.scrollTo({ x: 0, animated: true });
+            currentScrollX.current = 0;
+            hasScrolledVertically.current = false;
+        }
+    };
+
+    const handleTitleFocus = () => {
+        Animated.spring(titleFocusAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 100,
+        }).start();
+
+        if (!mainScrollViewRef?.current || !titlePressableRef.current || !isPageFocusedRef?.current) return;
+
+        // 测量标题在主滚动视图中的位置，让标题居中
+        titlePressableRef.current.measureLayout(
+            mainScrollViewRef.current as any,
+            (_x: number, y: number, _width: number, height: number) => {
+                // 计算垂直居中位置
+                const scrollToY = Math.max(0, y - (screenHeight / 2) + (height / 2));
+                mainScrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
+            }
+        );
+    };
+
+    const handleTitleBlur = () => {
+        Animated.timing(titleFocusAnim, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handleScroll = (event: any) => {
+        currentScrollX.current = event.nativeEvent.contentOffset.x;
+    };
+
+    const handleCardFocus = (index: number, cardRef: any) => {
+        if (!scrollViewRef.current) return;
+
+        // 卡片实际宽度 90 + 右边距 20 = 110
+        const cardTotalWidth = 110;
+        const cardActualWidth = 90;
+        const contentPadding = 16; // ScrollView 的 paddingHorizontal（与 styles.cardsContainer 一致）
+        const sectionPaddingLeft = 45; // section 的 paddingLeft（与 styles.container 一致）
+        const cardPosition = index * cardTotalWidth; // 卡片左边缘相对于内容区的位置
+        const viewportStart = currentScrollX.current; // 视口左边缘（相对于 ScrollView 内容）
+        // 视口右边缘需要减去 section 的 paddingLeft，因为这部分不属于 ScrollView 的可见区域
+        const viewportEnd = currentScrollX.current + screenWidth - sectionPaddingLeft; // 视口右边缘
+
+        // 当前卡片在内容区中的绝对位置（包含 padding）
+        const cardAbsoluteLeft = contentPadding + cardPosition;
+
+        // 下一个卡片（右侧）的位置
+        const nextCardPosition = (index + 1) * cardTotalWidth;
+        const nextCardAbsoluteLeft = contentPadding + nextCardPosition;
+        const nextCardAbsoluteRight = nextCardAbsoluteLeft + cardActualWidth;
+        // 上一个卡片（左侧）的位置
+        const prevCardPosition = (index - 1) * cardTotalWidth;
+        const prevCardAbsoluteLeft = contentPadding + prevCardPosition;
+
+        // 向右滚动：如果下一个卡片右边缘超出视口，滚动刚好使下一个卡片完整可见
+        // 对称于左滚动，右边也留出 contentPadding 的空间
+        if (nextCardAbsoluteRight > viewportEnd - contentPadding) {
+            // 计算需要滚动的距离
+            const scrollDistance = nextCardAbsoluteRight - (viewportEnd - contentPadding);
+            const newScrollX = currentScrollX.current + scrollDistance;
+            console.log('PlaySourceSection 向右滚动:', {
+                index,
+                contentPadding,
+                sectionPaddingLeft,
+                currentScrollX: currentScrollX.current,
+                viewportEnd,
+                nextCardAbsoluteRight,
+                scrollDistance,
+                newScrollX,
+                screenWidth
+            });
+            currentScrollX.current = newScrollX;
+            scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
+        }
+        // 向左滚动：如果上一个卡片左边缘超出视口，滚动刚好使上一个卡片完整可见
+        else if (prevCardAbsoluteLeft < viewportStart + contentPadding) {
+            // 计算需要滚动的距离：视口左边缘 - 上一个卡片左边缘 + 左边距
+            const scrollDistance = (viewportStart + contentPadding) - prevCardAbsoluteLeft;
+            const newScrollX = Math.max(0, currentScrollX.current - scrollDistance);
+            console.log('PlaySourceSection 向左滚动:', {
+                index,
+                contentPadding,
+                sectionPaddingLeft,
+                currentScrollX: currentScrollX.current,
+                viewportStart,
+                prevCardAbsoluteLeft,
+                scrollDistance,
+                newScrollX
+            });
+            currentScrollX.current = newScrollX;
+            scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
+        }
+    };
+
+    useEffect(() => {
+        if (titlePressableRef.current) {
+            const handle = findNodeHandle(titlePressableRef.current);
+            setTitleNodeHandle(handle);
+        }
+    }, [title]);
+
+    // 使用 videos 作为依赖，当列表渲染完成后再检查 nextSectionTitleRef
+    useEffect(() => {
+        if (nextSectionTitleRef?.current) {
+            const handle = findNodeHandle(nextSectionTitleRef.current);
+            setNextSectionTitleNodeHandle(handle);
+        }
+    }, [nextSectionTitleRef]);
+
+    // 监听返回键，重置水平滚动
+    useEffect(() => {
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+            resetScroll();
+            return false; // 不阻止默认行为，让事件继续传播
+        });
+
+        return () => backHandler.remove();
+    }, []);
+
+    return (
+        <TVFocusGuideView
+            ref={sectionRef}
+            style={styles.container}
+            trapFocusUp
+            trapFocusDown
+            autoFocus={false}
+        >
+            <TVFocusGuideView
+                style={styles.titleWrapper}
+                trapFocusLeft
+                trapFocusRight
+                autoFocus={false}
+            >
+                <Pressable
+                    ref={(ref) => {
+                        titlePressableRef.current = ref;
+                        if (titleRef) {
+                            titleRef.current = ref;
+                        }
+                    }}
+                    onPress={onTitlePress}
+                    onFocus={handleTitleFocus}
+                    onBlur={handleTitleBlur}
+                    android_disableSound={true}
+                    style={{ backgroundColor: 'transparent' }}
+                >
+                    <Animated.View
+                        style={[
+                            styles.titleContainer,
+                            {
+                                backgroundColor: titleFocusAnim.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)'],
+                                }),
+                                transform: [
+                                    {
+                                        scale: titleFocusAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [1, 1.1],
+                                        }),
+                                    },
+                                ],
+                            },
+                        ]}
+                    >
+                        <Text style={styles.title}>{title}</Text>
+                    </Animated.View>
+                </Pressable>
+            </TVFocusGuideView>
+
+            <TVFocusGuideView
+                ref={cardsWrapperRef}
+                style={styles.cardsWrapper}
+                trapFocusLeft
+                trapFocusRight
+                autoFocus={false}
+            >
+                <ScrollView
+                    ref={scrollViewRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.cardsContainer}
+                    onScroll={handleScroll}
+                    scrollEventThrottle={16}
+                >
+                    {videos.length === 0 && loading ? (
+                        // 只有在没有结果且正在加载时才显示骨架屏
+                        Array.from({ length: 8 }).map((_, index) => (
+                            <VideoCardSkeleton key={`skeleton-${index}`} />
+                        ))
+                    ) : (
+                        <>
+                            {videos.map((video, index) => {
+                                const sourceKey = `${video.source}_${video.id}`;
+                                const isSelected = selectedSourceKey === sourceKey;
+                                return (
+                                    <VideoCard
+                                        key={sourceKey}
+                                        videoInfo={video}
+                                        from="source"
+                                        onPress={() => onSourceSelect?.(sourceKey)}
+                                        onFocus={(cardRef) => handleCardFocus(index, cardRef)}
+                                        nextFocusUp={titleNodeHandle ?? undefined}
+                                        nextFocusDown={nextSectionTitleNodeHandle ?? undefined}
+                                        isSelected={isSelected}
+                                        style={index === 0 ? { marginLeft: 45 } : undefined}
+                                    />
+                                );
+                            })}
+                            {/* 如果还在加载中，在已有结果后面显示 2 个骨架屏 */}
+                            {loading && videos.length > 0 && (
+                                <>
+                                    <VideoCardSkeleton />
+                                    <VideoCardSkeleton />
+                                </>
+                            )}
+                        </>
+                    )}
+                </ScrollView>
+            </TVFocusGuideView>
+        </TVFocusGuideView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        marginBottom: 24,
+    },
+    titleWrapper: {
+        flexDirection: 'row',
+    },
+    titleContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        marginBottom: 0,
+        alignSelf: 'flex-start',
+        marginLeft: 70,
+        borderRadius: 6,
+    },
+    title: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#ffffff',
+    },
+    cardsWrapper: {
+        flexDirection: 'row',
+    },
+    scrollView: {
+        flexGrow: 0,
+    },
+    cardsContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+});

@@ -43,7 +43,7 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
 
   // 处理焦点变化时的动画
   useEffect(() => {
-    options.forEach((option) => {
+    for (const option of options) {
       const isFocused = focusedKey === option.key;
       Animated.spring(optionAnimations[option.key], {
         toValue: isFocused ? 1.05 : 1,
@@ -51,8 +51,8 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
         friction: 8,
         tension: 100,
       }).start();
-    });
-  }, [focusedKey]);
+    }
+  }, [focusedKey, options, optionAnimations]);
 
   // 当选中项改变时，更新首选焦点目标
   useEffect(() => {
@@ -77,7 +77,7 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
   useEffect(() => {
     if (nextFocusDownMap) {
       const handles: Record<string, number | null> = {};
-      Object.keys(nextFocusDownMap).forEach((key) => {
+      for (const key in nextFocusDownMap) {
         const target = nextFocusDownMap[key];
         if (target) {
           const handle = findNodeHandle(target);
@@ -85,7 +85,7 @@ const FilterSelector = forwardRef<any, FilterSelectorProps>((props, ref) => {
         } else {
           handles[key] = null;
         }
-      });
+      }
       setNextFocusDownHandles(handles);
     } else {
       setNextFocusDownHandles({});

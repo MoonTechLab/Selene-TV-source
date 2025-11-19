@@ -73,26 +73,41 @@ export default function RecommendSection({ title, videos, from, onTitlePress, ti
   const handleCardFocus = (index: number, cardRef: any) => {
     if (!scrollViewRef.current) return;
 
-    // 卡片宽度 100 + 右边距 20 = 120
-    const cardWidth = 120;
-    const actualCardWidth = 100;
-    const cardPosition = index * cardWidth;
-    const horizontalMargin = 160; // 左右预留余量
+    // 卡片实际宽度 90 + 右边距 20 = 110
+    const cardTotalWidth = 110;
+    const cardActualWidth = 90;
     const contentPadding = 16; // ScrollView 的 paddingHorizontal
+    const cardPosition = index * cardTotalWidth; // 卡片左边缘相对于内容区的位置
+    const viewportStart = currentScrollX.current; // 视口左边缘
+    const viewportEnd = currentScrollX.current + screenWidth; // 视口右边缘
 
-    // 计算卡片在视口中的位置
-    const cardLeftInViewport = cardPosition - currentScrollX.current;
-    const cardRightInViewport = cardLeftInViewport + actualCardWidth;
+    // 当前卡片在内容区中的绝对位置（包含 padding）
+    const cardAbsoluteLeft = contentPadding + cardPosition;
+    const cardAbsoluteRight = cardAbsoluteLeft + cardActualWidth;
 
-    // 如果卡片右边超出视口或距离右边太近，向右滚动
-    if (cardRightInViewport > screenWidth - horizontalMargin) {
-      const newScrollX = cardPosition - screenWidth + actualCardWidth + horizontalMargin;
+    // 下一个卡片（右侧）的位置
+    const nextCardPosition = (index + 1) * cardTotalWidth;
+    const nextCardAbsoluteLeft = contentPadding + nextCardPosition;
+    const nextCardAbsoluteRight = nextCardAbsoluteLeft + cardActualWidth;
+    // 上一个卡片（左侧）的位置
+    const prevCardPosition = (index - 1) * cardTotalWidth;
+    const prevCardAbsoluteLeft = contentPadding + prevCardPosition;
+    const prevCardAbsoluteRight = prevCardAbsoluteLeft + cardActualWidth;
+
+    // 向右滚动：如果下一个卡片右边缘超出视口，滚动刚好使下一个卡片完整可见
+    // 对称于左滚动，右边也留出 contentPadding 的空间
+    if (nextCardAbsoluteRight > viewportEnd - contentPadding) {
+      // 计算需要滚动的距离
+      const scrollDistance = nextCardAbsoluteRight - (viewportEnd - contentPadding);
+      const newScrollX = currentScrollX.current + scrollDistance;
       currentScrollX.current = newScrollX;
       scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
     }
-    // 如果卡片左边超出视口或距离左边太近，向左滚动
-    else if (cardLeftInViewport < horizontalMargin - contentPadding) {
-      const newScrollX = Math.max(0, cardPosition - horizontalMargin + contentPadding);
+    // 向左滚动：如果上一个卡片左边缘超出视口，滚动刚好使上一个卡片完整可见
+    else if (prevCardAbsoluteLeft < viewportStart + contentPadding) {
+      // 计算需要滚动的距离：视口左边缘 - 上一个卡片左边缘 + 左边距
+      const scrollDistance = (viewportStart + contentPadding) - prevCardAbsoluteLeft;
+      const newScrollX = Math.max(0, currentScrollX.current - scrollDistance);
       currentScrollX.current = newScrollX;
       scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
     }

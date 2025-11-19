@@ -83,3 +83,33 @@ export interface DoubanRecommendsParams {
   page?: number;
   dataSourceKey?: DoubanDataSourceKey;
 }
+
+// 豆瓣推荐项目
+export interface DoubanRecommendItem {
+  id: string;
+  title: string;
+  poster: string;
+  rate?: string;
+}
+
+// 豆瓣电影详情
+export interface DoubanMovieDetails {
+  id: string;
+  title: string;
+  poster: string;
+  rate?: string;
+  year: string;
+  summary?: string;
+  genres: string[];
+  directors: string[];
+  screenwriters: string[];
+  actors: string[];
+  duration?: string;
+  countries: string[];
+  languages: string[];
+  releaseDate?: string;
+  originalTitle?: string;
+  imdbId?: string;
+  totalEpisodes?: number;
+  recommends: DoubanRecommendItem[];
+}

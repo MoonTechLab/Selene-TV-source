@@ -656,8 +656,8 @@ const AnimeTab = forwardRef<any, AnimeTabProps>(({ firstSelectorRef, onFirstSele
             onBlur={() => setFocusedCategoryKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedCategory)}
             nextFocusDownMap={{
-              series: transparentFilterRef?.current,
-              movie: transparentFilterRef?.current,
+              series: transparentFilterRef?.current?.getFirstOptionRef?.(),
+              movie: transparentFilterRef?.current?.getFirstOptionRef?.(),
             }}
           />
         </View>

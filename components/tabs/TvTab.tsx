@@ -547,8 +547,9 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef, onFirstSelectorRe
                   }, 300);
                 }
               },
-              () => {
+              (error: any) => {
                 // 测量失败时的回调，仍然尝试加载
+                console.warn('measureLayout failed:', error);
                 if (shouldLoadNextPage) {
                   loadingTriggeredForPageRef.current = page;
                   loadData(false);
@@ -586,7 +587,7 @@ const TvTab = forwardRef<any, TvTabProps>(({ firstSelectorRef, onFirstSelectorRe
             onBlur={() => setFocusedCategoryKey(null)}
             onSelect={(key) => handleFilterSelect(key, setSelectedCategory)}
             nextFocusDownMap={{
-              all: transparentFilterRef?.current,
+              all: transparentFilterRef?.current?.getFirstOptionRef?.(),
             }}
           />
         </View>

@@ -14,15 +14,17 @@ interface VideoCardProps {
   onNavigateVertical?: (direction: 'up' | 'down') => void;
   nextFocusUp?: number;
   nextFocusDown?: number;
+  isSelected?: boolean;
+  style?: any;
 }
 
-function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown }: VideoCardProps) {
+function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onBlurProp, onNavigateVertical, nextFocusUp, nextFocusDown, isSelected = false, style }: VideoCardProps) {
   const { title, cover: coverUrl, sourceName, index, totalEpisodes, rate, playTime, totalTime, year } = videoInfo;
-  const showSourceName = (from === 'playrecord' || from === 'favorite') && sourceName;
-  const showEpisodeBadge = (from === 'playrecord' || from === 'favorite' || from === 'search') && totalEpisodes > 1;
+  const showSourceName = (from === 'playrecord' || from === 'favorite' || from === 'source') && sourceName;
+  const showEpisodeBadge = (from === 'playrecord' || from === 'favorite' || from === 'search' || from === 'source') && totalEpisodes > 1;
   const showRateBadge = (from === 'bangumi' || from === 'douban') && rate && rate !== '0';
   const showYearBadge = from === 'search' && year && year !== '0' && year.toLowerCase() !== 'unknown' && year.trim() !== '';
-  const showProgressBar = from === 'playrecord' && totalTime > 0;
+  const showProgressBar = (from === 'playrecord' || from === 'source') && totalTime > 0;
   const progressPercentage = showProgressBar ? Math.min((playTime / totalTime) * 100, 100) : 0;
 
   // 徽章文本逻辑
@@ -30,7 +32,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     if (from === 'playrecord') {
       return `${index}/${totalEpisodes}`;
     }
-    if (from === 'favorite') {
+    if (from === 'favorite' || from === 'source') {
       return index > 0 ? `${index}/${totalEpisodes}` : `${totalEpisodes}`;
     }
     if (from === 'search') {
@@ -57,10 +59,10 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
   const needsScroll = titleWidth > containerWidth && containerWidth > 0;
   const measureTextRef = useRef<Text>(null);
   const { renderMeasureElement, clearMeasureElement } = useScrollContext();
-  
+
   // 固定的文本间隔
   const TEXT_GAP = 40;
-  
+
   // 使用 ref 存储最新的 titleWidth，避免闭包问题
   const titleWidthRef = useRef(titleWidth);
   useEffect(() => {
@@ -76,7 +78,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
 
     // 循环距离：文本宽度 + 固定间距（使用 ref 获取最新值）
     const loopDistance = titleWidthRef.current + TEXT_GAP;
-    
+
     // 先延迟1秒
     Animated.sequence([
       Animated.delay(1000),
@@ -106,9 +108,9 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     if (!isFocused) {
       return;
     }
-    
+
     const measureEl = (
-      <Text 
+      <Text
         key={measureKey}
         ref={measureTextRef}
         style={styles.title}
@@ -122,7 +124,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
       </Text>
     );
     renderMeasureElement(measureEl);
-    
+
     return () => {
       clearMeasureElement();
     };
@@ -146,10 +148,10 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     }).start();
     onFocusProp?.(cardRef.current);
   };
-  
+
   // 当测量完成后启动动画
   useEffect(() => {
-    
+
     if (isFocused && isMeasured && needsScroll) {
       // 停止之前的动画并重置
       scrollAnim.stopAnimation(() => {
@@ -192,6 +194,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
           title: videoInfo.title,
           doubanId: videoInfo.doubanId,
           from: from,
+          year: videoInfo.year,
         },
       });
     } else if (onPress) {
@@ -207,6 +210,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
         style={[
           styles.container,
           { transform: [{ scale: scaleAnim }] },
+          style,
         ]}
       >
         <Pressable
@@ -217,20 +221,27 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
           nextFocusUp={nextFocusUp}
           nextFocusDown={nextFocusDown}
         >
-          <View style={[
-            styles.cover,
-            isFocused && styles.coverFocused
-          ]}>
-            <FastImage 
-              source={{ 
+          <View style={styles.coverWrapper}>
+            {isSelected && (
+              <View style={styles.selectedIndicator}>
+                <Text style={styles.selectedIndicatorIcon}>✓</Text>
+              </View>
+            )}
+
+            <View style={[
+              styles.cover,
+              isFocused && styles.coverFocused
+            ]}>
+              <FastImage
+              source={{
                 uri: coverUrl,
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                   'Referer': 'https://movie.douban.com/',
                 },
                 priority: FastImage.priority.normal,
-              }} 
-              style={styles.coverImage}
+              }}
+              style={[styles.coverImage, isFocused && styles.coverImageFocused]}
               resizeMode={FastImage.resizeMode.cover}
               onError={() => {
                 // setImageError(true);
@@ -258,8 +269,9 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                 </View>
               </View>
             )}
+            </View>
           </View>
-          <View 
+          <View
             style={styles.content}
             onLayout={(e) => {
               // 只在第一次或聚焦时测量容器宽度
@@ -281,7 +293,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                       style={[
                         styles.title,
                         styles.titleScrolling,
-                        { 
+                        {
                           textAlign: 'left',
                           transform: [{ translateX: scrollAnim }],
                           left: 0,
@@ -295,7 +307,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
                     <Animated.View
                       style={[
                         styles.titleScrolling,
-                        { 
+                        {
                           transform: [{ translateX: scrollAnim }],
                           left: titleWidth + TEXT_GAP,
                           width: titleWidth,
@@ -338,6 +350,11 @@ const styles = StyleSheet.create({
   pressable: {
     width: '100%',
   },
+  coverWrapper: {
+    position: 'relative',
+    width: 90,
+    height: 135,
+  },
   cover: {
     width: 90,
     height: 135,
@@ -345,17 +362,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2a2a',
   },
   coverFocused: {
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 24,
-    elevation: 12,
-    borderWidth: 0,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  selectedIndicator: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
+    zIndex: 10,
+  },
+  selectedIndicatorIcon: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '700',
   },
   coverImage: {
     width: 90,
     height: 135,
     borderRadius: 6,
+  },
+  coverImageFocused: {
+    width: 86,
+    height: 131,
+    borderRadius: 4,
   },
   content: {
     marginTop: 6,
@@ -485,7 +522,8 @@ export default memo(VideoCard, (prevProps, nextProps) => {
     prevProps.videoInfo.cover === nextProps.videoInfo.cover &&
     prevProps.videoInfo.source === nextProps.videoInfo.source &&
     prevProps.nextFocusUp === nextProps.nextFocusUp &&
-    prevProps.nextFocusDown === nextProps.nextFocusDown
+    prevProps.nextFocusDown === nextProps.nextFocusDown &&
+    prevProps.isSelected === nextProps.isSelected
     // 注意：onPress、onFocus、onBlur 等函数引用可能每次都不同
     // 但它们的行为通常是一致的，所以我们不比较它们
   );
