@@ -3,6 +3,7 @@ import { useRef, useEffect, useState, memo, useCallback } from 'react';
 import FastImage from 'react-native-fast-image';
 import { useScrollContext } from '@/contexts/ScrollContext';
 import { VideoInfo } from '@/types/entities';
+import { router } from 'expo-router';
 
 interface VideoCardProps {
   videoInfo: VideoInfo;
@@ -181,6 +182,24 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
     }
   });
 
+  // 处理点击事件
+  const handlePress = () => {
+    // 如果来源是 douban，导航到详情页
+    if (from === 'douban' && videoInfo.doubanId) {
+      router.push({
+        pathname: '/detail' as any,
+        params: {
+          title: videoInfo.title,
+          doubanId: videoInfo.doubanId,
+          from: from,
+        },
+      });
+    } else if (onPress) {
+      // 否则调用传入的 onPress
+      onPress();
+    }
+  };
+
   return (
     <>
       <Animated.View
@@ -192,7 +211,7 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
       >
         <Pressable
           style={styles.pressable}
-          onPress={onPress}
+          onPress={handlePress}
           onFocus={handleFocus}
           onBlur={handleBlur}
           nextFocusUp={nextFocusUp}

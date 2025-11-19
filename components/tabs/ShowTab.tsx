@@ -182,7 +182,7 @@ const ShowTab = forwardRef<any, ShowTabProps>(({ firstSelectorRef, onFirstSelect
   const [hasMore, setHasMore] = useState(true);
   const pageLimit = 25;
 
-  const { scrollViewRef: mainScrollViewRef } = useScrollContext();
+  const { scrollViewRef: mainScrollViewRef, isPageFocusedRef } = useScrollContext();
   const { height: screenHeight } = useWindowDimensions();
   const currentRowRef = useRef<number>(-1);
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
@@ -510,7 +510,8 @@ const ShowTab = forwardRef<any, ShowTabProps>(({ firstSelectorRef, onFirstSelect
     const shouldLoadNextPage = rowIndex === rows.length - 1 && hasMore && !isLoading && loadingTriggeredForPageRef.current < page;
 
     // 当切换到新行时，滚动到居中位置
-    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current) {
+    // 但如果页面失去焦点，不执行滚动（避免导航时的焦点转移触发滚动）
+    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current && isPageFocusedRef?.current) {
       currentRowRef.current = rowIndex;
       
       // 使用行容器的 ref 进行测量

@@ -21,7 +21,7 @@ export default function RecommendSection({ title, videos, from, onTitlePress, ti
   const sectionRef = useRef<any>(null);
   const titlePressableRef = useRef<any>(null);
   const cardsWrapperRef = useRef<any>(null);
-  const { scrollViewRef: mainScrollViewRef } = useScrollContext();
+  const { scrollViewRef: mainScrollViewRef, isPageFocusedRef } = useScrollContext();
   const currentScrollX = useRef(0);
   const hasScrolledVertically = useRef(false);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -45,7 +45,7 @@ export default function RecommendSection({ title, videos, from, onTitlePress, ti
       tension: 100,
     }).start();
 
-    if (!mainScrollViewRef?.current || !titlePressableRef.current) return;
+    if (!mainScrollViewRef?.current || !titlePressableRef.current || !isPageFocusedRef?.current) return;
 
     // 测量标题在主滚动视图中的位置
     titlePressableRef.current.measureLayout(
@@ -98,7 +98,8 @@ export default function RecommendSection({ title, videos, from, onTitlePress, ti
     }
 
     // 垂直滚动到居中位置（只在第一次进入这一行时滚动）
-    if (!hasScrolledVertically.current && mainScrollViewRef?.current && cardRef) {
+    // 但如果页面失去焦点，不执行滚动（避免导航时的焦点转移触发滚动）
+    if (!hasScrolledVertically.current && mainScrollViewRef?.current && cardRef && isPageFocusedRef?.current) {
       cardRef.measureLayout(
         mainScrollViewRef.current as any,
         (_x: number, y: number, _width: number, height: number) => {

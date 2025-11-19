@@ -186,7 +186,7 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef, onFirstSele
   const [hasMore, setHasMore] = useState(true);
   const pageLimit = 25;
 
-  const { scrollViewRef: mainScrollViewRef } = useScrollContext();
+  const { scrollViewRef: mainScrollViewRef, isPageFocusedRef } = useScrollContext();
   const { height: screenHeight } = useWindowDimensions();
   const currentRowRef = useRef<number>(-1);
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
@@ -501,7 +501,8 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef, onFirstSele
     const shouldLoadNextPage = rowIndex === rows.length - 1 && hasMore && !isLoading && loadingTriggeredForPageRef.current < page;
 
     // 当切换到新行时，滚动到居中位置
-    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current) {
+    // 但如果页面失去焦点，不执行滚动（避免导航时的焦点转移触发滚动）
+    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current && isPageFocusedRef?.current) {
       currentRowRef.current = rowIndex;
       
       // 使用行容器的 ref 进行测量
@@ -514,7 +515,6 @@ const MovieTab = forwardRef<any, MovieTabProps>(({ firstSelectorRef, onFirstSele
               mainScrollViewRef.current as any,
               (_x: number, y: number, _width: number, height: number) => {
                 const scrollToY = Math.max(0, y - (screenHeight / 2) + (height / 2));
-                // 使用非动画滚动，避免与系统滚动冲突
                 mainScrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
                 
                 // 滚动完成后，如果是最后一行，触发加载下一页

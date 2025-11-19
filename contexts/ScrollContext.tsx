@@ -1,4 +1,4 @@
-import { createContext, useContext, RefObject, ReactNode } from 'react';
+import { createContext, useContext, RefObject, ReactNode, MutableRefObject } from 'react';
 import { ScrollView, View } from 'react-native';
 
 interface ScrollContextType {
@@ -6,6 +6,7 @@ interface ScrollContextType {
   measureContainerRef: RefObject<View | null> | null;
   renderMeasureElement: (element: ReactNode) => void;
   clearMeasureElement: () => void;
+  isPageFocusedRef: MutableRefObject<boolean> | null;
 }
 
 export const ScrollContext = createContext<ScrollContextType>({
@@ -13,6 +14,7 @@ export const ScrollContext = createContext<ScrollContextType>({
   measureContainerRef: null,
   renderMeasureElement: () => {},
   clearMeasureElement: () => {},
+  isPageFocusedRef: null,
 });
 
 export const useScrollContext = () => useContext(ScrollContext);

@@ -75,7 +75,7 @@ export default function SearchTab() {
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
   const currentRowRef = useRef<number>(-1);
   const rowRefs = useRef<Map<number, any>>(new Map());
-  const { scrollViewRef: mainScrollViewRef } = useScrollContext();
+  const { scrollViewRef: mainScrollViewRef, isPageFocusedRef } = useScrollContext();
   const { height: screenHeight } = useWindowDimensions();
 
   // 动画值
@@ -413,7 +413,8 @@ export default function SearchTab() {
   const handleCardFocus = useCallback((rowIndex: number) => {
     setFocusedRowIndex(rowIndex);
 
-    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current) {
+    // 但如果页面失去焦点，不执行滚动（避免导航时的焦点转移触发滚动）
+    if (currentRowRef.current !== rowIndex && mainScrollViewRef?.current && isPageFocusedRef?.current) {
       currentRowRef.current = rowIndex;
       
       const rowRef = rowRefs.current.get(rowIndex);

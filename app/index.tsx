@@ -1,6 +1,7 @@
 import { StyleSheet, ScrollView, BackHandler, Animated, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import TabSwitcher, { TabType } from '@/components/TabSwitcher';
 import HomeTab, { HomeTabRef } from '@/components/tabs/HomeTab';
 import MovieTab from '@/components/tabs/MovieTab';
@@ -87,6 +88,9 @@ export default function HomeScreen() {
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const previousTabRef = useRef<TabType>(activeTab);
+  
+  // 页面焦点状态（用于所有 Tab 共享）
+  const isPageFocusedRef = useRef(true);
 
   // 自动登录逻辑
   useEffect(() => {
@@ -148,6 +152,17 @@ export default function HomeScreen() {
     
     autoLogin();
   }, []);
+
+  // 监听页面焦点状态
+  useFocusEffect(
+    useCallback(() => {
+      isPageFocusedRef.current = true;
+      
+      return () => {
+        isPageFocusedRef.current = false;
+      };
+    }, [])
+  );
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -315,7 +330,7 @@ export default function HomeScreen() {
       locations={[0, 0.4, 0.7, 1]}
       style={styles.container}
     >
-      <ScrollContext.Provider value={{ scrollViewRef, measureContainerRef, renderMeasureElement, clearMeasureElement }}>
+      <ScrollContext.Provider value={{ scrollViewRef, measureContainerRef, renderMeasureElement, clearMeasureElement, isPageFocusedRef }}>
         <ScrollView 
           ref={scrollViewRef}
           style={styles.scrollView}
