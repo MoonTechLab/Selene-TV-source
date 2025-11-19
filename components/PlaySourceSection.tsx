@@ -102,17 +102,6 @@ export default function PlaySourceSection({ title, videos, from, onTitlePress, t
             // 计算需要滚动的距离
             const scrollDistance = nextCardAbsoluteRight - (viewportEnd - contentPadding);
             const newScrollX = currentScrollX.current + scrollDistance;
-            console.log('PlaySourceSection 向右滚动:', {
-                index,
-                contentPadding,
-                sectionPaddingLeft,
-                currentScrollX: currentScrollX.current,
-                viewportEnd,
-                nextCardAbsoluteRight,
-                scrollDistance,
-                newScrollX,
-                screenWidth
-            });
             currentScrollX.current = newScrollX;
             scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
         }
@@ -121,16 +110,6 @@ export default function PlaySourceSection({ title, videos, from, onTitlePress, t
             // 计算需要滚动的距离：视口左边缘 - 上一个卡片左边缘 + 左边距
             const scrollDistance = (viewportStart + contentPadding) - prevCardAbsoluteLeft;
             const newScrollX = Math.max(0, currentScrollX.current - scrollDistance);
-            console.log('PlaySourceSection 向左滚动:', {
-                index,
-                contentPadding,
-                sectionPaddingLeft,
-                currentScrollX: currentScrollX.current,
-                viewportStart,
-                prevCardAbsoluteLeft,
-                scrollDistance,
-                newScrollX
-            });
             currentScrollX.current = newScrollX;
             scrollViewRef.current.scrollTo({ x: newScrollX, animated: true });
         }

@@ -54,8 +54,6 @@ export default function DetailScreen() {
   const { height: screenHeight } = useWindowDimensions();
 
   const [details, setDetails] = useState<DoubanMovieDetails | null>(null);
-  // loading 状态仅用于内部逻辑，不再用于阻塞渲染
-  const [loading, setLoading] = useState(false);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [highResPosterUrl, setHighResPosterUrl] = useState<string | null>(null);
 
@@ -170,20 +168,30 @@ export default function DetailScreen() {
       setButtonGroupKey(prev => prev + 1);
     }, 200);
 
+    // 如果 selectedDoubanId 不存在（为空或为 0），且入参中包含 doubanId，则切换到入参的 doubanId
+    if ((!selectedDoubanId || selectedDoubanId === '0') && doubanId) {
+      const paramDoubanId = doubanId as string;
+      // 如果和当前页面展示的 douban 一致，无动作
+      if (paramDoubanId === currentDoubanIdRef.current) {
+        return;
+      }
+      // 切换到入参的 doubanId
+      currentDoubanIdRef.current = paramDoubanId;
+      fetchDoubanDetails(paramDoubanId);
+      return;
+    }
+
     // 如果 doubanId 不存在（为空或为 0），无动作
     if (!selectedDoubanId || selectedDoubanId === '0') {
-      console.log('选中源没有 doubanId，无需更新详情');
       return;
     }
 
     // 如果和当前页面展示的 douban 一致，无动作
     if (selectedDoubanId === currentDoubanIdRef.current) {
-      console.log('选中源的 doubanId 与当前一致，无需更新详情');
       return;
     }
 
     // doubanId 不一致，重新获取详情
-    console.log('选中源的 doubanId 不一致，重新获取详情:', selectedDoubanId);
     currentDoubanIdRef.current = selectedDoubanId;
     fetchDoubanDetails(selectedDoubanId);
   };
@@ -371,7 +379,6 @@ export default function DetailScreen() {
   }, [details]);
 
   const fetchDoubanDetails = async (id: string) => {
-    setLoading(true);
     try {
       const response = await doubanService.getDoubanDetails(id);
       if (response.success && response.data) {
@@ -379,8 +386,6 @@ export default function DetailScreen() {
       }
     } catch (error) {
       console.error('获取详情失败:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
