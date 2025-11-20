@@ -63,8 +63,10 @@ export default function DetailScreen() {
   // TMDB 图片相关状态
   const [tmdbBackdrop, setTmdbBackdrop] = useState<string | null>(null);
   const [tmdbLogo, setTmdbLogo] = useState<string | null>(null);
-  const [tmdbImagesLoaded, setTmdbImagesLoaded] = useState(false);
+  const [backdropLoaded, setBackdropLoaded] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoSize, setLogoSize] = useState<{ width: number; height: number } | null>(null);
+  const [pendingLogoUrl, setPendingLogoUrl] = useState<string | null>(null);
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const coverOpacity = useRef(new Animated.Value(1)).current;
@@ -441,9 +443,24 @@ export default function DetailScreen() {
           return;
         }
 
-        // 获取第一张 backdrop 和第一张 logo
+        // 获取第一张 backdrop
         const backdropPath = imagesResponse.backdrops[0]?.file_path;
-        const logoPath = imagesResponse.logos[0]?.file_path;
+        
+        // 获取 logo：只选择 png、jpg 或 webp 格式的，从这些 logo 中优先选择中文的
+        let logoPath: string | null = null;
+        if (imagesResponse.logos.length > 0) {
+          // 过滤出 png、jpg 或 webp 后缀的 logo
+          const validLogos = imagesResponse.logos.filter(logo => {
+            const filePath = logo.file_path.toLowerCase();
+            return filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.webp');
+          });
+          
+          if (validLogos.length > 0) {
+            // 从有效的 logo 中优先选择中文的
+            const cnLogo = validLogos.find(logo => logo.iso_3166_1 === 'CN');
+            logoPath = cnLogo ? cnLogo.file_path : validLogos[0].file_path;
+          }
+        }
 
         if (!backdropPath && !logoPath) {
           return;
@@ -451,67 +468,59 @@ export default function DetailScreen() {
 
         // 构建完整的图片 URL
         const backdropUrl = backdropPath ? `https://image.tmdb.org/t/p/original${backdropPath}` : null;
-        const logoUrl = logoPath ? `https://image.tmdb.org/t/p/original${logoPath}` : null;
+        // 如果 backdrop 没有展示，则也不要展示 logo
+        const logoUrl = (logoPath && backdropUrl) ? `https://image.tmdb.org/t/p/original${logoPath}` : null;
 
          console.log('backdrop: '+ backdropUrl)
          console.log('logo: ' + logoUrl)
 
-        // 预加载图片
+        // 并行预加载 backdrop 和 logo
         const preloadPromises: Promise<void>[] = [];
         
         if (backdropUrl) {
           preloadPromises.push(
             Image.prefetch(backdropUrl).then(() => {
               setTmdbBackdrop(backdropUrl);
+              setBackdropLoaded(true);
             })
           );
         }
 
         if (logoUrl) {
-          // 创建一个 Promise 来处理 logo 的加载和尺寸获取
+          // 预加载 logo 并获取尺寸，但不立即显示
           const logoPromise = new Promise<void>((resolve, reject) => {
-            // 先获取图片尺寸
             Image.getSize(
               logoUrl,
-              (width, height) => {
+              async (width, height) => {
                 // 根据宽高比决定显示尺寸
                 const aspectRatio = width / height;
                 let targetHeight: number;
                 let targetWidth: number;
                 
                 if (aspectRatio >= 3) {
-                  // 较宽的 logo (宽高比 >= 3:1)，高度固定 80
                   targetHeight = 80;
                   targetWidth = targetHeight * aspectRatio;
                 } else if (aspectRatio >= 1.5) {
-                  // 中等宽度 logo (宽高比 1.5:1 到 3:1)，高度固定 80
                   targetHeight = 130;
                   targetWidth = targetHeight * aspectRatio;
                 } else {
-                  // 较高的 logo (宽高比 < 1.5:1)，增加高度到 120
                   targetHeight = 180;
                   targetWidth = targetHeight * aspectRatio;
                 }
                 
                 // 预加载图片
-                Image.prefetch(logoUrl)
-                  .then(() => {
-                    setLogoSize({ width: targetWidth, height: targetHeight });
-                    setTmdbLogo(logoUrl);
-                    resolve();
-                  })
-                  .catch(reject);
+                await Image.prefetch(logoUrl);
+                setLogoSize({ width: targetWidth, height: targetHeight });
+                setPendingLogoUrl(logoUrl);
+                resolve();
               },
-              (error) => {
+              async (error) => {
                 console.error('获取 logo 尺寸失败:', error);
                 // 失败时使用默认尺寸
-                Image.prefetch(logoUrl)
-                  .then(() => {
-                    setLogoSize({ width: 300, height: 80 });
-                    setTmdbLogo(logoUrl);
-                    resolve();
-                  })
-                  .catch(reject);
+                await Image.prefetch(logoUrl);
+                setLogoSize({ width: 300, height: 80 });
+                setPendingLogoUrl(logoUrl);
+                resolve();
               }
             );
           });
@@ -519,9 +528,8 @@ export default function DetailScreen() {
           preloadPromises.push(logoPromise);
         }
 
-        // 等待所有图片加载完成
+        // 等待所有图片预加载完成
         await Promise.all(preloadPromises);
-        setTmdbImagesLoaded(true);
 
       } catch (error) {
         console.error('获取 TMDB 图片失败:', error);
@@ -531,29 +539,48 @@ export default function DetailScreen() {
     fetchTmdbImages();
   }, [details]);
 
-  // TMDB 图片加载完成后的动画效果
+  // backdrop 加载完成后的动画效果
   useEffect(() => {
-    if (tmdbImagesLoaded) {
+    if (backdropLoaded && tmdbBackdrop) {
+      // backdrop 淡入和封面淡出
       Animated.parallel([
-        // backdrop 淡入
         Animated.timing(backdropOpacity, {
           toValue: 1,
           duration: 600,
           useNativeDriver: true,
         }),
-        // logo 淡入
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        // 封面淡出
         Animated.timing(coverOpacity, {
           toValue: 0,
           duration: 600,
           useNativeDriver: true,
         }),
-        // 标题淡出
+      ]).start();
+    }
+  }, [backdropLoaded, tmdbBackdrop]);
+
+  // backdrop 动画完成后 100ms 显示 logo
+  useEffect(() => {
+    if (backdropLoaded && pendingLogoUrl) {
+      const timer = setTimeout(() => {
+        setTmdbLogo(pendingLogoUrl);
+        setLogoLoaded(true);
+        setPendingLogoUrl(null);
+      }, 700); // backdrop 动画 600ms + 100ms 延迟
+
+      return () => clearTimeout(timer);
+    }
+  }, [backdropLoaded, pendingLogoUrl]);
+
+  // logo 加载完成后的动画效果
+  useEffect(() => {
+    if (logoLoaded && tmdbLogo) {
+      // logo 淡入和标题淡出
+      Animated.parallel([
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
         Animated.timing(titleOpacity, {
           toValue: 0,
           duration: 600,
@@ -561,14 +588,16 @@ export default function DetailScreen() {
         }),
       ]).start();
     }
-  }, [tmdbImagesLoaded]);
+  }, [logoLoaded, tmdbLogo]);
 
   const fetchDoubanDetails = async (id: string) => {
     // 重置 TMDB 相关状态，恢复原始样式
     setTmdbBackdrop(null);
     setTmdbLogo(null);
     setLogoSize(null);
-    setTmdbImagesLoaded(false);
+    setBackdropLoaded(false);
+    setLogoLoaded(false);
+    setPendingLogoUrl(null);
     backdropOpacity.setValue(0);
     logoOpacity.setValue(0);
     coverOpacity.setValue(1);
@@ -716,7 +745,7 @@ export default function DetailScreen() {
                     <View style={[styles.leftContent, tmdbBackdrop && { justifyContent: 'flex-end' }]}>
                     {/* TMDB Logo */}
                     {tmdbLogo && logoSize && (
-                      <Animated.View style={{ opacity: logoOpacity, marginBottom: 12 }}>
+                      <Animated.View style={{ opacity: logoOpacity, marginBottom: 20 }}>
                         <Image
                           source={{ uri: tmdbLogo }}
                           style={{ width: logoSize.width, height: logoSize.height }}
