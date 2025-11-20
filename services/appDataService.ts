@@ -9,6 +9,7 @@ class AppDataService {
   private static readonly _doubanDataSourceKey = 'douban_data_source';
   private static readonly _doubanImageSourceKey = 'douban_image_source';
   private static readonly _m3u8ProxyUrlKey = 'm3u8_proxy_url';
+  private static readonly _tmdbApiKeyKey = 'tmdb_api_key';
 
   // 保存用户登录信息
   static async saveUserData({
@@ -233,6 +234,17 @@ class AppDataService {
   static async getM3u8ProxyUrl(): Promise<string> {
     const url = await AsyncStorage.getItem(this._m3u8ProxyUrlKey);
     return url || '';
+  }
+
+  // 保存 TMDB API Key
+  static async saveTmdbApiKey(apiKey: string): Promise<void> {
+    await AsyncStorage.setItem(this._tmdbApiKeyKey, apiKey);
+  }
+
+  // 获取 TMDB API Key
+  static async getTmdbApiKey(): Promise<string> {
+    const apiKey = await AsyncStorage.getItem(this._tmdbApiKeyKey);
+    return apiKey || '';
   }
 
   // 从 cookies 中解析用户角色

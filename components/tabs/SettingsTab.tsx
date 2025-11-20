@@ -25,6 +25,7 @@ export default function SettingsTab() {
   const [doubanDataSource, setDoubanDataSource] = useState('直连');
   const [doubanImageSource, setDoubanImageSource] = useState('直连');
   const [m3u8ProxyUrl, setM3u8ProxyUrl] = useState('');
+  const [tmdbApiKey, setTmdbApiKey] = useState('');
   
   // 用户信息
   const [username, setUsername] = useState('');
@@ -35,7 +36,9 @@ export default function SettingsTab() {
   const [showImageSourceModal, setShowImageSourceModal] = useState(false);
   const [showProxyModal, setShowProxyModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showTmdbModal, setShowTmdbModal] = useState(false);
   const [tempProxyUrl, setTempProxyUrl] = useState('');
+  const [tempTmdbApiKey, setTempTmdbApiKey] = useState('');
   
   // 登录表单数据
   const [loginServerUrl, setLoginServerUrl] = useState('');
@@ -51,6 +54,7 @@ export default function SettingsTab() {
   const [imageSourceModalVisible, setImageSourceModalVisible] = useState(false);
   const [proxyModalVisible, setProxyModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
+  const [tmdbModalVisible, setTmdbModalVisible] = useState(false);
 
   // 动画值
   const dataSourceScale = useRef(new Animated.Value(0.8)).current;
@@ -69,12 +73,17 @@ export default function SettingsTab() {
   const loginOpacity = useRef(new Animated.Value(0)).current;
   const loginOverlayOpacity = useRef(new Animated.Value(0)).current;
 
+  const tmdbScale = useRef(new Animated.Value(0.8)).current;
+  const tmdbOpacity = useRef(new Animated.Value(0)).current;
+  const tmdbOverlayOpacity = useRef(new Animated.Value(0)).current;
+
   // 设置项聚焦动画
   const settingItemAnimations = useRef({
     login: new Animated.Value(1),
     dataSource: new Animated.Value(1),
     imageSource: new Animated.Value(1),
     proxy: new Animated.Value(1),
+    tmdb: new Animated.Value(1),
     clearDoubanCache: new Animated.Value(1),
     clearUserDataCache: new Animated.Value(1),
     logout: new Animated.Value(1),
@@ -97,7 +106,7 @@ export default function SettingsTab() {
 
   // 处理设置项聚焦动画
   useEffect(() => {
-    ['login', 'dataSource', 'imageSource', 'proxy', 'clearDoubanCache', 'clearUserDataCache', 'logout'].forEach((item) => {
+    ['login', 'dataSource', 'imageSource', 'proxy', 'tmdb', 'clearDoubanCache', 'clearUserDataCache', 'logout'].forEach((item) => {
       const isFocused = focusedItem === item;
       Animated.spring(settingItemAnimations[item as keyof typeof settingItemAnimations], {
         toValue: isFocused ? 1.02 : 1,
@@ -126,11 +135,13 @@ export default function SettingsTab() {
     const dataSource = await AppDataService.getDoubanDataSourceDisplayName();
     const imageSource = await AppDataService.getDoubanImageSourceDisplayName();
     const proxyUrl = await AppDataService.getM3u8ProxyUrl();
+    const apiKey = await AppDataService.getTmdbApiKey();
     
     setHasLogin(isLoggedIn);
     setDoubanDataSource(dataSource);
     setDoubanImageSource(imageSource);
     setM3u8ProxyUrl(proxyUrl);
+    setTmdbApiKey(apiKey);
     
     // 如果已登录，加载用户信息
     if (isLoggedIn) {
@@ -349,6 +360,24 @@ export default function SettingsTab() {
     }
   }, [showLoginModal, loginModalVisible, loginScale, loginOpacity, loginOverlayOpacity]);
 
+  // TMDB Modal 动画
+  useEffect(() => {
+    if (showTmdbModal) {
+      setTmdbModalVisible(true);
+      Animated.parallel([
+        Animated.spring(tmdbScale, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+        Animated.spring(tmdbOpacity, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+        Animated.spring(tmdbOverlayOpacity, { toValue: 1, useNativeDriver: true, friction: 10, tension: 150 }),
+      ]).start();
+    } else if (tmdbModalVisible) {
+      Animated.parallel([
+        Animated.spring(tmdbScale, { toValue: 0.8, useNativeDriver: true, friction: 12, tension: 200 }),
+        Animated.spring(tmdbOpacity, { toValue: 0, useNativeDriver: true, friction: 12, tension: 200 }),
+        Animated.spring(tmdbOverlayOpacity, { toValue: 0, useNativeDriver: true, friction: 12, tension: 200 }),
+      ]).start(() => setTmdbModalVisible(false));
+    }
+  }, [showTmdbModal, tmdbModalVisible, tmdbScale, tmdbOpacity, tmdbOverlayOpacity]);
+
   const handleDataSourceSelect = async (source: string) => {
     await AppDataService.saveDoubanDataSource(source);
     setDoubanDataSource(source);
@@ -370,6 +399,17 @@ export default function SettingsTab() {
   const openProxyModal = () => {
     setTempProxyUrl(m3u8ProxyUrl);
     setShowProxyModal(true);
+  };
+
+  const handleTmdbApiKeySave = async () => {
+    await AppDataService.saveTmdbApiKey(tempTmdbApiKey);
+    setTmdbApiKey(tempTmdbApiKey);
+    setShowTmdbModal(false);
+  };
+
+  const openTmdbModal = () => {
+    setTempTmdbApiKey(tmdbApiKey);
+    setShowTmdbModal(true);
   };
 
   const handleLogout = async () => {
@@ -532,6 +572,30 @@ export default function SettingsTab() {
                 styles.settingValue,
                 focusedItem === 'imageSource' && styles.settingValueFocused
               ]}>{doubanImageSource}</Text>
+            </Pressable>
+          </Animated.View>
+
+          {/* TMDB API Key */}
+          <Animated.View style={{ transform: [{ scale: settingItemAnimations.tmdb }] }}>
+            <Pressable
+              style={[
+                styles.settingItem,
+                focusedItem === 'tmdb' && styles.settingItemFocused
+              ]}
+              onPress={openTmdbModal}
+              onFocus={() => setFocusedItem('tmdb')}
+              onBlur={() => setFocusedItem(null)}
+            >
+              <Text style={[
+                styles.settingLabel,
+                focusedItem === 'tmdb' && styles.settingLabelFocused
+              ]}>TMDB API Key</Text>
+              <Text style={[
+                styles.settingValue,
+                focusedItem === 'tmdb' && styles.settingValueFocused
+              ]} numberOfLines={1}>
+                {tmdbApiKey || '未设置'}
+              </Text>
             </Pressable>
           </Animated.View>
 
@@ -792,6 +856,62 @@ export default function SettingsTab() {
         </Animated.View>
       </Modal>
 
+      {/* TMDB API Key 输入弹窗 */}
+      <Modal
+        visible={tmdbModalVisible}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowTmdbModal(false)}
+      >
+        <Animated.View style={[styles.modalOverlay, { opacity: tmdbOverlayOpacity }]}>
+          <Animated.View style={[styles.modalContent, { transform: [{ scale: tmdbScale }], opacity: tmdbOpacity }]}>
+            <Text style={styles.modalTitle}>设置 TMDB API Key</Text>
+            <TextInput
+              style={styles.input}
+              value={tempTmdbApiKey}
+              onChangeText={setTempTmdbApiKey}
+              placeholder="输入 TMDB API Key"
+              placeholderTextColor="#666"
+              autoFocus={true}
+            />
+            <View style={styles.modalButtons}>
+              <Animated.View style={{ flex: 1, transform: [{ scale: getModalItemAnimation('tmdb-cancel') }] }}>
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    focusedModalItem === 'tmdb-cancel' && styles.modalButtonFocused,
+                  ]}
+                  onPress={() => setShowTmdbModal(false)}
+                  onFocus={() => setFocusedModalItem('tmdb-cancel')}
+                  onBlur={() => setFocusedModalItem(null)}
+                >
+                  <Text style={[
+                    styles.modalButtonText,
+                    focusedModalItem === 'tmdb-cancel' && styles.modalButtonTextFocused,
+                  ]}>取消</Text>
+                </Pressable>
+              </Animated.View>
+              <Animated.View style={{ flex: 1, transform: [{ scale: getModalItemAnimation('tmdb-confirm') }] }}>
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    focusedModalItem === 'tmdb-confirm' && styles.modalButtonFocused,
+                  ]}
+                  onPress={handleTmdbApiKeySave}
+                  onFocus={() => setFocusedModalItem('tmdb-confirm')}
+                  onBlur={() => setFocusedModalItem(null)}
+                >
+                  <Text style={[
+                    styles.modalButtonText,
+                    focusedModalItem === 'tmdb-confirm' && styles.modalButtonTextFocused,
+                  ]}>确定</Text>
+                </Pressable>
+              </Animated.View>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
       {/* 登录弹窗 */}
       <Modal
         visible={loginModalVisible}
@@ -887,7 +1007,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-    paddingTop: 30,
+    paddingTop: 20,
     alignItems: 'center',
   },
   content: {

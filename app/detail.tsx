@@ -1,6 +1,7 @@
 import { StyleSheet, View, Text, ScrollView, BackHandler, Animated, Image, ActivityIndicator, useWindowDimensions, Pressable, TVFocusGuideView } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { doubanService } from '@/services/doubanService';
 import { DoubanMovieDetails } from '@/types/douban';
@@ -10,6 +11,8 @@ import SearchService from '@/services/searchService';
 import { VideoInfo, SearchResult, FavoriteItem } from '@/types/entities';
 import { ScrollContext } from '@/contexts/ScrollContext';
 import userDataCacheService from '@/services/userDataCacheService';
+import TmdbService from '@/services/tmdbService';
+import AppDataService from '@/services/appDataService';
 
 // 骨架屏组件
 const Skeleton = ({ width, height, style }: { width?: number | string, height?: number | string, style?: any }) => {
@@ -56,6 +59,16 @@ export default function DetailScreen() {
   const [details, setDetails] = useState<DoubanMovieDetails | null>(null);
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [highResPosterUrl, setHighResPosterUrl] = useState<string | null>(null);
+  
+  // TMDB 图片相关状态
+  const [tmdbBackdrop, setTmdbBackdrop] = useState<string | null>(null);
+  const [tmdbLogo, setTmdbLogo] = useState<string | null>(null);
+  const [tmdbImagesLoaded, setTmdbImagesLoaded] = useState(false);
+  const [logoSize, setLogoSize] = useState<{ width: number; height: number } | null>(null);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const coverOpacity = useRef(new Animated.Value(1)).current;
+  const titleOpacity = useRef(new Animated.Value(1)).current;
 
   // 播放源相关状态
   const [sources, setSources] = useState<VideoInfo[]>([]);
@@ -378,7 +391,189 @@ export default function DetailScreen() {
     }
   }, [details]);
 
+  // 获取 TMDB 图片
+  useEffect(() => {
+    const fetchTmdbImages = async () => {
+      if (!details?.imdbId) {
+        return;
+      }
+
+      const tmdbApiKey = await AppDataService.getTmdbApiKey();
+      if (!tmdbApiKey) {
+        return;
+      }
+
+      try {
+        // 通过 IMDB ID 查找 TMDB ID
+        console.log(details.imdbId);
+        const findResponse = await TmdbService.findByImdbId(details.imdbId);
+        if (!findResponse) {
+          console.log('TMDB 查询失败');
+          return;
+        }
+
+        // 优先从 movie_results 获取，如果为空则从 tv_results 获取
+        let tmdbId: number | null = null;
+        let mediaType: 'movie' | 'tv' = 'movie';
+        
+        if (findResponse.movie_results.length > 0) {
+          tmdbId = findResponse.movie_results[0].id;
+          mediaType = 'movie';
+        } else if (findResponse.tv_results.length > 0) {
+          tmdbId = findResponse.tv_results[0].id;
+          mediaType = 'tv';
+        }
+
+        if (!tmdbId) {
+          console.log('未找到对应的 TMDB 内容');
+          return;
+        }
+
+        console.log(`找到 TMDB ${mediaType} ID: ${tmdbId}`);
+        
+        // 根据媒体类型获取图片信息
+        const imagesResponse = mediaType === 'movie' 
+          ? await TmdbService.getMovieImages(tmdbId)
+          : await TmdbService.getTVImages(tmdbId);
+          
+        if (!imagesResponse) {
+          console.log('未获取到 TMDB 图片');
+          return;
+        }
+
+        // 获取第一张 backdrop 和第一张 logo
+        const backdropPath = imagesResponse.backdrops[0]?.file_path;
+        const logoPath = imagesResponse.logos[0]?.file_path;
+
+        if (!backdropPath && !logoPath) {
+          return;
+        }
+
+        // 构建完整的图片 URL
+        const backdropUrl = backdropPath ? `https://image.tmdb.org/t/p/original${backdropPath}` : null;
+        const logoUrl = logoPath ? `https://image.tmdb.org/t/p/original${logoPath}` : null;
+
+         console.log('backdrop: '+ backdropUrl)
+         console.log('logo: ' + logoUrl)
+
+        // 预加载图片
+        const preloadPromises: Promise<void>[] = [];
+        
+        if (backdropUrl) {
+          preloadPromises.push(
+            Image.prefetch(backdropUrl).then(() => {
+              setTmdbBackdrop(backdropUrl);
+            })
+          );
+        }
+
+        if (logoUrl) {
+          // 创建一个 Promise 来处理 logo 的加载和尺寸获取
+          const logoPromise = new Promise<void>((resolve, reject) => {
+            // 先获取图片尺寸
+            Image.getSize(
+              logoUrl,
+              (width, height) => {
+                // 根据宽高比决定显示尺寸
+                const aspectRatio = width / height;
+                let targetHeight: number;
+                let targetWidth: number;
+                
+                if (aspectRatio >= 3) {
+                  // 较宽的 logo (宽高比 >= 3:1)，高度固定 80
+                  targetHeight = 80;
+                  targetWidth = targetHeight * aspectRatio;
+                } else if (aspectRatio >= 1.5) {
+                  // 中等宽度 logo (宽高比 1.5:1 到 3:1)，高度固定 80
+                  targetHeight = 130;
+                  targetWidth = targetHeight * aspectRatio;
+                } else {
+                  // 较高的 logo (宽高比 < 1.5:1)，增加高度到 120
+                  targetHeight = 180;
+                  targetWidth = targetHeight * aspectRatio;
+                }
+                
+                // 预加载图片
+                Image.prefetch(logoUrl)
+                  .then(() => {
+                    setLogoSize({ width: targetWidth, height: targetHeight });
+                    setTmdbLogo(logoUrl);
+                    resolve();
+                  })
+                  .catch(reject);
+              },
+              (error) => {
+                console.error('获取 logo 尺寸失败:', error);
+                // 失败时使用默认尺寸
+                Image.prefetch(logoUrl)
+                  .then(() => {
+                    setLogoSize({ width: 300, height: 80 });
+                    setTmdbLogo(logoUrl);
+                    resolve();
+                  })
+                  .catch(reject);
+              }
+            );
+          });
+          
+          preloadPromises.push(logoPromise);
+        }
+
+        // 等待所有图片加载完成
+        await Promise.all(preloadPromises);
+        setTmdbImagesLoaded(true);
+
+      } catch (error) {
+        console.error('获取 TMDB 图片失败:', error);
+      }
+    };
+
+    fetchTmdbImages();
+  }, [details]);
+
+  // TMDB 图片加载完成后的动画效果
+  useEffect(() => {
+    if (tmdbImagesLoaded) {
+      Animated.parallel([
+        // backdrop 淡入
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        // logo 淡入
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        // 封面淡出
+        Animated.timing(coverOpacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        // 标题淡出
+        Animated.timing(titleOpacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [tmdbImagesLoaded]);
+
   const fetchDoubanDetails = async (id: string) => {
+    // 重置 TMDB 相关状态，恢复原始样式
+    setTmdbBackdrop(null);
+    setTmdbLogo(null);
+    setLogoSize(null);
+    setTmdbImagesLoaded(false);
+    backdropOpacity.setValue(0);
+    logoOpacity.setValue(0);
+    coverOpacity.setValue(1);
+    titleOpacity.setValue(1);
+    
     try {
       const response = await doubanService.getDoubanDetails(id);
       if (response.success && response.data) {
@@ -417,6 +612,12 @@ export default function DetailScreen() {
         }),
         Animated.timing(translateX, {
           toValue: 50,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        // backdrop 也淡出
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
           duration: 100,
           useNativeDriver: true,
         }),
@@ -468,6 +669,28 @@ export default function DetailScreen() {
       style={styles.container}
     >
       <ScrollContext.Provider value={{ scrollViewRef, measureContainerRef, renderMeasureElement, clearMeasureElement, isPageFocusedRef }}>
+        {/* TMDB Backdrop 背景 - 固定在顶部，底部渐变透明 */}
+        {tmdbBackdrop && (
+          <Animated.View style={[styles.fixedBackdropContainer, { opacity: backdropOpacity, height: screenHeight * 0.7 + 50 }]}>
+            <MaskedView
+              style={{ flex: 1 }}
+              maskElement={
+                <LinearGradient
+                  colors={['black', 'black', 'transparent']}
+                  locations={[0, 0.6, 1]}
+                  style={{ flex: 1 }}
+                />
+              }
+            >
+              <Image
+                source={{ uri: tmdbBackdrop }}
+                style={styles.backdropImage}
+                resizeMode="cover"
+              />
+            </MaskedView>
+          </Animated.View>
+        )}
+        
         <Animated.View
           style={[
             styles.animatedContainer,
@@ -486,12 +709,28 @@ export default function DetailScreen() {
             <View style={styles.content}>
               <View style={styles.detailContainer}>
                 {/* 顶部详情区域 */}
-                <View style={[styles.topSection, { height: screenHeight * 0.6 }]}>
+                <View style={[styles.topSection, { height: screenHeight * 0.7 }]}>
                   {/* 左侧区域 */}
                   <View style={styles.leftArea}>
                     {/* 左侧内容区 */}
-                    <View style={styles.leftContent}>
-                    <Text style={styles.mainTitle} numberOfLines={2}>{title}</Text>
+                    <View style={[styles.leftContent, tmdbBackdrop && { justifyContent: 'flex-end' }]}>
+                    {/* TMDB Logo */}
+                    {tmdbLogo && logoSize && (
+                      <Animated.View style={{ opacity: logoOpacity, marginBottom: 12 }}>
+                        <Image
+                          source={{ uri: tmdbLogo }}
+                          style={{ width: logoSize.width, height: logoSize.height }}
+                          resizeMode="contain"
+                        />
+                      </Animated.View>
+                    )}
+                    
+                    {/* 原标题 - 有 logo 时不渲染 */}
+                    {!tmdbLogo && (
+                      <Animated.View style={{ opacity: titleOpacity, marginBottom: 12 }}>
+                        <Text style={styles.mainTitle} numberOfLines={2}>{title}</Text>
+                      </Animated.View>
+                    )}
 
                     {details ? (
                       <>
@@ -518,7 +757,7 @@ export default function DetailScreen() {
                         </View>
 
                         {details.summary && (
-                          <Text style={styles.summary} numberOfLines={8} ellipsizeMode="tail">
+                          <Text style={styles.summary} numberOfLines={3} ellipsizeMode="tail">
                             {details.summary}
                           </Text>
                         )}
@@ -688,8 +927,8 @@ export default function DetailScreen() {
                     </View>
                   </View>
 
-                  {/* 右侧封面 */}
-                  <View style={styles.rightCover}>
+                  {/* 右侧封面 - 有 backdrop 时隐藏 */}
+                  <Animated.View style={[styles.rightCover, { opacity: tmdbBackdrop ? coverOpacity : 1 }]}>
                     {details ? (
                       <>
                         <Image
@@ -717,7 +956,7 @@ export default function DetailScreen() {
                     ) : (
                       <Skeleton width="100%" height="100%" />
                     )}
-                  </View>
+                  </Animated.View>
                 </View>
 
                 {/* 播放源 */}
@@ -790,14 +1029,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
     paddingHorizontal: 60,
+    position: 'relative',
+  },
+  fixedBackdropContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
+    pointerEvents: 'none',
+  },
+  backdropImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoImage: {
+    width: 300,
+    height: 80,
   },
   leftArea: {
     flex: 1,
     marginRight: 40,
     height: '100%',
+    zIndex: 1,
   },
   leftContent: {
-    height: '70%',
+    flex: 1,
   },
   rightCover: {
     height: '100%',
@@ -810,6 +1067,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     backgroundColor: '#2a2a2a',
+    zIndex: 1,
   },
   posterImage: {
     width: '100%',
@@ -888,8 +1146,7 @@ const styles = StyleSheet.create({
     maxWidth: 5000,
   },
   actionButtonsWrapper: {
-    height: '30%',
-    justifyContent: 'flex-end',
+    marginTop: 20,
   },
   actionButtons: {
     flexDirection: 'row',

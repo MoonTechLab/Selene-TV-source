@@ -847,6 +847,14 @@ class DoubanService {
         summary = summary2;
       }
 
+      // 提取 IMDb ID
+      let imdbId: string | undefined;
+      const imdbRegex = /<span[^>]*class="pl">IMDb:<\/span>([^<]+)/;
+      const imdbMatch = html.match(imdbRegex);
+      if (imdbMatch) {
+        imdbId = imdbMatch[1]?.trim();
+      }
+
       // 提取推荐区域
       const recommends: DoubanRecommendItem[] = [];
       try {
@@ -917,7 +925,7 @@ class DoubanService {
         languages,
         releaseDate,
         originalTitle: undefined, // HTML页面中暂未找到原始标题的提取逻辑
-        imdbId: undefined, // HTML页面中暂未找到IMDB ID的提取逻辑
+        imdbId,
         recommends,
         totalEpisodes: episodes,
       };
