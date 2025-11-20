@@ -71,6 +71,8 @@ export default function DetailScreen() {
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const coverOpacity = useRef(new Animated.Value(1)).current;
   const titleOpacity = useRef(new Animated.Value(1)).current;
+  // 整体内容初始在顶部（负的 translateY），动画后移到底部（translateY: 0）
+  const contentTranslateY = useRef(new Animated.Value(-screenHeight * 0.7 + 220)).current;
 
   // 播放源相关状态
   const [sources, setSources] = useState<VideoInfo[]>([]);
@@ -508,6 +510,13 @@ export default function DetailScreen() {
                   targetWidth = targetHeight * aspectRatio;
                 }
                 
+                // 限制最大宽度为 500
+                const maxWidth = 500;
+                if (targetWidth > maxWidth) {
+                  targetHeight = (maxWidth / targetWidth) * targetHeight;
+                  targetWidth = maxWidth;
+                }
+                
                 // 预加载图片
                 await Image.prefetch(logoUrl);
                 setLogoSize({ width: targetWidth, height: targetHeight });
@@ -542,7 +551,7 @@ export default function DetailScreen() {
   // backdrop 加载完成后的动画效果
   useEffect(() => {
     if (backdropLoaded && tmdbBackdrop) {
-      // backdrop 淡入和封面淡出
+      // backdrop 淡入、封面淡出和整体内容平移到底部（translateY: 0）
       Animated.parallel([
         Animated.timing(backdropOpacity, {
           toValue: 1,
@@ -553,6 +562,12 @@ export default function DetailScreen() {
           toValue: 0,
           duration: 600,
           useNativeDriver: true,
+        }),
+        Animated.spring(contentTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 10,
+          tension: 50,
         }),
       ]).start();
     }
@@ -602,6 +617,7 @@ export default function DetailScreen() {
     logoOpacity.setValue(0);
     coverOpacity.setValue(1);
     titleOpacity.setValue(1);
+    contentTranslateY.setValue(-screenHeight * 0.7 + 220);
     
     try {
       const response = await doubanService.getDoubanDetails(id);
@@ -741,75 +757,85 @@ export default function DetailScreen() {
                 <View style={[styles.topSection, { height: screenHeight * 0.7 }]}>
                   {/* 左侧区域 */}
                   <View style={styles.leftArea}>
-                    {/* 左侧内容区 */}
-                    <View style={[styles.leftContent, tmdbBackdrop && { justifyContent: 'flex-end' }]}>
-                    {/* TMDB Logo */}
-                    {tmdbLogo && logoSize && (
-                      <Animated.View style={{ opacity: logoOpacity, marginBottom: 20 }}>
-                        <Image
-                          source={{ uri: tmdbLogo }}
-                          style={{ width: logoSize.width, height: logoSize.height }}
-                          resizeMode="contain"
-                        />
-                      </Animated.View>
-                    )}
-                    
-                    {/* 原标题 - 有 logo 时不渲染 */}
-                    {!tmdbLogo && (
-                      <Animated.View style={{ opacity: titleOpacity, marginBottom: 12 }}>
-                        <Text style={styles.mainTitle} numberOfLines={2}>{title}</Text>
-                      </Animated.View>
-                    )}
-
-                    {details ? (
-                      <>
-                        <View style={styles.metaInfo}>
-                          <View style={styles.tagsRow}>
-                            {details.genres.map((genre, index) => (
-                              <View key={index} style={styles.tagBadge}>
-                                <Text style={styles.tagText}>{genre}</Text>
-                              </View>
-                            ))}
-                            {details.rate && (
-                              <View style={styles.ratingContainer}>
-                                <Ionicons name="star" size={14} color="#E91E63" style={styles.starIcon} />
-                                <Text style={styles.ratingText}>{details.rate}</Text>
-                              </View>
-                            )}
-                          </View>
-
-                          <Text style={styles.releaseDate}>
-                            {details.releaseDate || details.year}
-                            {details.countries.length > 0 && ` · ${details.countries[0]}`}
-                            {details.duration && ` · ${details.duration}`}
-                          </Text>
-                        </View>
-
-                        {details.summary && (
-                          <Text style={styles.summary} numberOfLines={3} ellipsizeMode="tail">
-                            {details.summary}
-                          </Text>
+                    {/* 整体内容容器 - 一起动画移动 */}
+                    <Animated.View style={[
+                      styles.leftContent,
+                      {
+                        transform: [{ translateY: contentTranslateY }]
+                      }
+                    ]}>
+                      {/* 标题区域 */}
+                      <View style={styles.titleArea}>
+                        {/* TMDB Logo */}
+                        {tmdbLogo && logoSize && (
+                          <Animated.View style={{ opacity: logoOpacity, marginBottom: 6 }}>
+                            <Image
+                              source={{ uri: tmdbLogo }}
+                              style={{ width: logoSize.width, height: logoSize.height }}
+                              resizeMode="contain"
+                            />
+                          </Animated.View>
                         )}
-                      </>
-                    ) : (
-                      // 骨架屏加载状态
-                      <>
-                        <View style={styles.metaInfo}>
-                          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                            <Skeleton width={60} height={20} />
-                            <Skeleton width={60} height={20} />
-                            <Skeleton width={40} height={20} />
-                          </View>
-                          <Skeleton width={200} height={16} />
-                        </View>
-                        <View style={{ gap: 8 }}>
-                          <Skeleton width="100%" height={16} />
-                          <Skeleton width="100%" height={16} />
-                          <Skeleton width="80%" height={16} />
-                        </View>
-                      </>
-                    )}
-                    </View>
+                        
+                        {/* 原标题 - 有 logo 时不渲染 */}
+                        {!tmdbLogo && (
+                          <Animated.View style={{ opacity: titleOpacity, marginBottom: 6 }}>
+                            <Text style={styles.mainTitle} numberOfLines={2}>{title}</Text>
+                          </Animated.View>
+                        )}
+                      </View>
+
+                      {/* 详情信息区域 - 固定高度避免跳变 */}
+                      <View style={styles.detailInfoArea}>
+                        {/* 详情信息或骨架屏 */}
+                        {details ? (
+                          <>
+                            <View style={styles.metaInfo}>
+                              <View style={styles.tagsRow}>
+                                {details.genres.map((genre, index) => (
+                                  <View key={index} style={styles.tagBadge}>
+                                    <Text style={styles.tagText}>{genre}</Text>
+                                  </View>
+                                ))}
+                                {details.rate && (
+                                  <View style={styles.ratingContainer}>
+                                    <Ionicons name="star" size={14} color="#E91E63" style={styles.starIcon} />
+                                    <Text style={styles.ratingText}>{details.rate}</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              <Text style={styles.releaseDate}>
+                                {details.releaseDate || details.year}
+                                {details.countries.length > 0 && ` · ${details.countries[0]}`}
+                                {details.duration && ` · ${details.duration}`}
+                              </Text>
+                            </View>
+
+                            {details.summary && (
+                              <Text style={styles.summary} numberOfLines={3} ellipsizeMode="tail">
+                                {details.summary}
+                              </Text>
+                            )}
+                          </>
+                        ) : (
+                          // 骨架屏加载状态 - 精确匹配实际内容的结构和间距
+                          <>
+                            <View style={styles.metaInfo}>
+                              <View style={styles.tagsRow}>
+                                <Skeleton width={60} height={20} />
+                                <Skeleton width={60} height={20} />
+                                <Skeleton width={40} height={20} />
+                              </View>
+                              <Skeleton width={200} height={12} />
+                            </View>
+                            <Skeleton width="100%" height={20} />
+                            <Skeleton width="100%" height={20} />
+                            <Skeleton width="80%" height={20} />
+                          </>
+                        )}
+                      </View>
+                    </Animated.View>
 
                     {/* 操作按钮组 */}
                     <View style={styles.actionButtonsWrapper}>
@@ -1084,6 +1110,14 @@ const styles = StyleSheet.create({
   },
   leftContent: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  titleArea: {
+    marginBottom: 6,
+  },
+  detailInfoArea: {
+    height: 108,
+    overflow: 'hidden',
   },
   rightCover: {
     height: '100%',
@@ -1106,7 +1140,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 12,
     lineHeight: 32,
   },
   metaInfo: {
