@@ -6,6 +6,7 @@ import {
   BangumiImages,
   BangumiCollection,
   BangumiWeekday,
+  BangumiDetails,
 } from '@/types/bangumi';
 import doubanCacheService from './doubanCacheService';
 
@@ -132,6 +133,33 @@ class BangumiService {
   }
 
   /**
+   * 解析 BangumiDetails
+   */
+  private parseDetails(json: any): BangumiDetails {
+    return {
+      id: json?.id || 0,
+      type: json?.type || 0,
+      name: String(json?.name || ''),
+      nameCn: json?.name_cn ? String(json.name_cn) : null,
+      summary: String(json?.summary || ''),
+      nsfw: Boolean(json?.nsfw),
+      locked: Boolean(json?.locked),
+      date: json?.date ? String(json.date) : null,
+      platform: json?.platform ? String(json.platform) : null,
+      images: this.parseImages(json?.images),
+      infobox: Array.isArray(json?.infobox) ? json.infobox.map((item: any) => String(item)) : [],
+      volumes: json?.volumes || 0,
+      eps: json?.eps || 0,
+      totalEpisodes: json?.total_episodes || 0,
+      rating: this.parseRating(json?.rating),
+      collection: this.parseCollection(json?.collection),
+      tags: Array.isArray(json?.tags) ? json.tags.map((tag: any) => String(tag?.name || tag)) : [],
+      metaTags: Array.isArray(json?.meta_tags) ? json.meta_tags.map((tag: any) => String(tag)) : [],
+      series: Boolean(json?.series),
+    };
+  }
+
+  /**
    * 获取指定星期的新番放送
    * @param weekday - 星期几 (1..7, Monday..Sunday)
    * @param forceSource - 是否强制从源获取，默认false
@@ -225,6 +253,92 @@ class BangumiService {
       }
       return ApiResponseHelper.error(
         `Bangumi 数据请求异常: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * 获取 Bangumi 详情
+   * @param bangumiId - Bangumi ID
+   */
+  async getBangumiDetail(bangumiId: string): Promise<ApiResponse<BangumiDetails>> {
+    await this.initCache();
+
+    // 生成缓存键
+    const cacheKey = `bangumi_details_${bangumiId}`;
+
+    // 尝试从缓存获取数据
+    try {
+      const cachedData = await doubanCacheService.get<BangumiDetails>(
+        cacheKey,
+        (raw) => {
+          if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+            throw new Error('Bangumi 缓存数据格式错误');
+          }
+          return this.parseDetails(raw);
+        }
+      );
+
+      if (cachedData) {
+        return ApiResponseHelper.success(cachedData);
+      }
+    } catch (_) {
+      // 缓存读取失败，清理可能损坏的缓存，继续执行网络请求
+      try {
+        await doubanCacheService.set(cacheKey, null, 0);
+      } catch (_) {
+        // 静默处理缓存清理错误
+      }
+    }
+
+    try {
+      const apiUrl = `https://api.bgm.tv/v0/subjects/${bangumiId}`;
+      const headers: Record<string, string> = {
+        'User-Agent': this.USER_AGENT,
+        'Accept': 'application/json',
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        try {
+          const data: any = await response.json();
+          const details = this.parseDetails(data);
+
+          // 缓存成功的结果，缓存时间为3天
+          try {
+            await doubanCacheService.set(cacheKey, data, 3 * 24 * 60 * 60 * 1000);
+          } catch (cacheError) {
+            // 静默处理缓存错误
+          }
+
+          return ApiResponseHelper.success(details, response.status);
+        } catch (parseError) {
+          return ApiResponseHelper.error(
+            `Bangumi 详情数据解析失败: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+          );
+        }
+      } else {
+        return ApiResponseHelper.error(
+          `获取 Bangumi 详情数据失败: ${response.status}`,
+          response.status
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return ApiResponseHelper.error('Bangumi 详情数据请求超时');
+      }
+      return ApiResponseHelper.error(
+        `Bangumi 详情数据请求异常: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

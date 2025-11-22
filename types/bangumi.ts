@@ -99,3 +99,28 @@ export interface BangumiCalendarResponse {
   weekday: BangumiWeekday;
   items: BangumiItem[];
 }
+
+/**
+ * Bangumi 详情数据模型
+ */
+export interface BangumiDetails {
+  id: number;
+  type: number;
+  name: string;
+  nameCn: string | null;
+  summary: string;
+  nsfw: boolean;
+  locked: boolean;
+  date: string | null;
+  platform: string | null;
+  images: BangumiImages;
+  infobox: string[];
+  volumes: number;
+  eps: number;
+  totalEpisodes: number;
+  rating: BangumiRating;
+  collection: BangumiCollection;
+  tags: string[];
+  metaTags: string[];
+  series: boolean;
+}

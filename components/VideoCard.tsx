@@ -197,6 +197,17 @@ function VideoCard({ videoInfo, from, onPress, onFocus: onFocusProp, onBlur: onB
           year: videoInfo.year,
         },
       });
+    } else if (from === 'bangumi' && videoInfo.bangumiId) {
+      // 如果来源是 bangumi，导航到详情页
+      router.push({
+        pathname: '/detail' as any,
+        params: {
+          title: videoInfo.title,
+          bangumiId: videoInfo.bangumiId.toString(),
+          from: from,
+          year: videoInfo.year,
+        },
+      });
     } else if (onPress) {
       // 否则调用传入的 onPress
       onPress();

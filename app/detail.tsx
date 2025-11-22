@@ -4,7 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { doubanService } from '@/services/doubanService';
+import { bangumiService } from '@/services/bangumiService';
 import { DoubanMovieDetails } from '@/types/douban';
+import { BangumiDetails, getBestImageUrl } from '@/types/bangumi';
 import { Ionicons } from '@expo/vector-icons';
 import PlaySourceSection from '@/components/PlaySourceSection';
 import SearchService from '@/services/searchService';
@@ -51,7 +53,7 @@ const Skeleton = ({ width, height, style }: { width?: number | string, height?: 
 
 export default function DetailScreen() {
   const params = useLocalSearchParams();
-  const { title, doubanId, from, year } = params;
+  const { title, doubanId, bangumiId, from, year } = params;
   const { height: screenHeight } = useWindowDimensions();
 
   const [details, setDetails] = useState<DoubanMovieDetails | null>(null);
@@ -121,17 +123,19 @@ export default function DetailScreen() {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    console.log('详情页参数:', { title, doubanId, from, year });
+    console.log('详情页参数:', { title, doubanId, bangumiId, from, year });
 
     if (from === 'douban' && doubanId) {
       fetchDoubanDetails(doubanId as string);
       currentDoubanIdRef.current = doubanId as string;
+    } else if (from === 'bangumi' && bangumiId) {
+      fetchBangumiDetails(bangumiId as string);
     }
 
     // 加载播放记录和收藏
     loadPlayRecords();
     loadFavorites();
-  }, [title, doubanId, from]);
+  }, [title, doubanId, bangumiId, from]);
 
   const loadPlayRecords = async () => {
     try {
@@ -176,9 +180,22 @@ export default function DetailScreen() {
       setButtonGroupKey(prev => prev + 1);
     }, 200);
 
-    // 如果 doubanId 不存在（为空或为 0），直接使用源信息转换为详情展示，无需获取豆瓣信息
+    // 如果 doubanId 不存在（为空或为 0）
     if (!selectedDoubanId || selectedDoubanId === '0') {
-      // 将源信息转换为详情格式
+      // 如果 from=bangumi，重新获取 bangumi 详情
+      if (from === 'bangumi' && bangumiId) {
+        currentDoubanIdRef.current = undefined;
+        fetchBangumiDetails(bangumiId as string);
+        return;
+      }
+
+      if (from === 'douban' && doubanId && doubanId != currentDoubanIdRef.current) {
+        currentDoubanIdRef.current = doubanId as string;
+        fetchDoubanDetails(currentDoubanIdRef.current);
+        return;
+      }
+      
+      // 否则，将源信息转换为详情格式展示
       const sourceDetails = convertVideoInfoToDetails(selectedVideo);
       currentDoubanIdRef.current = undefined;
       
@@ -227,6 +244,30 @@ export default function DetailScreen() {
       languages: [],
       recommends: [],
       totalEpisodes: video.totalEpisodes,
+    };
+  };
+
+  // 将 BangumiDetails 转换为 DoubanMovieDetails 格式
+  const convertBangumiToDoubanDetails = (bangumi: BangumiDetails): DoubanMovieDetails => {
+    const year = bangumi.date ? bangumi.date.split('-')[0] : '';
+    const rate = bangumi.rating.score > 0 ? bangumi.rating.score.toFixed(1) : undefined;
+    
+    return {
+      id: bangumi.id.toString(),
+      title: bangumi.nameCn || bangumi.name,
+      poster: getBestImageUrl(bangumi.images),
+      rate,
+      year,
+      summary: bangumi.summary,
+      genres: bangumi.tags.slice(0, 3), // 取前3个标签作为类型
+      directors: [],
+      screenwriters: [],
+      actors: [],
+      countries: [],
+      languages: [],
+      releaseDate: bangumi.date || undefined,
+      totalEpisodes: bangumi.totalEpisodes,
+      recommends: [],
     };
   };
 
@@ -388,6 +429,11 @@ export default function DetailScreen() {
             doubanId: result.doubanId ? String(result.doubanId) : undefined,
             episodesTitles: result.episodesTitles,
           };
+        })
+        .filter((video, index, self) => {
+          // 去重：根据 source 和 id 组合去重
+          const key = `${video.source}_${video.id}`;
+          return index === self.findIndex(v => `${v.source}_${v.id}` === key);
         });
 
       setSources(prev => {
@@ -402,6 +448,17 @@ export default function DetailScreen() {
               const newSourceKey = `${matchedSource.source}_${matchedSource.id}`;
               setSelectedSourceKey(newSourceKey);
               selectedSourceKeyRef.current = newSourceKey;
+            }
+          } else if (from === 'bangumi' && newVideos.length != 0) {
+            const matchedSource = newVideos[0];
+            if (matchedSource) {
+              const newSourceKey = `${matchedSource.source}_${matchedSource.id}`;
+              setSelectedSourceKey(newSourceKey);
+              selectedSourceKeyRef.current = newSourceKey;
+              if (matchedSource.doubanId && matchedSource.doubanId !== '0' && matchedSource.doubanId !== doubanId) {
+                currentDoubanIdRef.current = matchedSource.doubanId;
+                fetchDoubanDetails(matchedSource.doubanId);
+              }
             }
           }
         }
@@ -418,18 +475,23 @@ export default function DetailScreen() {
       setSources(currentSources => {
         if (!selectedSourceKeyRef.current && currentSources.length > 0) {
           const defaultSource = currentSources[0];
+          const newSourceKey = `${defaultSource.source}_${defaultSource.id}`;
           
-          // 如果 from=douban 且第 0 个源有 doubanID 且与入参不同，使用源的 doubanID 加载详情
+          // 设置选中源
+          setSelectedSourceKey(newSourceKey);
+          selectedSourceKeyRef.current = newSourceKey;
+          
+          // 根据来源类型处理详情加载
           if (from === 'douban' && doubanId) {
+            // 如果 from=douban 且第 0 个源有 doubanID 且与入参不同，使用源的 doubanID 加载详情
             if (defaultSource.doubanId && defaultSource.doubanId !== '0' && defaultSource.doubanId !== doubanId) {
               currentDoubanIdRef.current = defaultSource.doubanId;
               fetchDoubanDetails(defaultSource.doubanId);
             }
+          } else if (from === 'bangumi' && bangumiId) {
+            // 如果 from=bangumi，不需要额外处理，因为已经在初始化时加载了 bangumi 详情
+            // 但如果第 0 个源没有 doubanId，保持当前 bangumi 详情
           }
-          
-          const newSourceKey = `${defaultSource.source}_${defaultSource.id}`;
-          setSelectedSourceKey(newSourceKey);
-          selectedSourceKeyRef.current = newSourceKey;
         }
         
         return currentSources;
@@ -453,7 +515,7 @@ export default function DetailScreen() {
   // 搜索相关资源
   useEffect(() => {
     // 只有在播放记录加载完成后才开始搜索
-    if (from === 'douban' && title && playRecordsLoaded) {
+    if (title && playRecordsLoaded) {
       // 先注册监听器
       const removeListeners = setupSearchListeners();
 
@@ -598,6 +660,52 @@ export default function DetailScreen() {
         }
       } catch (error) {
         console.error('获取详情失败:', error);
+      }
+    });
+  };
+
+  const fetchBangumiDetails = async (id: string) => {
+    // 渐隐动画
+    Animated.timing(contentOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(async () => {
+      // 重置状态，显示骨架屏
+      setDetails(null);
+      setLogoSize(null);
+      
+      // 渐显骨架屏
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      
+      try {
+        const response = await bangumiService.getBangumiDetail(id);
+        if (response.success && response.data) {
+          const bangumiDetails = response.data;
+          const convertedDetails = convertBangumiToDoubanDetails(bangumiDetails);
+          
+          // 再次渐隐
+          Animated.timing(contentOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setDetails(convertedDetails);
+            
+            // 渐显真实内容
+            Animated.timing(contentOpacity, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+          });
+        }
+      } catch (error) {
+        console.error('获取 Bangumi 详情失败:', error);
       }
     });
   };
