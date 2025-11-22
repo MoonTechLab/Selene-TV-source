@@ -85,6 +85,7 @@ export default function SettingsTab() {
     proxy: new Animated.Value(1),
     tmdb: new Animated.Value(1),
     clearDoubanCache: new Animated.Value(1),
+    clearSearchCache: new Animated.Value(1),
     clearUserDataCache: new Animated.Value(1),
     logout: new Animated.Value(1),
   }).current;
@@ -106,7 +107,7 @@ export default function SettingsTab() {
 
   // 处理设置项聚焦动画
   useEffect(() => {
-    ['login', 'dataSource', 'imageSource', 'proxy', 'tmdb', 'clearDoubanCache', 'clearUserDataCache', 'logout'].forEach((item) => {
+    ['login', 'dataSource', 'imageSource', 'proxy', 'tmdb', 'clearDoubanCache', 'clearSearchCache', 'clearUserDataCache', 'logout'].forEach((item) => {
       const isFocused = focusedItem === item;
       Animated.spring(settingItemAnimations[item as keyof typeof settingItemAnimations], {
         toValue: isFocused ? 1.02 : 1,
@@ -425,11 +426,20 @@ export default function SettingsTab() {
   const handleClearDoubanCache = async () => {
     try {
       await doubanCacheService.clearAllCache();
-      searchCacheService.clearCache();
       ToastService.success('豆瓣缓存已清空');
     } catch (error) {
       console.error('清空豆瓣缓存失败:', error);
       ToastService.error('清空豆瓣缓存失败');
+    }
+  };
+
+  const handleClearSearchCache = async () => {
+    try {
+      searchCacheService.clearCache();
+      ToastService.success('搜索缓存已清空');
+    } catch (error) {
+      console.error('清空搜索缓存失败:', error);
+      ToastService.error('清空搜索缓存失败');
     }
   };
 
@@ -623,7 +633,7 @@ export default function SettingsTab() {
             </Pressable>
           </Animated.View>
 
-          {/* 清空缓存选项 - 一行两个按钮 */}
+          {/* 清空缓存选项 - 一行三个按钮 */}
           <View style={styles.cacheButtonsRow}>
             <Animated.View style={{ flex: 1, transform: [{ scale: settingItemAnimations.clearDoubanCache }] }}>
               <Pressable
@@ -639,6 +649,22 @@ export default function SettingsTab() {
                   styles.cacheButtonText,
                   focusedItem === 'clearDoubanCache' && styles.cacheButtonTextFocused
                 ]}>清空豆瓣缓存</Text>
+              </Pressable>
+            </Animated.View>
+            <Animated.View style={{ flex: 1, transform: [{ scale: settingItemAnimations.clearSearchCache }] }}>
+              <Pressable
+                style={[
+                  styles.cacheButton,
+                  focusedItem === 'clearSearchCache' && styles.cacheButtonFocused
+                ]}
+                onPress={handleClearSearchCache}
+                onFocus={() => setFocusedItem('clearSearchCache')}
+                onBlur={() => setFocusedItem(null)}
+              >
+                <Text style={[
+                  styles.cacheButtonText,
+                  focusedItem === 'clearSearchCache' && styles.cacheButtonTextFocused
+                ]}>清空搜索缓存</Text>
               </Pressable>
             </Animated.View>
             <Animated.View style={{ flex: 1, transform: [{ scale: settingItemAnimations.clearUserDataCache }] }}>

@@ -210,7 +210,10 @@ export default function PlaySourceSection({ title, videos, from, onTitlePress, t
                     {videos.length === 0 && loading ? (
                         // 只有在没有结果且正在加载时才显示骨架屏
                         Array.from({ length: 8 }).map((_, index) => (
-                            <VideoCardSkeleton key={`skeleton-${index}`} />
+                            <VideoCardSkeleton 
+                                key={`skeleton-${index}`}
+                                style={index === 0 ? { marginLeft: 45 } : undefined}
+                            />
                         ))
                     ) : (
                         <>

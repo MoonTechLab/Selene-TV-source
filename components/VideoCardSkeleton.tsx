@@ -1,8 +1,12 @@
 import { StyleSheet, View } from 'react-native';
 
-export default function VideoCardSkeleton() {
+interface VideoCardSkeletonProps {
+  style?: any;
+}
+
+export default function VideoCardSkeleton({ style }: VideoCardSkeletonProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, style]}>
       <View style={styles.cover} />
       <View style={styles.titleWrapper}>
         <View style={styles.title} />

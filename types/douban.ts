@@ -112,4 +112,6 @@ export interface DoubanMovieDetails {
   imdbId?: string;
   totalEpisodes?: number;
   recommends: DoubanRecommendItem[];
+  backdrop?: string;
+  logo?: string;
 }

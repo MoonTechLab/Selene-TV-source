@@ -11,6 +11,7 @@ import {
 } from '@/types/douban';
 import doubanCacheService from './doubanCacheService';
 import AppDataService from './appDataService';
+import TmdbService from './tmdbService';
 
 /**
  * 豆瓣服务类
@@ -577,6 +578,8 @@ class DoubanService {
             imdbId: map.imdbId?.toString(),
             recommends: recommends,
             totalEpisodes: map.totalEpisodes,
+            backdrop: map.backdrop?.toString(),
+            logo: map.logo?.toString(),
           };
         }
       );
@@ -639,6 +642,9 @@ class DoubanService {
           const html = await response.text();
           // 解析HTML响应
           const details = this.parseDoubanHtmlDetails(html, doubanId);
+
+          // 获取 TMDB 图片
+          await this.fetchTmdbImages(details);
 
           // 缓存成功的结果，缓存时间为3天
           try {
@@ -944,6 +950,96 @@ class DoubanService {
         languages: [],
         recommends: [],
       };
+    }
+  }
+
+  /**
+   * 获取 TMDB 图片（backdrop 和 logo）
+   */
+  private async fetchTmdbImages(details: DoubanMovieDetails): Promise<void> {
+    if (!details.imdbId) {
+      return;
+    }
+
+    const tmdbApiKey = await AppDataService.getTmdbApiKey();
+    if (!tmdbApiKey) {
+      return;
+    }
+
+    try {
+      // 通过 IMDB ID 查找 TMDB ID
+      const findResponse = await TmdbService.findByImdbId(details.imdbId);
+      if (!findResponse) {
+        console.log('TMDB 查询失败');
+        return;
+      }
+
+      // 优先从 movie_results 获取，如果为空则从 tv_results 获取
+      let tmdbId: number | null = null;
+      let mediaType: 'movie' | 'tv' = 'movie';
+      
+      if (findResponse.movie_results.length > 0) {
+        tmdbId = findResponse.movie_results[0].id;
+        mediaType = 'movie';
+      } else if (findResponse.tv_results.length > 0) {
+        tmdbId = findResponse.tv_results[0].id;
+        mediaType = 'tv';
+      }
+
+      if (!tmdbId) {
+        console.log('未找到对应的 TMDB 内容');
+        return;
+      }
+
+      console.log(`找到 TMDB ${mediaType} ID: ${tmdbId}`);
+      
+      // 根据媒体类型获取图片信息
+      const imagesResponse = mediaType === 'movie' 
+        ? await TmdbService.getMovieImages(tmdbId)
+        : await TmdbService.getTVImages(tmdbId);
+        
+      if (!imagesResponse) {
+        console.log('未获取到 TMDB 图片');
+        return;
+      }
+
+      // 获取第一张 backdrop
+      const backdropPath = imagesResponse.backdrops[0]?.file_path;
+      
+      // 获取 logo：只选择 png、jpg 或 webp 格式的，从这些 logo 中优先选择中文的
+      let logoPath: string | null = null;
+      if (imagesResponse.logos.length > 0) {
+        // 过滤出 png、jpg 或 webp 后缀的 logo
+        const validLogos = imagesResponse.logos.filter(logo => {
+          const filePath = logo.file_path.toLowerCase();
+          return filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.webp');
+        });
+        
+        if (validLogos.length > 0) {
+          // 从有效的 logo 中优先选择中文的
+          const cnLogo = validLogos.find(logo => logo.iso_3166_1 === 'CN');
+          logoPath = cnLogo ? cnLogo.file_path : validLogos[0].file_path;
+        }
+      }
+
+      if (!backdropPath && !logoPath) {
+        return;
+      }
+
+      // 构建完整的图片 URL
+      const backdropUrl = backdropPath ? `https://image.tmdb.org/t/p/original${backdropPath}` : undefined;
+      // 如果 backdrop 没有展示，则也不要展示 logo
+      const logoUrl = (logoPath && backdropUrl) ? `https://image.tmdb.org/t/p/original${logoPath}` : undefined;
+
+      console.log('backdrop: ' + backdropUrl);
+      console.log('logo: ' + logoUrl);
+
+      // 设置 backdrop 和 logo
+      details.backdrop = backdropUrl;
+      details.logo = logoUrl;
+
+    } catch (error) {
+      console.error('获取 TMDB 图片失败:', error);
     }
   }
 }

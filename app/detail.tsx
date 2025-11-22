@@ -11,8 +11,6 @@ import SearchService from '@/services/searchService';
 import { VideoInfo, SearchResult, FavoriteItem } from '@/types/entities';
 import { ScrollContext } from '@/contexts/ScrollContext';
 import userDataCacheService from '@/services/userDataCacheService';
-import TmdbService from '@/services/tmdbService';
-import AppDataService from '@/services/appDataService';
 
 // 骨架屏组件
 const Skeleton = ({ width, height, style }: { width?: number | string, height?: number | string, style?: any }) => {
@@ -61,17 +59,9 @@ export default function DetailScreen() {
   const [highResPosterUrl, setHighResPosterUrl] = useState<string | null>(null);
   
   // TMDB 图片相关状态
-  const [tmdbBackdrop, setTmdbBackdrop] = useState<string | null>(null);
-  const [tmdbLogo, setTmdbLogo] = useState<string | null>(null);
-  const [backdropLoaded, setBackdropLoaded] = useState(false);
-  const [logoLoaded, setLogoLoaded] = useState(false);
   const [logoSize, setLogoSize] = useState<{ width: number; height: number } | null>(null);
-  const [pendingLogoUrl, setPendingLogoUrl] = useState<string | null>(null);
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const coverOpacity = useRef(new Animated.Value(1)).current;
-  // 整体内容初始在顶部（负的 translateY），动画后移到底部（translateY: 0）
-  const contentTranslateY = useRef(new Animated.Value(-screenHeight * 0.7 + 220)).current;
+  const contentOpacity = useRef(new Animated.Value(1)).current;
+  const posterOpacity = useRef(new Animated.Value(1)).current;
 
   // 播放源相关状态
   const [sources, setSources] = useState<VideoInfo[]>([]);
@@ -186,21 +176,28 @@ export default function DetailScreen() {
       setButtonGroupKey(prev => prev + 1);
     }, 200);
 
-    // 如果 selectedDoubanId 不存在（为空或为 0），且入参中包含 doubanId，则切换到入参的 doubanId
-    if ((!selectedDoubanId || selectedDoubanId === '0') && doubanId) {
-      const paramDoubanId = doubanId as string;
-      // 如果和当前页面展示的 douban 一致，无动作
-      if (paramDoubanId === currentDoubanIdRef.current) {
-        return;
-      }
-      // 切换到入参的 doubanId
-      currentDoubanIdRef.current = paramDoubanId;
-      fetchDoubanDetails(paramDoubanId);
-      return;
-    }
-
-    // 如果 doubanId 不存在（为空或为 0），无动作
+    // 如果 doubanId 不存在（为空或为 0），直接使用源信息转换为详情展示，无需获取豆瓣信息
     if (!selectedDoubanId || selectedDoubanId === '0') {
+      // 将源信息转换为详情格式
+      const sourceDetails = convertVideoInfoToDetails(selectedVideo);
+      currentDoubanIdRef.current = undefined;
+      
+      // 渐隐动画
+      Animated.timing(contentOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setDetails(sourceDetails);
+        setLogoSize(null);
+        
+        // 渐显新内容
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      });
       return;
     }
 
@@ -212,6 +209,25 @@ export default function DetailScreen() {
     // doubanId 不一致，重新获取详情
     currentDoubanIdRef.current = selectedDoubanId;
     fetchDoubanDetails(selectedDoubanId);
+  };
+
+  // 将 VideoInfo 转换为 DoubanMovieDetails 格式
+  const convertVideoInfoToDetails = (video: VideoInfo): DoubanMovieDetails => {
+    return {
+      id: video.id,
+      title: video.title,
+      poster: video.cover,
+      rate: video.rate,
+      year: video.year,
+      genres: [],
+      directors: [],
+      screenwriters: [],
+      actors: [],
+      countries: [],
+      languages: [],
+      recommends: [],
+      totalEpisodes: video.totalEpisodes,
+    };
   };
 
   // 获取当前选中源的信息
@@ -375,26 +391,20 @@ export default function DetailScreen() {
         });
 
       setSources(prev => {
-        // 去重合并
-        const existingIds = new Set(prev.map(v => `${v.source}_${v.id}`));
-        const uniqueNewVideos = newVideos.filter(v => !existingIds.has(`${v.source}_${v.id}`));
-        const updatedSources = [...prev, ...uniqueNewVideos];
+        const updatedSources = [...prev, ...newVideos];
+        console.log(updatedSources.length)
         
-        // 如果还没有选中源且有结果，自动选中
-        if (!selectedSourceKeyRef.current && updatedSources.length > 0) {
-          let defaultSource = updatedSources[0];
-          
-          // 如果 from=douban，优先选择第一个 doubanId 匹配的源
+        // 如果还没有选中源且有新结果
+        if (!selectedSourceKeyRef.current && newVideos.length > 0) {
+          // 如果 from=douban，尝试在新结果中找到第一个 doubanId 匹配的源
           if (from === 'douban' && doubanId) {
-            const matchedSource = updatedSources.find(v => v.doubanId === doubanId);
+            const matchedSource = newVideos.find(v => v.doubanId === doubanId);
             if (matchedSource) {
-              defaultSource = matchedSource;
+              const newSourceKey = `${matchedSource.source}_${matchedSource.id}`;
+              setSelectedSourceKey(newSourceKey);
+              selectedSourceKeyRef.current = newSourceKey;
             }
           }
-          
-          const newSourceKey = `${defaultSource.source}_${defaultSource.id}`;
-          setSelectedSourceKey(newSourceKey);
-          selectedSourceKeyRef.current = newSourceKey;
         }
         
         return updatedSources;
@@ -404,6 +414,27 @@ export default function DetailScreen() {
     // 监听搜索完成
     const removeCompleteListener = SearchService.addEventListener('complete', () => {
       setSearching(false);
+      
+      // 搜索完成后，如果还没有选中源，选择第 0 个
+      setSources(currentSources => {
+        if (!selectedSourceKeyRef.current && currentSources.length > 0) {
+          const defaultSource = currentSources[0];
+          
+          // 如果 from=douban 且第 0 个源有 doubanID 且与入参不同，使用源的 doubanID 加载详情
+          if (from === 'douban' && doubanId) {
+            if (defaultSource.doubanId && defaultSource.doubanId !== '0' && defaultSource.doubanId !== doubanId) {
+              currentDoubanIdRef.current = defaultSource.doubanId;
+              fetchDoubanDetails(defaultSource.doubanId);
+            }
+          }
+          
+          const newSourceKey = `${defaultSource.source}_${defaultSource.id}`;
+          setSelectedSourceKey(newSourceKey);
+          selectedSourceKeyRef.current = newSourceKey;
+        }
+        
+        return currentSources;
+      });
     });
 
     // 监听搜索错误
@@ -450,7 +481,54 @@ export default function DetailScreen() {
     }
   }, [from, title, playRecordsLoaded, setupSearchListeners]);
 
+  // 计算 logo 尺寸
   useEffect(() => {
+    if (details?.logo) {
+      Image.getSize(
+        details.logo,
+        (width, height) => {
+          // 根据宽高比决定显示尺寸
+          const aspectRatio = width / height;
+          let targetHeight: number;
+          let targetWidth: number;
+          
+          if (aspectRatio >= 3) {
+            targetHeight = 80;
+            targetWidth = targetHeight * aspectRatio;
+          } else if (aspectRatio >= 1.5) {
+            targetHeight = 130;
+            targetWidth = targetHeight * aspectRatio;
+          } else {
+            targetHeight = 180;
+            targetWidth = targetHeight * aspectRatio;
+          }
+          
+          // 限制最大宽度为 500
+          const maxWidth = 500;
+          if (targetWidth > maxWidth) {
+            targetHeight = (maxWidth / targetWidth) * targetHeight;
+            targetWidth = maxWidth;
+          }
+          
+          setLogoSize({ width: targetWidth, height: targetHeight });
+        },
+        (error) => {
+          console.error('获取 logo 尺寸失败:', error);
+          // 失败时使用默认尺寸
+          setLogoSize({ width: 300, height: 80 });
+        }
+      );
+    }
+  }, [details?.logo]);
+
+  useEffect(() => {
+    // 如果有 backdrop，不设置 poster url
+    if (details?.backdrop) {
+      setPosterUrl(null);
+      setHighResPosterUrl(null);
+      return;
+    }
+    
     if (details?.poster) {
       // 先显示默认图片
       setPosterUrl(details.poster);
@@ -462,230 +540,67 @@ export default function DetailScreen() {
     }
   }, [details]);
 
-  // 获取 TMDB 图片
+  // poster 显隐动画 - 根据 logo 是否存在
   useEffect(() => {
-    const fetchTmdbImages = async () => {
-      if (!details?.imdbId) {
-        return;
-      }
-
-      const tmdbApiKey = await AppDataService.getTmdbApiKey();
-      if (!tmdbApiKey) {
-        return;
-      }
-
-      try {
-        // 通过 IMDB ID 查找 TMDB ID
-        console.log(details.imdbId);
-        const findResponse = await TmdbService.findByImdbId(details.imdbId);
-        if (!findResponse) {
-          console.log('TMDB 查询失败');
-          return;
-        }
-
-        // 优先从 movie_results 获取，如果为空则从 tv_results 获取
-        let tmdbId: number | null = null;
-        let mediaType: 'movie' | 'tv' = 'movie';
-        
-        if (findResponse.movie_results.length > 0) {
-          tmdbId = findResponse.movie_results[0].id;
-          mediaType = 'movie';
-        } else if (findResponse.tv_results.length > 0) {
-          tmdbId = findResponse.tv_results[0].id;
-          mediaType = 'tv';
-        }
-
-        if (!tmdbId) {
-          console.log('未找到对应的 TMDB 内容');
-          return;
-        }
-
-        console.log(`找到 TMDB ${mediaType} ID: ${tmdbId}`);
-        
-        // 根据媒体类型获取图片信息
-        const imagesResponse = mediaType === 'movie' 
-          ? await TmdbService.getMovieImages(tmdbId)
-          : await TmdbService.getTVImages(tmdbId);
-          
-        if (!imagesResponse) {
-          console.log('未获取到 TMDB 图片');
-          return;
-        }
-
-        // 获取第一张 backdrop
-        const backdropPath = imagesResponse.backdrops[0]?.file_path;
-        
-        // 获取 logo：只选择 png、jpg 或 webp 格式的，从这些 logo 中优先选择中文的
-        let logoPath: string | null = null;
-        if (imagesResponse.logos.length > 0) {
-          // 过滤出 png、jpg 或 webp 后缀的 logo
-          const validLogos = imagesResponse.logos.filter(logo => {
-            const filePath = logo.file_path.toLowerCase();
-            return filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.webp');
-          });
-          
-          if (validLogos.length > 0) {
-            // 从有效的 logo 中优先选择中文的
-            const cnLogo = validLogos.find(logo => logo.iso_3166_1 === 'CN');
-            logoPath = cnLogo ? cnLogo.file_path : validLogos[0].file_path;
-          }
-        }
-
-        if (!backdropPath && !logoPath) {
-          return;
-        }
-
-        // 构建完整的图片 URL
-        const backdropUrl = backdropPath ? `https://image.tmdb.org/t/p/original${backdropPath}` : null;
-        // 如果 backdrop 没有展示，则也不要展示 logo
-        const logoUrl = (logoPath && backdropUrl) ? `https://image.tmdb.org/t/p/original${logoPath}` : null;
-
-         console.log('backdrop: '+ backdropUrl)
-         console.log('logo: ' + logoUrl)
-
-        // 并行预加载 backdrop 和 logo
-        const preloadPromises: Promise<void>[] = [];
-        
-        if (backdropUrl) {
-          preloadPromises.push(
-            Image.prefetch(backdropUrl).then(() => {
-              setTmdbBackdrop(backdropUrl);
-              setBackdropLoaded(true);
-            })
-          );
-        }
-
-        if (logoUrl) {
-          // 预加载 logo 并获取尺寸，但不立即显示
-          const logoPromise = new Promise<void>((resolve, reject) => {
-            Image.getSize(
-              logoUrl,
-              async (width, height) => {
-                // 根据宽高比决定显示尺寸
-                const aspectRatio = width / height;
-                let targetHeight: number;
-                let targetWidth: number;
-                
-                if (aspectRatio >= 3) {
-                  targetHeight = 80;
-                  targetWidth = targetHeight * aspectRatio;
-                } else if (aspectRatio >= 1.5) {
-                  targetHeight = 130;
-                  targetWidth = targetHeight * aspectRatio;
-                } else {
-                  targetHeight = 180;
-                  targetWidth = targetHeight * aspectRatio;
-                }
-                
-                // 限制最大宽度为 500
-                const maxWidth = 500;
-                if (targetWidth > maxWidth) {
-                  targetHeight = (maxWidth / targetWidth) * targetHeight;
-                  targetWidth = maxWidth;
-                }
-                
-                // 预加载图片
-                await Image.prefetch(logoUrl);
-                setLogoSize({ width: targetWidth, height: targetHeight });
-                setPendingLogoUrl(logoUrl);
-                resolve();
-              },
-              async (error) => {
-                console.error('获取 logo 尺寸失败:', error);
-                // 失败时使用默认尺寸
-                await Image.prefetch(logoUrl);
-                setLogoSize({ width: 300, height: 80 });
-                setPendingLogoUrl(logoUrl);
-                resolve();
-              }
-            );
-          });
-          
-          preloadPromises.push(logoPromise);
-        }
-
-        // 等待所有图片预加载完成
-        await Promise.all(preloadPromises);
-
-      } catch (error) {
-        console.error('获取 TMDB 图片失败:', error);
-      }
-    };
-
-    fetchTmdbImages();
-  }, [details]);
-
-  // backdrop 加载完成后的动画效果
-  useEffect(() => {
-    if (backdropLoaded && tmdbBackdrop) {
-      // backdrop 淡入、封面淡出和整体内容平移到底部（translateY: 0）
-      Animated.parallel([
-        Animated.timing(backdropOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(coverOpacity, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.spring(contentTranslateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          friction: 10,
-          tension: 50,
-        }),
-      ]).start();
-    }
-  }, [backdropLoaded, tmdbBackdrop]);
-
-  // backdrop 动画完成后 100ms 显示 logo
-  useEffect(() => {
-    if (backdropLoaded && pendingLogoUrl) {
-      const timer = setTimeout(() => {
-        setTmdbLogo(pendingLogoUrl);
-        setLogoLoaded(true);
-        setPendingLogoUrl(null);
-      }, 700); // backdrop 动画 600ms + 100ms 延迟
-
-      return () => clearTimeout(timer);
-    }
-  }, [backdropLoaded, pendingLogoUrl]);
-
-  // logo 加载完成后的动画效果
-  useEffect(() => {
-    if (logoLoaded && tmdbLogo) {
-      // logo 淡入，标题保持显示
-      Animated.timing(logoOpacity, {
+    if (details?.logo) {
+      // 有 logo 时，隐藏 poster
+      Animated.timing(posterOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // 没有 logo 时，显示 poster
+      Animated.timing(posterOpacity, {
         toValue: 1,
-        duration: 600,
+        duration: 300,
         useNativeDriver: true,
       }).start();
     }
-  }, [logoLoaded, tmdbLogo]);
+  }, [details?.logo]);
 
   const fetchDoubanDetails = async (id: string) => {
-    // 重置 TMDB 相关状态，恢复原始样式
-    setTmdbBackdrop(null);
-    setTmdbLogo(null);
-    setLogoSize(null);
-    setBackdropLoaded(false);
-    setLogoLoaded(false);
-    setPendingLogoUrl(null);
-    backdropOpacity.setValue(0);
-    logoOpacity.setValue(0);
-    coverOpacity.setValue(1);
-    contentTranslateY.setValue(-screenHeight * 0.7 + 220);
-    
-    try {
-      const response = await doubanService.getDoubanDetails(id);
-      if (response.success && response.data) {
-        setDetails(response.data);
+    // 渐隐动画
+    Animated.timing(contentOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(async () => {
+      // 重置状态，显示骨架屏
+      setDetails(null);
+      setLogoSize(null);
+      
+      // 渐显骨架屏
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      
+      try {
+        const response = await doubanService.getDoubanDetails(id);
+        if (response.success && response.data) {
+          const newDetails = response.data;
+          // 再次渐隐
+          Animated.timing(contentOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            setDetails(newDetails);
+            
+            // 渐显真实内容
+            Animated.timing(contentOpacity, {
+              toValue: 1,
+              duration: 300,
+              useNativeDriver: true,
+            }).start();
+          });
+        }
+      } catch (error) {
+        console.error('获取详情失败:', error);
       }
-    } catch (error) {
-      console.error('获取详情失败:', error);
-    }
+    });
   };
 
   // 进入动画
@@ -716,12 +631,6 @@ export default function DetailScreen() {
         }),
         Animated.timing(translateX, {
           toValue: 50,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        // backdrop 也淡出
-        Animated.timing(backdropOpacity, {
-          toValue: 0,
           duration: 100,
           useNativeDriver: true,
         }),
@@ -774,8 +683,8 @@ export default function DetailScreen() {
     >
       <ScrollContext.Provider value={{ scrollViewRef, measureContainerRef, renderMeasureElement, clearMeasureElement, isPageFocusedRef }}>
         {/* TMDB Backdrop 背景 - 固定在顶部，底部渐变透明 */}
-        {tmdbBackdrop && (
-          <Animated.View style={[styles.fixedBackdropContainer, { opacity: backdropOpacity, height: screenHeight * 0.7 + 50 }]}>
+        {details?.backdrop && (
+          <View style={[styles.fixedBackdropContainer, { height: screenHeight * 0.7 + 50 }]}>
             <MaskedView
               style={{ flex: 1 }}
               maskElement={
@@ -787,12 +696,12 @@ export default function DetailScreen() {
               }
             >
               <Image
-                source={{ uri: tmdbBackdrop }}
+                source={{ uri: details.backdrop }}
                 style={styles.backdropImage}
                 resizeMode="cover"
               />
             </MaskedView>
-          </Animated.View>
+          </View>
         )}
         
         <Animated.View
@@ -816,24 +725,19 @@ export default function DetailScreen() {
                 <View style={[styles.topSection, { height: screenHeight * 0.7 }]}>
                   {/* 左侧区域 */}
                   <View style={styles.leftArea}>
-                    {/* 整体内容容器 - 一起动画移动 */}
-                    <Animated.View style={[
-                      styles.leftContent,
-                      {
-                        transform: [{ translateY: contentTranslateY }]
-                      }
-                    ]}>
+                    {/* 整体内容容器 - 有 backdrop 时置底，否则置顶 */}
+                    <Animated.View style={[styles.leftContent, !details?.backdrop && { justifyContent: 'flex-start' }, { opacity: contentOpacity }]}>
                       {/* 标题区域 */}
                       <View style={styles.titleArea}>
                         {/* TMDB Logo - 显示在标题上方 */}
-                        {tmdbLogo && logoSize && (
-                          <Animated.View style={{ opacity: logoOpacity, marginBottom: 12 }}>
+                        {details?.logo && logoSize && (
+                          <View style={{ marginBottom: 12 }}>
                             <Image
-                              source={{ uri: tmdbLogo }}
+                              source={{ uri: details.logo }}
                               style={{ width: logoSize.width, height: logoSize.height }}
                               resizeMode="contain"
                             />
-                          </Animated.View>
+                          </View>
                         )}
                         
                         {/* 原标题 - 始终显示 */}
@@ -1059,8 +963,8 @@ export default function DetailScreen() {
                     </View>
                   </View>
 
-                  {/* 右侧封面 - 有 backdrop 时隐藏 */}
-                  <Animated.View style={[styles.rightCover, { opacity: tmdbBackdrop ? coverOpacity : 1 }]}>
+                  {/* 右侧封面 - 有 logo 时隐藏但保持占位 */}
+                  <Animated.View style={[styles.rightCover, { opacity: posterOpacity }]}>
                     {details ? (
                       <>
                         <Image
@@ -1294,7 +1198,7 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     alignItems: 'center',
   },
   sourceNameBadge: {
@@ -1314,8 +1218,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 6,
     gap: 8,
     overflow: 'hidden',
@@ -1339,7 +1243,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   buttonTextFocused: {
@@ -1349,20 +1253,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 6,
     gap: 6,
   },
   secondaryButtonText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
