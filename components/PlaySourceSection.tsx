@@ -79,22 +79,21 @@ export default function PlaySourceSection({ title, videos, from, onTitlePress, t
         const cardTotalWidth = 110;
         const cardActualWidth = 90;
         const contentPadding = 16; // ScrollView 的 paddingHorizontal（与 styles.cardsContainer 一致）
-        const sectionPaddingLeft = 45; // section 的 paddingLeft（与 styles.container 一致）
+        const firstCardExtraMargin = 45; // 第一个卡片的额外 marginLeft
         const cardPosition = index * cardTotalWidth; // 卡片左边缘相对于内容区的位置
-        const viewportStart = currentScrollX.current; // 视口左边缘（相对于 ScrollView 内容）
-        // 视口右边缘需要减去 section 的 paddingLeft，因为这部分不属于 ScrollView 的可见区域
-        const viewportEnd = currentScrollX.current + screenWidth - sectionPaddingLeft; // 视口右边缘
+        const viewportStart = currentScrollX.current; // 视口左边缘
+        const viewportEnd = currentScrollX.current + screenWidth; // 视口右边缘
 
-        // 当前卡片在内容区中的绝对位置（包含 padding）
-        const cardAbsoluteLeft = contentPadding + cardPosition;
+        // 当前卡片在内容区中的绝对位置（包含 padding 和第一个卡片的额外 margin）
+        const cardAbsoluteLeft = contentPadding + firstCardExtraMargin + cardPosition;
 
         // 下一个卡片（右侧）的位置
         const nextCardPosition = (index + 1) * cardTotalWidth;
-        const nextCardAbsoluteLeft = contentPadding + nextCardPosition;
+        const nextCardAbsoluteLeft = contentPadding + firstCardExtraMargin + nextCardPosition;
         const nextCardAbsoluteRight = nextCardAbsoluteLeft + cardActualWidth;
         // 上一个卡片（左侧）的位置
         const prevCardPosition = (index - 1) * cardTotalWidth;
-        const prevCardAbsoluteLeft = contentPadding + prevCardPosition;
+        const prevCardAbsoluteLeft = contentPadding + firstCardExtraMargin + prevCardPosition;
 
         // 向右滚动：如果下一个卡片右边缘超出视口，滚动刚好使下一个卡片完整可见
         // 对称于左滚动，右边也留出 contentPadding 的空间
