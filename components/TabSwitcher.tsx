@@ -229,10 +229,8 @@ const TabSwitcher = forwardRef<TabSwitcherRef, TabSwitcherProps>(({
                 ]}
                 onFocus={() => onTabFocus(tab.key)}
                 onPress={() => {
-                  // 只有在不是当前激活标签时才触发切换
-                  if (tab.key !== activeTab) {
-                    onTabChange(tab.key);
-                  }
+                  // 总是触发 onTabChange，让父组件决定如何处理
+                  onTabChange(tab.key);
                 }}
                 onBlur={() => onTabFocus(null as any)}
                 hasTVPreferredFocus={tab.key === focusTarget && shouldFocusCurrent}

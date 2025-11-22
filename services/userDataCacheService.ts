@@ -101,6 +101,7 @@ class UserDataCacheService {
     // 先检查缓存
     const cachedData = this.getCache<PlayRecord[]>(cacheKey);
     if (cachedData !== null) {
+      this.refreshPlayRecords();
       return DataOperationResult.success(cachedData);
     }
 
@@ -287,6 +288,7 @@ class UserDataCacheService {
     // 先检查缓存
     const cachedData = this.getCache<FavoriteItem[]>(cacheKey);
     if (cachedData !== null) {
+      this.refreshFavorites();
       // 过滤掉 origin=live 的数据
       const filteredData = cachedData.filter((item) => item.origin !== 'live');
       return DataOperationResult.success(filteredData);
@@ -470,6 +472,7 @@ class UserDataCacheService {
     // 先检查缓存
     const cachedData = this.getCache<string[]>(cacheKey);
     if (cachedData !== null) {
+      this.refreshSearchHistory();
       return DataOperationResult.success(cachedData);
     }
 

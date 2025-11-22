@@ -70,7 +70,6 @@ export default function DetailScreen() {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const coverOpacity = useRef(new Animated.Value(1)).current;
-  const titleOpacity = useRef(new Animated.Value(1)).current;
   // 整体内容初始在顶部（负的 translateY），动画后移到底部（translateY: 0）
   const contentTranslateY = useRef(new Animated.Value(-screenHeight * 0.7 + 220)).current;
 
@@ -80,6 +79,7 @@ export default function DetailScreen() {
   const [playRecords, setPlayRecords] = useState<VideoInfo[]>([]);
   const [playRecordsLoaded, setPlayRecordsLoaded] = useState(false);
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
+  const selectedSourceKeyRef = useRef<string | null>(null);
   const currentDoubanIdRef = useRef<string | undefined>(doubanId as string | undefined);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   
@@ -170,6 +170,7 @@ export default function DetailScreen() {
   // 处理选中源的变化
   const handleSourceSelect = (sourceKey: string) => {
     setSelectedSourceKey(sourceKey);
+    selectedSourceKeyRef.current = sourceKey;
 
     // 查找对应的视频信息
     const selectedVideo = sources.find(v => `${v.source}_${v.id}` === sourceKey);
@@ -224,6 +225,44 @@ export default function DetailScreen() {
     const selectedSource = getSelectedSourceInfo();
     if (!selectedSource) return false;
     return playRecords.some(r => r.source === selectedSource.source && r.id === selectedSource.id);
+  };
+
+  // 获取当前应该显示的集数标题
+  const getEpisodeTitle = () => {
+    const selectedSource = getSelectedSourceInfo();
+    if (!selectedSource) return null;
+    
+    // 如果总集数小于等于1，不显示集数标题
+    if (selectedSource.totalEpisodes <= 1) return null;
+    
+    const episodeIndex = selectedSource.index;
+    const episodesTitles = selectedSource.episodesTitles;
+    
+    // 如果存在播放记录，显示播放记录对应的集数标题
+    if (hasPlayRecord()) {
+      if (episodesTitles && episodesTitles[episodeIndex-1]) {
+        return episodesTitles[episodeIndex-1];
+      }
+      return `第${episodeIndex}集`;
+    }
+    
+    // 如果没有播放记录，显示第0集的标题
+    if (episodesTitles && episodesTitles[0]) {
+      return episodesTitles[0];
+    }
+    return '第1集';
+  };
+
+  // 格式化时间为 xx:xx 或 xx:xx:xx
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   // 检查当前源是否已收藏
@@ -288,10 +327,107 @@ export default function DetailScreen() {
     }
   };
 
+  // 注册搜索监听器
+  const setupSearchListeners = useCallback(() => {
+    // 监听搜索结果
+    const removeResultsListener = SearchService.addEventListener('results', (results: SearchResult[]) => {
+      // 创建播放记录的 Map，key 为 source+id
+      const playRecordMap = new Map<string, VideoInfo>();
+      playRecords.forEach(record => {
+        const key = `${record.source}_${record.id}`;
+        playRecordMap.set(key, record);
+      });
+      
+      // 过滤和转换结果
+      const newVideos = results
+        .filter(result => {
+          // 必须标题完全一致
+          if (result.title !== title) {
+            return false;
+          }
+          // 如果有年份参数，进行过滤
+          if (year) {
+            return result.year === year || result.year === String(year);
+          }
+          return true;
+        })
+        .map((result, index) => {
+          const key = `${result.source}_${result.id}`;
+          const playRecord = playRecordMap.get(key);
+
+          // 如果有播放记录，使用播放记录的 index、playTime 和 totalTime
+          return {
+            id: result.id,
+            source: result.source,
+            title: result.title,
+            sourceName: result.sourceName,
+            year: result.year,
+            cover: result.poster,
+            index: playRecord?.index ?? 0,
+            totalEpisodes: result.episodes?.length || 0,
+            playTime: playRecord?.playTime ?? 0,
+            totalTime: playRecord?.totalTime ?? 0,
+            saveTime: Date.now(),
+            searchTitle: title as string,
+            doubanId: result.doubanId ? String(result.doubanId) : undefined,
+            episodesTitles: result.episodesTitles,
+          };
+        });
+
+      setSources(prev => {
+        // 去重合并
+        const existingIds = new Set(prev.map(v => `${v.source}_${v.id}`));
+        const uniqueNewVideos = newVideos.filter(v => !existingIds.has(`${v.source}_${v.id}`));
+        const updatedSources = [...prev, ...uniqueNewVideos];
+        
+        // 如果还没有选中源且有结果，自动选中
+        if (!selectedSourceKeyRef.current && updatedSources.length > 0) {
+          let defaultSource = updatedSources[0];
+          
+          // 如果 from=douban，优先选择第一个 doubanId 匹配的源
+          if (from === 'douban' && doubanId) {
+            const matchedSource = updatedSources.find(v => v.doubanId === doubanId);
+            if (matchedSource) {
+              defaultSource = matchedSource;
+            }
+          }
+          
+          const newSourceKey = `${defaultSource.source}_${defaultSource.id}`;
+          setSelectedSourceKey(newSourceKey);
+          selectedSourceKeyRef.current = newSourceKey;
+        }
+        
+        return updatedSources;
+      });
+    });
+
+    // 监听搜索完成
+    const removeCompleteListener = SearchService.addEventListener('complete', () => {
+      setSearching(false);
+    });
+
+    // 监听搜索错误
+    const removeErrorListener = SearchService.addEventListener('error', (error) => {
+      console.error('搜索出错:', error);
+      setSearching(false);
+    });
+
+    // 返回清理函数
+    return () => {
+      removeResultsListener();
+      removeCompleteListener();
+      removeErrorListener();
+    };
+  }, [title, year, playRecords, from, doubanId]);
+
   // 搜索相关资源
   useEffect(() => {
     // 只有在播放记录加载完成后才开始搜索
     if (from === 'douban' && title && playRecordsLoaded) {
+      // 先注册监听器
+      const removeListeners = setupSearchListeners();
+
+      // 再启动搜索
       const startSearch = async () => {
         setSearching(true);
         setSources([]);
@@ -306,82 +442,13 @@ export default function DetailScreen() {
 
       startSearch();
 
-      // 监听搜索结果
-      const removeResultsListener = SearchService.addEventListener('results', (results: SearchResult[]) => {
-        // 创建播放记录的 Map，key 为 source+id
-        const playRecordMap = new Map<string, VideoInfo>();
-        playRecords.forEach(record => {
-          const key = `${record.source}_${record.id}`;
-          playRecordMap.set(key, record);
-        });
-        // 过滤和转换结果
-        const newVideos = results
-          .filter(result => {
-            // 必须标题完全一致
-            if (result.title !== title) {
-              return false;
-            }
-            // 如果有年份参数，进行过滤
-            if (year) {
-              return result.year === year || result.year === String(year);
-            }
-            return true;
-          })
-          .map((result, index) => {
-            const key = `${result.source}_${result.id}`;
-            const playRecord = playRecordMap.get(key);
-
-            // 如果有播放记录，使用播放记录的 index、playTime 和 totalTime
-            return {
-              id: result.id,
-              source: result.source,
-              title: result.title,
-              sourceName: result.sourceName,
-              year: result.year,
-              cover: result.poster,
-              index: playRecord?.index ?? 0,
-              totalEpisodes: result.episodes?.length || 0,
-              playTime: playRecord?.playTime ?? 0,
-              totalTime: playRecord?.totalTime ?? 0,
-              saveTime: Date.now(),
-              searchTitle: title as string,
-              doubanId: result.doubanId ? String(result.doubanId) : undefined,
-            };
-          });
-
-        setSources(prev => {
-          // 去重合并
-          const existingIds = new Set(prev.map(v => `${v.source}_${v.id}`));
-          const uniqueNewVideos = newVideos.filter(v => !existingIds.has(`${v.source}_${v.id}`));
-          const updatedSources = [...prev, ...uniqueNewVideos];
-          
-          // 如果还没有选中源且有结果，自动选中第一个
-          if (!selectedSourceKey && updatedSources.length > 0) {
-            setSelectedSourceKey(`${updatedSources[0].source}_${updatedSources[0].id}`);
-          }
-          
-          return updatedSources;
-        });
-      });
-
-      const removeCompleteListener = SearchService.addEventListener('complete', () => {
-        setSearching(false);
-      });
-
-      const removeErrorListener = SearchService.addEventListener('error', (error) => {
-        console.error('搜索出错:', error);
-        // 出错也不要一直 loading
-        setSearching(false);
-      });
-
+      // 清理函数
       return () => {
-        removeResultsListener();
-        removeCompleteListener();
-        removeErrorListener();
+        removeListeners();
         SearchService.stopSearch();
       };
     }
-  }, [from, title, year, playRecordsLoaded]);
+  }, [from, title, playRecordsLoaded, setupSearchListeners]);
 
   useEffect(() => {
     if (details?.poster) {
@@ -589,19 +656,12 @@ export default function DetailScreen() {
   // logo 加载完成后的动画效果
   useEffect(() => {
     if (logoLoaded && tmdbLogo) {
-      // logo 淡入和标题淡出
-      Animated.parallel([
-        Animated.timing(logoOpacity, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(titleOpacity, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      // logo 淡入，标题保持显示
+      Animated.timing(logoOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }).start();
     }
   }, [logoLoaded, tmdbLogo]);
 
@@ -616,7 +676,6 @@ export default function DetailScreen() {
     backdropOpacity.setValue(0);
     logoOpacity.setValue(0);
     coverOpacity.setValue(1);
-    titleOpacity.setValue(1);
     contentTranslateY.setValue(-screenHeight * 0.7 + 220);
     
     try {
@@ -766,9 +825,9 @@ export default function DetailScreen() {
                     ]}>
                       {/* 标题区域 */}
                       <View style={styles.titleArea}>
-                        {/* TMDB Logo */}
+                        {/* TMDB Logo - 显示在标题上方 */}
                         {tmdbLogo && logoSize && (
-                          <Animated.View style={{ opacity: logoOpacity, marginBottom: 6 }}>
+                          <Animated.View style={{ opacity: logoOpacity, marginBottom: 12 }}>
                             <Image
                               source={{ uri: tmdbLogo }}
                               style={{ width: logoSize.width, height: logoSize.height }}
@@ -777,12 +836,15 @@ export default function DetailScreen() {
                           </Animated.View>
                         )}
                         
-                        {/* 原标题 - 有 logo 时不渲染 */}
-                        {!tmdbLogo && (
-                          <Animated.View style={{ opacity: titleOpacity, marginBottom: 6 }}>
-                            <Text style={styles.mainTitle} numberOfLines={2}>{title}</Text>
-                          </Animated.View>
-                        )}
+                        {/* 原标题 - 始终显示 */}
+                        <View style={{ marginBottom: 6 }}>
+                          <Text style={styles.mainTitle} numberOfLines={2}>
+                            {title}
+                            {getEpisodeTitle() && (
+                              <Text style={styles.episodeTitle}> · {getEpisodeTitle()}</Text>
+                            )}
+                          </Text>
+                        </View>
                       </View>
 
                       {/* 详情信息区域 - 固定高度避免跳变 */}
@@ -861,29 +923,44 @@ export default function DetailScreen() {
                                 onBlur={handleButtonBlur}
                                 hasTVPreferredFocus={true}
                               >
-                                {({ focused }) => (
-                                  <>
-                                    <Ionicons name="play-circle" size={20} color={focused ? '#0a0a0a' : '#ffffff'} />
-                                    <Text style={[styles.primaryButtonText, focused && styles.buttonTextFocused]}>继续播放</Text>
-                                  </>
-                                )}
+                                {({ focused }) => {
+                                  const selectedSource = getSelectedSourceInfo();
+                                  const playTime = selectedSource?.playTime || 0;
+                                  const totalTime = selectedSource?.totalTime || 0;
+                                  const progress = totalTime > 0 ? (playTime / totalTime) * 100 : 0;
+                                  
+                                  return (
+                                    <>
+                                      {/* 进度背景 */}
+                                      <View style={[
+                                        styles.progressBackground,
+                                        { width: `${progress}%` },
+                                        focused && styles.progressBackgroundFocused
+                                      ]} />
+                                      {/* 内容 */}
+                                      <View style={styles.buttonContent}>
+                                        <Ionicons name="play-circle" size={20} color={focused ? '#0a0a0a' : '#ffffff'} />
+                                        <Text style={[styles.primaryButtonText, focused && styles.buttonTextFocused]}>
+                                          继续播放 {formatTime(playTime)}
+                                        </Text>
+                                      </View>
+                                    </>
+                                  );
+                                }}
                               </Pressable>
                             </Animated.View>
                             <Animated.View style={{ transform: [{ scale: buttonAnimations.play }] }}>
                               <Pressable
                                 style={({ focused }) => [
-                                  styles.secondaryButton,
-                                  focused && styles.buttonFocused
+                                  styles.iconButton,
+                                  focused && styles.iconButtonFocused
                                 ]}
                                 onPress={handlePlay}
                                 onFocus={() => handleButtonFocus('play')}
                                 onBlur={handleButtonBlur}
                               >
                                 {({ focused }) => (
-                                  <>
-                                    <Ionicons name="play" size={18} color={focused ? '#0a0a0a' : '#ffffff'} />
-                                    <Text style={[styles.secondaryButtonText, focused && styles.buttonTextFocused]}>播放</Text>
-                                  </>
+                                  <Ionicons name="reload" size={20} color={focused ? '#0a0a0a' : '#ffffff'} />
                                 )}
                               </Pressable>
                             </Animated.View>
@@ -1142,6 +1219,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     lineHeight: 32,
   },
+  episodeTitle: {
+    fontSize: 18,
+    fontWeight: '400',
+    color: '#ffffff',
+  },
   metaInfo: {
     marginBottom: 8,
   },
@@ -1236,6 +1318,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 6,
     gap: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  progressBackground: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  progressBackgroundFocused: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 1,
   },
   primaryButtonText: {
     color: '#ffffff',

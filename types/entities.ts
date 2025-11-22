@@ -17,6 +17,7 @@ export interface VideoInfo {
   doubanId?: string; // 豆瓣ID，用于豆瓣模式
   bangumiId?: number; // Bangumi ID，用于Bangumi模式
   rate?: string; // 评分
+  episodesTitles?: string[]; // 集数标题列表
 }
 
 /**
