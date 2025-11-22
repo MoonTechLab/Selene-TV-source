@@ -392,7 +392,6 @@ export default function DetailScreen() {
 
       setSources(prev => {
         const updatedSources = [...prev, ...newVideos];
-        console.log(updatedSources.length)
         
         // 如果还没有选中源且有新结果
         if (!selectedSourceKeyRef.current && newVideos.length > 0) {
