@@ -89,6 +89,9 @@ fun TabSwitcher(
     // 是否正在切换标签页（500ms 延迟期间）
     var isSwitching by remember { mutableStateOf(false) }
     
+    // 记录是否曾经因按下键而失焦
+    var hadLostFocusByDown by remember { mutableStateOf(false) }
+    
     // 自动切换逻辑：等待动画完成后再计时 500ms
     LaunchedEffect(focusedTabId) {
         if (focusedTabId != null && focusedTabId != selectedTabId) {
@@ -129,6 +132,16 @@ fun TabSwitcher(
                     shape = RoundedCornerShape(18.dp)
                 )
                 .padding(2.dp)
+                .onFocusChanged { focusState ->
+                    // 当 focusGroup 获得焦点（hasFocus 但非 isFocused）且之前因按下键失焦过
+                    if (focusState.hasFocus && !focusState.isFocused && hadLostFocusByDown) {
+                        hadLostFocusByDown = false
+                        val idx = tabs.indexOfFirst { it.id == selectedTabId }
+                        if (idx >= 0) {
+                            focusRequesters[idx].requestFocus()
+                        }
+                    }
+                }
                 .focusGroup()
                 .focusRestorer(selectedTabFocusRequester),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
@@ -147,7 +160,10 @@ fun TabSwitcher(
                         focusedTabId = if (isFocused) tab.id else null
                     },
                     onTabClick = { onTabSelected(tab.id) },
-                    onNavigateDown = { onNavigateDown(selectedTabId) },
+                    onNavigateDown = {
+                        hadLostFocusByDown = true
+                        onNavigateDown(selectedTabId)
+                    },
                     onBackPressed = {
                         // 在标签栏按返回键时，如果当前不是首页，则自动切换到首页标签
                         if (selectedTabId != "home") {

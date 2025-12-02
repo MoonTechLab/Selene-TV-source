@@ -85,7 +85,7 @@ fun RecommendSection(
         val rowBringIntoViewSpec = remember {
             object : BringIntoViewSpec {
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-                    // 将聚焦项滚动到 30% 位置（TV 标准行为）
+                    // 将聚焦项滚动到 35% 位置（TV 标准行为）
                     val targetOffset = containerSize * 0.35f
                     return offset - targetOffset + (size / 2f)
                 }
