@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.screen.tab.*
 import org.moontechlab.selenetv.ui.AnimatedTabContent
 import org.moontechlab.selenetv.ui.TabSwitcher
+import org.moontechlab.selenetv.ui.TextMeasureProvider
 
 @Composable
 fun HomeScreen() {
@@ -63,14 +64,15 @@ fun HomeScreen() {
         1.0f to Color(0xFF050505)
     )
     
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(brush = gradientBrush)
-    ) {
-        // 根据 selectedTabId 显示对应的内容页面（带动画）
-        // TabSwitcher 作为 header 不参与动画，但会跟随滚动
-        AnimatedTabContent(
+    TextMeasureProvider {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(brush = gradientBrush)
+        ) {
+            // 根据 selectedTabId 显示对应的内容页面（带动画）
+            // TabSwitcher 作为 header 不参与动画，但会跟随滚动
+            AnimatedTabContent(
             selectedTabId = selectedTabId,
             scrollState = scrollState,
             modifier = Modifier.fillMaxSize(),
@@ -105,6 +107,7 @@ fun HomeScreen() {
                 "live" -> LiveTab(scrollState = scrollState)
                 "settings" -> SettingsTab(scrollState = scrollState)
             }
+        }
         }
     }
 }

@@ -1,5 +1,6 @@
 package org.moontechlab.selenetv.ui
 
+import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -29,8 +31,14 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.VideoInfo
 import kotlin.math.roundToInt
+
+private const val TAG = "VideoCard"
+
+// 两个文本实例之间的间隔（dp）
+private val TEXT_GAP_DP = 30.dp
 
 /**
  * 视频来源类型
@@ -58,6 +66,14 @@ fun VideoCard(
     var isFocused by remember { mutableStateOf(false) }
     var titleWidth by remember { mutableStateOf(0) }
     var containerWidth by remember { mutableStateOf(0) }
+    var isMeasured by remember { mutableStateOf(false) }
+    
+    // 获取全局测量上下文（可选，如果没有 Provider 则使用本地测量）
+    val textMeasure = runCatching { LocalTextMeasure.current }.getOrNull()
+    
+    // 将 dp 转换为 px
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val textGapPx = with(density) { TEXT_GAP_DP.roundToPx() }
     
     // 计算播放进度
     val progress = if (videoInfo.totalTime > 0) {
@@ -74,23 +90,61 @@ fun VideoCard(
         label = "video_card_scale"
     )
     
-    // 标题滚动动画
-    val scrollAnimation = rememberInfiniteTransition(label = "titleScroll")
-    val shouldScroll = isFocused && titleWidth > containerWidth && containerWidth > 0
+    // 无缝循环滚动动画
+    val scrollAnim = remember { Animatable(0f) }
     
-    val scrollOffset by scrollAnimation.animateFloat(
-        initialValue = 0f,
-        targetValue = if (shouldScroll) -(titleWidth - containerWidth).toFloat() else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = if (shouldScroll) (titleWidth - containerWidth) * 20 else 0,
-                delayMillis = 1000,
-                easing = LinearEasing
-            ),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "scrollOffset"
-    )
+    // 判断是否需要滚动：聚焦 + 已测量 + 标题宽度 > 容器宽度
+    val needsScroll by remember(isFocused, isMeasured, titleWidth, containerWidth) {
+        derivedStateOf { isFocused && isMeasured && titleWidth > containerWidth && containerWidth > 0 }
+    }
+    
+    // 懒测量：只在聚焦时才请求测量
+    LaunchedEffect(isFocused) {
+        if (isFocused && !isMeasured && textMeasure != null) {
+            Log.d(TAG, "🔍 [${videoInfo.title.take(10)}] Focused, requesting measure...")
+            textMeasure.measureText(
+                id = videoInfo.id,
+                text = videoInfo.title
+            ) { width ->
+                titleWidth = width
+                isMeasured = true
+                Log.d(TAG, "✅ [${videoInfo.title.take(10)}] Measured: $width px, containerWidth=$containerWidth")
+            }
+        } else if (!isFocused) {
+            // 失焦时清除测量请求（只清除自己的）
+            textMeasure?.clearMeasure(videoInfo.id)
+        }
+    }
+    
+    // 调试日志
+    LaunchedEffect(isFocused, titleWidth, containerWidth, needsScroll) {
+        Log.d(TAG, "📊 [${videoInfo.title.take(10)}] isFocused=$isFocused, isMeasured=$isMeasured, titleWidth=$titleWidth, containerWidth=$containerWidth, needsScroll=$needsScroll")
+    }
+    
+    // 滚动动画控制
+    LaunchedEffect(needsScroll) {
+        if (needsScroll) {
+            val loopDistance = titleWidth + textGapPx
+            Log.d(TAG, "🎬 [${videoInfo.title.take(10)}] Starting scroll, loopDistance=$loopDistance")
+            delay(1000) // 先停顿1秒
+            while (true) {
+                scrollAnim.animateTo(
+                    targetValue = -loopDistance.toFloat(),
+                    animationSpec = tween(
+                        durationMillis = loopDistance * 10, // 10ms/px，更快的滚动速度
+                        easing = LinearEasing
+                    )
+                )
+                scrollAnim.snapTo(0f)
+            }
+        } else {
+            // 失焦时平滑回弹
+            scrollAnim.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 300)
+            )
+        }
+    }
 
     Surface(
         onClick = onClick,
@@ -262,24 +316,57 @@ fun VideoCard(
                 modifier = Modifier
                     .width(90.dp)
                     .height(14.dp)
+                    .clipToBounds()
                     .onGloballyPositioned { coordinates ->
-                        containerWidth = coordinates.size.width
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = videoInfo.title,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .offset { IntOffset(scrollOffset.roundToInt(), 0) }
-                        .onGloballyPositioned { coordinates ->
-                            titleWidth = coordinates.size.width
+                        val newContainerWidth = coordinates.size.width
+                        if (newContainerWidth != containerWidth) {
+                            Log.d(TAG, "📐 [${videoInfo.title.take(10)}] Container: $newContainerWidth px")
+                            containerWidth = newContainerWidth
                         }
-                )
+                    }
+            ) {
+                if (needsScroll) {
+                    // 双文本无缝循环滚动
+                    // 使用 Row 让两个文本自然排列，不受父容器宽度限制
+                    Row(
+                        modifier = Modifier
+                            .wrapContentWidth(unbounded = true, align = Alignment.Start)
+                            .align(Alignment.CenterStart)
+                            .offset { IntOffset(scrollAnim.value.roundToInt(), 0) }
+                    ) {
+                        // 第一个文本实例
+                        Text(
+                            text = videoInfo.title,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        // 间隔
+                        Spacer(modifier = Modifier.width(TEXT_GAP_DP))
+                        // 第二个文本实例
+                        Text(
+                            text = videoInfo.title,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                } else {
+                    // 未聚焦或不需要滚动：单行显示，超长裁剪
+                    Text(
+                        text = videoInfo.title,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.Center)
+                    )
+                }
             }
 
             // 来源标签
