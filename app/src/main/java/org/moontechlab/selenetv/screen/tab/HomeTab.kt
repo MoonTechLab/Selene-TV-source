@@ -1,10 +1,13 @@
 package org.moontechlab.selenetv.screen.tab
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +32,8 @@ import org.moontechlab.selenetv.ui.VideoCardSource
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeTab(
-    focusRequester: FocusRequester = remember { FocusRequester() }
+    focusRequester: FocusRequester = remember { FocusRequester() },
+    scrollState: ScrollState = rememberScrollState()
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -45,6 +49,10 @@ fun HomeTab(
     // 新番放送数据状态
     var bangumiCalendar by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingBangumi by remember { mutableStateOf(true) }
+    
+    // 热门综艺数据状态
+    var hotShows by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
+    var isLoadingShows by remember { mutableStateOf(true) }
     
     // 加载数据
     LaunchedEffect(Unit) {
@@ -92,9 +100,21 @@ fun HomeTab(
             }
             isLoadingBangumi = false
         }
+        
+        // 加载热门综艺
+        coroutineScope.launch {
+            isLoadingShows = true
+            when (val response = doubanService.getHotShows(pageLimit = 20, page = 0)) {
+                is ApiResponse.Success -> {
+                    hotShows = response.data.map { it.toVideoInfo() }
+                }
+                is ApiResponse.Error -> {
+                    android.util.Log.e("HomeTab", "加载热门综艺失败: ${response.message}")
+                }
+            }
+            isLoadingShows = false
+        }
     }
-    
-    val scrollState = rememberScrollState()
     
     // 追踪是否是垂直方向的按键
     var isVerticalNavigation by remember { mutableStateOf(false) }
@@ -118,7 +138,6 @@ fun HomeTab(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 24.dp)
                 .verticalScroll(scrollState)
                 .focusRequester(focusRequester)
                 .focusGroup()
@@ -136,7 +155,10 @@ fun HomeTab(
                     false // 不消费事件
                 }
         ) {
-        RecommendSection(
+            // 顶部留出 TabSwitcher 的空间
+            Spacer(modifier = Modifier.height(46.dp))
+            
+            RecommendSection(
             title = "热门电影",
             videos = hotMovies,
             from = VideoCardSource.DOUBAN,
@@ -163,6 +185,17 @@ fun HomeTab(
             videos = bangumiCalendar,
             from = VideoCardSource.BANGUMI,
             isLoading = isLoadingBangumi,
+            onVideoClick = { video ->
+                // TODO: 处理视频点击事件
+                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+            }
+        )
+        
+        RecommendSection(
+            title = "热门综艺",
+            videos = hotShows,
+            from = VideoCardSource.DOUBAN,
+            isLoading = isLoadingShows,
             onVideoClick = { video ->
                 // TODO: 处理视频点击事件
                 android.util.Log.d("HomeTab", "点击视频: ${video.title}")

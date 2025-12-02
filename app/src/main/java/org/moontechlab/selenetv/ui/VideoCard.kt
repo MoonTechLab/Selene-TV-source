@@ -211,7 +211,7 @@ fun VideoCard(
 
                 // 评分徽章（番剧/豆瓣场景）
                 if ((from == VideoCardSource.BANGUMI || from == VideoCardSource.DOUBAN) && 
-                    videoInfo.rate != null) {
+                    videoInfo.rate != null && videoInfo.rate != "0.0") {
                     Box(
                         modifier = Modifier
                             .padding(4.dp)

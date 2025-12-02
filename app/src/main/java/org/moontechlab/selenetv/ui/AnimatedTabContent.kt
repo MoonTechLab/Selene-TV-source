@@ -2,10 +2,17 @@ package org.moontechlab.selenetv.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 
 /**
@@ -16,22 +23,23 @@ import kotlinx.coroutines.launch
  * 2. 进入动画（100ms）：新内容淡入 + 从相反方向滑入
  * 
  * @param selectedTabId 当前选中的标签页 ID
+ * @param scrollState 滚动状态，用于让 header 跟随滚动
  * @param modifier 修饰符
+ * @param header 不参与动画的头部内容（如 TabSwitcher），会跟随滚动
  * @param content 内容渲染函数，接收当前标签 ID
  */
 @Composable
 fun AnimatedTabContent(
     selectedTabId: String,
+    scrollState: ScrollState,
     modifier: Modifier = Modifier,
+    header: @Composable () -> Unit,
     content: @Composable (String) -> Unit
 ) {
     // 当前显示的内容 ID（在动画完成后才更新）
     var displayedTabId by remember { mutableStateOf(selectedTabId) }
     
-    // 上一次的标签 ID，用于判断切换方向
-    var previousTabId by remember { mutableStateOf(selectedTabId) }
-    
-    // 动画状态
+    // 动画状态 - 只应用于内容区域
     val alpha = remember { Animatable(1f) }
     val offsetX = remember { Animatable(0f) }
     
@@ -40,7 +48,7 @@ fun AnimatedTabContent(
     // 监听标签切换
     LaunchedEffect(selectedTabId) {
         if (selectedTabId != displayedTabId) {
-            // 判断切换方向（简化版：根据 ID 顺序判断）
+            // 判断切换方向
             val tabOrder = listOf("search", "home", "movies", "series", "anime", "variety", "live", "settings")
             val currentIndex = tabOrder.indexOf(displayedTabId)
             val newIndex = tabOrder.indexOf(selectedTabId)
@@ -48,7 +56,6 @@ fun AnimatedTabContent(
             
             coroutineScope.launch {
                 // 第一阶段：退出动画（100ms）
-                // 透明度 1 → 0，位移 0 → ±50
                 val exitOffset = if (isMovingRight) -50f else 50f
                 launch {
                     alpha.animateTo(
@@ -63,19 +70,16 @@ fun AnimatedTabContent(
                     )
                 }
                 
-                // 等待退出动画完成
                 kotlinx.coroutines.delay(100)
                 
                 // 切换内容
-                previousTabId = displayedTabId
                 displayedTabId = selectedTabId
                 
-                // 设置新内容的初始位置（相反方向）
+                // 设置新内容的初始位置
                 val enterOffset = if (isMovingRight) 50f else -50f
                 offsetX.snapTo(enterOffset)
                 
                 // 第二阶段：进入动画（100ms）
-                // 透明度 0 → 1，位移 ±50 → 0
                 launch {
                     alpha.animateTo(
                         targetValue = 1f,
@@ -92,12 +96,27 @@ fun AnimatedTabContent(
         }
     }
     
-    Box(
-        modifier = modifier.graphicsLayer {
-            this.alpha = alpha.value
-            translationX = offsetX.value
+    Box(modifier = modifier) {
+        // Header 在动画层外部，不参与切换动画
+        // 使用 offset 跟随滚动状态
+        Box(
+            modifier = Modifier
+                .zIndex(1f)
+                .offset { IntOffset(0, -scrollState.value) }
+        ) {
+            header()
         }
-    ) {
-        content(displayedTabId)
+        
+        // 内容区域参与动画
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    this.alpha = alpha.value
+                    translationX = offsetX.value
+                }
+        ) {
+            content(displayedTabId)
+        }
     }
 }

@@ -12,8 +12,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,6 +76,10 @@ fun TabSwitcher(
     // 焦点请求器，用于控制初始焦点
     val focusRequesters = remember { tabs.map { FocusRequester() } }
     
+    // 获取当前选中 tab 的 FocusRequester，用于 focusRestorer
+    val selectedTabIndex = remember(selectedTabId) { tabs.indexOfFirst { it.id == selectedTabId } }
+    val selectedTabFocusRequester = if (selectedTabIndex >= 0) focusRequesters[selectedTabIndex] else focusRequesters[0]
+    
     // 当前聚焦的标签 ID（用于自动切换逻辑）
     var focusedTabId by remember { mutableStateOf<String?>(null) }
     
@@ -122,7 +128,9 @@ fun TabSwitcher(
                     color = Color.White.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(18.dp)
                 )
-                .padding(2.dp),
+                .padding(2.dp)
+                .focusGroup()
+                .focusRestorer(selectedTabFocusRequester),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

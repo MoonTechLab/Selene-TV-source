@@ -209,7 +209,7 @@ fun DoubanItem.toDoubanMovie(): DoubanMovie {
         id = id,
         title = title,
         poster = pic?.large ?: pic?.normal ?: pic?.small ?: "",
-        rate = rating?.value?.toString(),
+        rate = rating?.value?.takeIf { it > 0.0 }?.toString(),
         year = extractYear(cardSubtitle)
     )
 }
@@ -232,7 +232,7 @@ fun DoubanItem.toVideoInfo(): VideoInfo {
         saveTime = System.currentTimeMillis(),
         searchTitle = title,
         doubanId = id,
-        rate = rating?.value?.toString()
+        rate = rating?.value?.takeIf { it > 0.0 }?.toString()
     )
 }
 
