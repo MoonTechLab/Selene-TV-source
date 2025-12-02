@@ -57,7 +57,9 @@ fun TabSwitcher(
     onTabSelected: (String) -> Unit,
     onNavigateDown: (String) -> Unit,
     onBackPressed: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester = remember { FocusRequester() },
+    onFocusChanged: (Boolean) -> Unit = {}
 ) {
     // 内置标签页列表
     val tabs = remember {
@@ -132,7 +134,11 @@ fun TabSwitcher(
                     shape = RoundedCornerShape(18.dp)
                 )
                 .padding(2.dp)
+                .focusRequester(focusRequester)
                 .onFocusChanged { focusState ->
+                    // 通知父组件焦点状态变化
+                    onFocusChanged(focusState.hasFocus)
+                    
                     // 当 focusGroup 获得焦点（hasFocus 但非 isFocused）且之前因按下键失焦过
                     if (focusState.hasFocus && !focusState.isFocused && hadLostFocusByDown) {
                         hadLostFocusByDown = false
@@ -251,11 +257,8 @@ private fun TabButton(
                         Key.DirectionRight -> {
                             isLastTab // 如果是最后一个标签，消费事件阻止移出；否则允许正常导航
                         }
-                        // 返回键
-                        Key.Back, Key.Escape -> {
-                            onBackPressed()
-                            true
-                        }
+                        // 返回键由 BackHandler 处理，这里不消费
+                        Key.Back, Key.Escape -> false
                         else -> false
                     }
                 } else {

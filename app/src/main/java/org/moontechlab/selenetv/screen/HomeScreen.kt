@@ -12,20 +12,48 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.screen.tab.*
 import org.moontechlab.selenetv.ui.AnimatedTabContent
 import org.moontechlab.selenetv.ui.TabSwitcher
 
 @Composable
 fun HomeScreen() {
+    val context = LocalContext.current
+    
     // 当前选中的标签页
     var selectedTabId by remember { mutableStateOf("home") }
     
     // 为每个 Tab 创建 FocusRequester
     val homeTabFocusRequester = remember { FocusRequester() }
     
+    // TabSwitcher 的 FocusRequester
+    val tabSwitcherFocusRequester = remember { FocusRequester() }
+    
+    // 协程作用域
+    val coroutineScope = rememberCoroutineScope()
+    
     // 共享的滚动状态，用于让 TabSwitcher 跟随滚动
     val scrollState = rememberScrollState()
+    
+    // 追踪焦点是否在 TabSwitcher 上
+    var isTabSwitcherFocused by remember { mutableStateOf(true) }
+    
+    // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
+    BackHandler(enabled = !isTabSwitcherFocused) {
+        coroutineScope.launch {
+            scrollState.animateScrollTo(0)
+        }
+        tabSwitcherFocusRequester.requestFocus()
+    }
+    
+    // 当焦点在 TabSwitcher 且不在首页时，拦截返回键，切换到首页
+    BackHandler(enabled = isTabSwitcherFocused && selectedTabId != "home") {
+        selectedTabId = "home"
+    }
     
     // 创建渐变背景
     val gradientBrush = Brush.verticalGradient(
@@ -56,8 +84,11 @@ fun HomeScreen() {
                         }
                     },
                     onBackPressed = {
-                        // TODO: 处理返回键逻辑
-                    }
+                        // 在首页 Tab 按返回键退出 app
+                        (context as? Activity)?.finish()
+                    },
+                    focusRequester = tabSwitcherFocusRequester,
+                    onFocusChanged = { hasFocus -> isTabSwitcherFocused = hasFocus }
                 )
             }
         ) { currentTabId ->
