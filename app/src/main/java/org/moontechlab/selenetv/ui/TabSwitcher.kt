@@ -77,6 +77,9 @@ fun TabSwitcher(
     // 当前聚焦的标签 ID（用于自动切换逻辑）
     var focusedTabId by remember { mutableStateOf<String?>(null) }
     
+    // TabSwitcher 是否有任何焦点（任何 tab 被聚焦）
+    val hasAnyFocus = focusedTabId != null
+    
     // 是否正在切换标签页（500ms 延迟期间）
     var isSwitching by remember { mutableStateOf(false) }
     
@@ -127,6 +130,7 @@ fun TabSwitcher(
                 TabButton(
                     tab = tab,
                     isSelected = tab.id == selectedTabId,
+                    hasAnyFocus = hasAnyFocus,
                     focusRequester = focusRequesters[index],
                     isFirstTab = index == 0,
                     isLastTab = index == tabs.lastIndex,
@@ -157,6 +161,7 @@ fun TabSwitcher(
 private fun TabButton(
     tab: TabItem,
     isSelected: Boolean,
+    hasAnyFocus: Boolean,
     focusRequester: FocusRequester,
     isFirstTab: Boolean,
     isLastTab: Boolean,
@@ -182,7 +187,8 @@ private fun TabButton(
     // 背景颜色和内容颜色
     val backgroundColor = when {
         isFocused -> Color.White // 聚焦：纯白色
-        else -> Color.Transparent // 默认和激活未聚焦：透明
+        isSelected && !hasAnyFocus -> Color.White.copy(alpha = 0.2f) // 选中且整个 TabSwitcher 无焦点：半透明白色
+        else -> Color.Transparent // 默认：透明
     }
     
     val contentColor = if (isFocused) Color(0xFF0a0a0a) else Color.White
