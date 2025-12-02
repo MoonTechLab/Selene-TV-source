@@ -1,15 +1,33 @@
 package org.moontechlab.selenetv.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +49,7 @@ import org.moontechlab.selenetv.model.VideoInfo
  * @param onVideoClick 视频卡片点击回调
  * @param modifier 修饰符
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecommendSection(
     title: String,
@@ -42,6 +61,8 @@ fun RecommendSection(
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val firstItemFocusRequester = remember { FocusRequester() }
+    var isRowFocused by remember { mutableStateOf(false) }
     
     Column(
         modifier = modifier
@@ -56,46 +77,80 @@ fun RecommendSection(
             modifier = Modifier.padding(start = 48.dp, bottom = 8.dp)
         )
         
-        // 卡片列表
-        LazyRow(
-            state = listState,
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            contentPadding = PaddingValues(horizontal = 48.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onPreviewKeyEvent { keyEvent ->
-                    // 处理返回键 - 重置滚动位置
-                    if (keyEvent.key == Key.Back && keyEvent.type == KeyEventType.KeyDown) {
-                        coroutineScope.launch {
-                            listState.scrollToItem(0)
-                        }
-                        false // 不阻止默认行为
-                    } else {
-                        false
-                    }
+        // LazyRow 专用的 BringIntoViewSpec，保持水平滚动功能
+        val rowBringIntoViewSpec = remember {
+            object : BringIntoViewSpec {
+                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                    // 将聚焦项滚动到 30% 位置（TV 标准行为）
+                    val targetOffset = containerSize * 0.4f
+                    return offset - targetOffset + (size / 2f)
                 }
+            }
+        }
+        
+        // 卡片列表
+        CompositionLocalProvider(
+            androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec
         ) {
-            if (isLoading || videos.isEmpty()) {
-                // 加载状态或无数据 - 显示 8 个骨架屏占位卡片
-                items(8) { _ ->
-                    SkeletonVideoCard(
-                        modifier = Modifier.onPreviewKeyEvent { keyEvent ->
-                            handleVerticalNavigation(keyEvent, listState, coroutineScope)
+            LazyRow(
+                state = listState,
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                contentPadding = PaddingValues(horizontal = 48.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusGroup()
+                    .focusRestorer(firstItemFocusRequester)
+                    .onFocusChanged { focusState ->
+                        // 当 LazyRow 获得焦点但内部没有聚焦项时，自动聚焦第一个元素
+                        if (focusState.hasFocus && !isRowFocused) {
+                            isRowFocused = true
+                            try {
+                                firstItemFocusRequester.requestFocus()
+                            } catch (_: Exception) {
+                                // 忽略焦点请求失败
+                            }
+                        } else if (!focusState.hasFocus) {
+                            isRowFocused = false
                         }
+                    }
+                    .onPreviewKeyEvent { keyEvent ->
+                        // 处理返回键 - 重置滚动位置
+                        if (keyEvent.key == Key.Back && keyEvent.type == KeyEventType.KeyDown) {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(0)
+                            }
+                            false // 不阻止默认行为
+                        } else {
+                            false
+                        }
+                    }
+            ) {
+            if (isLoading || videos.isEmpty()) {
+                // 加载状态或无数据 - 显示 10 个骨架屏占位卡片
+                items(10) { index ->
+                    SkeletonVideoCard(
+                        modifier = Modifier
+                            .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
+                            .onPreviewKeyEvent { keyEvent ->
+                                handleVerticalNavigation(keyEvent, listState, coroutineScope)
+                            }
                     )
                 }
             } else {
                 // 实际视频卡片
-                items(videos, key = { it.id }) { video ->
+                itemsIndexed(videos, key = { _, video -> video.id }) { index, video ->
                     VideoCard(
                         videoInfo = video,
                         from = from,
                         onClick = { onVideoClick(video) },
-                        modifier = Modifier.onPreviewKeyEvent { keyEvent ->
-                            handleVerticalNavigation(keyEvent, listState, coroutineScope)
-                        }
+                        modifier = Modifier
+                            .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
+                            .onPreviewKeyEvent { keyEvent ->
+                                handleVerticalNavigation(keyEvent, listState, coroutineScope)
+                            }
                     )
                 }
+            }
             }
         }
         
@@ -117,7 +172,7 @@ private fun handleVerticalNavigation(
             Key.DirectionUp, Key.DirectionDown -> {
                 // 垂直导航时重置水平滚动位置
                 coroutineScope.launch {
-                    listState.scrollToItem(0)
+                    listState.animateScrollToItem(0)
                 }
             }
         }

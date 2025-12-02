@@ -1,13 +1,18 @@
 package org.moontechlab.selenetv.screen.tab
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
@@ -16,10 +21,12 @@ import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
 import org.moontechlab.selenetv.service.ApiResponse
+import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.ui.RecommendSection
 import org.moontechlab.selenetv.ui.VideoCardSource
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeTab(
     focusRequester: FocusRequester = remember { FocusRequester() }
@@ -31,11 +38,22 @@ fun HomeTab(
     var hotMovies by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingMovies by remember { mutableStateOf(true) }
     
-    // 加载热门电影数据
+    // 热门剧集数据状态
+    var hotTvShows by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
+    var isLoadingTvShows by remember { mutableStateOf(true) }
+    
+    // 新番放送数据状态
+    var bangumiCalendar by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
+    var isLoadingBangumi by remember { mutableStateOf(true) }
+    
+    // 加载数据
     LaunchedEffect(Unit) {
+        val doubanService = DoubanService.getInstance(context)
+        val bangumiService = BangumiService.getInstance(context)
+        
+        // 加载热门电影
         coroutineScope.launch {
             isLoadingMovies = true
-            val doubanService = DoubanService.getInstance(context)
             when (val response = doubanService.getHotMovies(pageLimit = 20, page = 0)) {
                 is ApiResponse.Success -> {
                     hotMovies = response.data.map { it.toVideoInfo() }
@@ -46,25 +64,110 @@ fun HomeTab(
             }
             isLoadingMovies = false
         }
+        
+        // 加载热门剧集
+        coroutineScope.launch {
+            isLoadingTvShows = true
+            when (val response = doubanService.getHotTvShows(pageLimit = 20, page = 0)) {
+                is ApiResponse.Success -> {
+                    hotTvShows = response.data.map { it.toVideoInfo() }
+                }
+                is ApiResponse.Error -> {
+                    android.util.Log.e("HomeTab", "加载热门剧集失败: ${response.message}")
+                }
+            }
+            isLoadingTvShows = false
+        }
+        
+        // 加载新番放送
+        coroutineScope.launch {
+            isLoadingBangumi = true
+            when (val response = bangumiService.getTodayCalendar()) {
+                is ApiResponse.Success -> {
+                    bangumiCalendar = response.data.map { it.toVideoInfo() }
+                }
+                is ApiResponse.Error -> {
+                    android.util.Log.e("HomeTab", "加载新番放送失败: ${response.message}")
+                }
+            }
+            isLoadingBangumi = false
+        }
     }
     
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 24.dp)
-            .focusRequester(focusRequester)
+    val scrollState = rememberScrollState()
+    
+    // 追踪是否是垂直方向的按键
+    var isVerticalNavigation by remember { mutableStateOf(false) }
+    
+    // 根据按键方向决定是否允许垂直滚动
+    val directionalBringIntoViewSpec = remember(isVerticalNavigation) {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                // 只有垂直导航时才允许滚动
+                if (!isVerticalNavigation) return 0f
+                
+                // 将聚焦项滚动到正中位置
+                return offset + (size / 2f) - (containerSize / 2f)
+            }
+        }
+    }
+    
+    CompositionLocalProvider(
+        androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides directionalBringIntoViewSpec
     ) {
-        item {
-            RecommendSection(
-                title = "热门电影",
-                videos = hotMovies,
-                from = VideoCardSource.DOUBAN,
-                isLoading = isLoadingMovies,
-                onVideoClick = { video ->
-                    // TODO: 处理视频点击事件
-                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 24.dp)
+                .verticalScroll(scrollState)
+                .focusRequester(focusRequester)
+                .focusGroup()
+                .onPreviewKeyEvent { keyEvent ->
+                    if (keyEvent.type == KeyEventType.KeyDown) {
+                        when (keyEvent.key) {
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                isVerticalNavigation = true
+                            }
+                            Key.DirectionLeft, Key.DirectionRight -> {
+                                isVerticalNavigation = false
+                            }
+                        }
+                    }
+                    false // 不消费事件
                 }
-            )
+        ) {
+        RecommendSection(
+            title = "热门电影",
+            videos = hotMovies,
+            from = VideoCardSource.DOUBAN,
+            isLoading = isLoadingMovies,
+            onVideoClick = { video ->
+                // TODO: 处理视频点击事件
+                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+            }
+        )
+        
+        RecommendSection(
+            title = "热门剧集",
+            videos = hotTvShows,
+            from = VideoCardSource.DOUBAN,
+            isLoading = isLoadingTvShows,
+            onVideoClick = { video ->
+                // TODO: 处理视频点击事件
+                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+            }
+        )
+        
+        RecommendSection(
+            title = "新番放送",
+            videos = bangumiCalendar,
+            from = VideoCardSource.BANGUMI,
+            isLoading = isLoadingBangumi,
+            onVideoClick = { video ->
+                // TODO: 处理视频点击事件
+                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+            }
+        )
         }
     }
 }
