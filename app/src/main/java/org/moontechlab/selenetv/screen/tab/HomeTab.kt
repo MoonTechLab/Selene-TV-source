@@ -155,8 +155,8 @@ fun HomeTab(
                     false // 不消费事件
                 }
         ) {
-            // 顶部留出 TabSwitcher 的空间
-            Spacer(modifier = Modifier.height(46.dp))
+            // 顶部留出 TabSwitcher 的空间 + 额外间距
+            Spacer(modifier = Modifier.height(56.dp))
             
             RecommendSection(
             title = "热门电影",

@@ -67,14 +67,18 @@ fun RecommendSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .padding(bottom = 24.dp)  // container 底部 margin: 24
     ) {
         // 区块标题 - 纯展示，不可获得焦点
+        // titleContainer: paddingHorizontal 16, paddingVertical 6, marginLeft 19
         Text(
             text = title,
             color = Color.White,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 48.dp, bottom = 8.dp)
+            modifier = Modifier
+                .padding(start = 16.dp + 19.dp)  // paddingHorizontal 16 + marginLeft 19 = 35
+                .padding(vertical = 6.dp)         // paddingVertical 6
         )
         
         // LazyRow 专用的 BringIntoViewSpec，保持水平滚动功能
@@ -82,20 +86,21 @@ fun RecommendSection(
             object : BringIntoViewSpec {
                 override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
                     // 将聚焦项滚动到 30% 位置（TV 标准行为）
-                    val targetOffset = containerSize * 0.4f
+                    val targetOffset = containerSize * 0.35f
                     return offset - targetOffset + (size / 2f)
                 }
             }
         }
         
         // 卡片列表
+        // cardsContainer: paddingHorizontal 16, paddingVertical 8
         CompositionLocalProvider(
             androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides rowBringIntoViewSpec
         ) {
             LazyRow(
                 state = listState,
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(horizontal = 48.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusGroup()
@@ -154,8 +159,6 @@ fun RecommendSection(
             }
         }
         
-        // 区块底部间距
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
