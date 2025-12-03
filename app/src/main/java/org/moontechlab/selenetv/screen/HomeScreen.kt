@@ -28,8 +28,9 @@ fun HomeScreen() {
     // 当前选中的标签页
     var selectedTabId by remember { mutableStateOf("home") }
     
-    // 为每个 Tab 创建 FocusRequester
+    // 为每个 Tab 创建 FocusRequester (指向各 Tab 的分类筛选器)
     val homeTabFocusRequester = remember { FocusRequester() }
+    val movieCategoryFocusRequester = remember { FocusRequester() }
     
     // TabSwitcher 的 FocusRequester
     val tabSwitcherFocusRequester = remember { FocusRequester() }
@@ -83,6 +84,7 @@ fun HomeScreen() {
                     onNavigateDown = { currentTab ->
                         when (currentTab) {
                             "home" -> homeTabFocusRequester.requestFocus()
+                            "movies" -> movieCategoryFocusRequester.requestFocus()
                         }
                     },
                     onBackPressed = {
@@ -100,7 +102,10 @@ fun HomeScreen() {
                     focusRequester = homeTabFocusRequester,
                     scrollState = scrollState
                 )
-                "movies" -> MovieTab(scrollState = scrollState)
+                "movies" -> MovieTab(
+                    categoryFocusRequester = movieCategoryFocusRequester,
+                    scrollState = scrollState
+                )
                 "series" -> TvTab(scrollState = scrollState)
                 "anime" -> AnimeTab(scrollState = scrollState)
                 "variety" -> ShowTab(scrollState = scrollState)

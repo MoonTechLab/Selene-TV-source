@@ -80,12 +80,12 @@ fun VideoCard(
         (videoInfo.playTime.toFloat() / videoInfo.totalTime.toFloat()).coerceIn(0f, 1f)
     } else 0f
     
-    // 聚焦时的放大动画，使用弹簧效果（与 TabSwitcher 一致）
+    // 聚焦时的放大动画，使用弹簧效果
     val scale by animateFloatAsState(
         targetValue = if (isFocused) 1.1f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            dampingRatio = 0.6f,  // 较高阻尼，减少回弹
+            stiffness = 400f     // 较高刚度，更快响应
         ),
         label = "video_card_scale"
     )

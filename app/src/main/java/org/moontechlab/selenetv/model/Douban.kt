@@ -42,44 +42,19 @@ fun DoubanMovie.toVideoInfo(): VideoInfo {
  */
 @Serializable
 data class DoubanResponse(
-    val category: String,
-    val items: List<DoubanItem>,
-    val type: String? = null,
-    val total: Int? = null,
-    val tags: List<DoubanTag>? = null,
-    @SerialName("recommend_tags")
-    val recommendTags: List<DoubanTag>? = null
+    val items: List<DoubanItem> = emptyList()
 )
 
-/**
- * 豆瓣标签信息
- */
-@Serializable
-data class DoubanTag(
-    val category: String,
-    val title: String,
-    val selected: Boolean,
-    val types: List<DoubanTagType>? = null
-)
 
-/**
- * 豆瓣标签类型
- */
-@Serializable
-data class DoubanTagType(
-    val type: String,
-    val title: String,
-    val selected: Boolean
-)
 
 /**
  * 豆瓣 API 返回的原始数据结构
  */
 @Serializable
 data class DoubanItem(
-    val id: String,
-    val title: String,
-    val type: String,
+    val id: String? = null,
+    val title: String? = null,
+    val type: String? = null,
     @SerialName("card_subtitle")
     val cardSubtitle: String? = null,
     @SerialName("episodes_info")
@@ -203,11 +178,14 @@ data class DoubanMovieDetails(
 
 /**
  * 扩展函数：将 DoubanItem 转换为 DoubanMovie
+ * 返回 null 如果缺少必要字段
  */
-fun DoubanItem.toDoubanMovie(): DoubanMovie {
+fun DoubanItem.toDoubanMovie(): DoubanMovie? {
+    val itemId = id ?: return null
+    val itemTitle = title ?: return null
     return DoubanMovie(
-        id = id,
-        title = title,
+        id = itemId,
+        title = itemTitle,
         poster = pic?.large ?: pic?.normal ?: pic?.small ?: "",
         rate = rating?.value?.takeIf { it > 0.0 }?.toString(),
         year = extractYear(cardSubtitle)
@@ -216,12 +194,15 @@ fun DoubanItem.toDoubanMovie(): DoubanMovie {
 
 /**
  * 扩展函数：将 DoubanItem 转换为 VideoInfo
+ * 返回 null 如果缺少必要字段
  */
-fun DoubanItem.toVideoInfo(): VideoInfo {
+fun DoubanItem.toVideoInfo(): VideoInfo? {
+    val itemId = id ?: return null
+    val itemTitle = title ?: return null
     return VideoInfo(
-        id = id,
+        id = itemId,
         source = "douban",
-        title = title,
+        title = itemTitle,
         sourceName = "豆瓣",
         year = extractYear(cardSubtitle),
         cover = pic?.large ?: pic?.normal ?: pic?.small ?: "",
@@ -230,8 +211,8 @@ fun DoubanItem.toVideoInfo(): VideoInfo {
         playTime = 0,
         totalTime = 0,
         saveTime = System.currentTimeMillis(),
-        searchTitle = title,
-        doubanId = id,
+        searchTitle = itemTitle,
+        doubanId = itemId,
         rate = rating?.value?.takeIf { it > 0.0 }?.toString()
     )
 }

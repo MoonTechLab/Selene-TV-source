@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.moontechlab.selenetv.model.*
 import java.net.HttpURLConnection
@@ -58,15 +59,18 @@ class DoubanService private constructor(private val context: Context) {
     
     /**
      * 将豆瓣 API 返回的 Item 转换为 DoubanMovie
+     * 返回 null 如果缺少必要字段
      */
-    private fun parseItemToMovie(item: DoubanItem): DoubanMovie {
+    private fun parseItemToMovie(item: DoubanItem): DoubanMovie? {
+        val id = item.id ?: return null
+        val title = item.title ?: return null
         val poster = item.pic?.large ?: item.pic?.normal ?: item.pic?.small ?: ""
         val rate = item.rating?.value?.toString() ?: item.rating?.starCount?.toString()
         val year = item.cardSubtitle?.split("/")?.firstOrNull()?.trim() ?: ""
         
         return DoubanMovie(
-            id = item.id,
-            title = item.title,
+            id = id,
+            title = title,
             poster = poster,
             rate = rate,
             year = year
@@ -259,14 +263,11 @@ class DoubanService private constructor(private val context: Context) {
                         return ApiResponse.Error("豆瓣数据格式错误: items 为空")
                     }
                     
-                    val movies = data.items.map { parseItemToMovie(it) }
+                    val movies = data.items.mapNotNull { parseItemToMovie(it) }
                     
                     // 缓存成功的结果，缓存时间为 6 小时
                     try {
-                        val jsonData = json.encodeToString(
-                            ListSerializer(DoubanMovie.serializer()),
-                            movies
-                        )
+                        val jsonData = json.encodeToString(movies)
                         cacheService.set(cacheKey, jsonData, 6 * 60 * 60 * 1000L)
                     } catch (cacheError: Exception) {
                         android.util.Log.d("DoubanService", "缓存数据失败: ${cacheError.message}")
@@ -415,14 +416,11 @@ class DoubanService private constructor(private val context: Context) {
                     
                     val filteredItems = data.items
                         .filter { it.type == "movie" || it.type == "tv" }
-                        .map { parseItemToMovie(it) }
+                        .mapNotNull { parseItemToMovie(it) }
                     
                     // 缓存成功的结果，缓存时间为 6 小时
                     try {
-                        val jsonData = json.encodeToString(
-                            ListSerializer(DoubanMovie.serializer()),
-                            filteredItems
-                        )
+                        val jsonData = json.encodeToString(filteredItems)
                         cacheService.set(cacheKey, jsonData, 6 * 60 * 60 * 1000L)
                     } catch (cacheError: Exception) {
                         android.util.Log.d("DoubanService", "缓存数据失败: ${cacheError.message}")
@@ -490,7 +488,7 @@ class DoubanService private constructor(private val context: Context) {
                     
                     // 缓存成功的结果，缓存时间为3天
                     try {
-                        val jsonData = json.encodeToString(DoubanMovieDetails.serializer(), details)
+                        val jsonData = json.encodeToString(details)
                         cacheService.set(cacheKey, jsonData, 3 * 24 * 60 * 60 * 1000L)
                     } catch (cacheError: Exception) {
                         android.util.Log.d("DoubanService", "缓存豆瓣详情数据失败: ${cacheError.message}")
