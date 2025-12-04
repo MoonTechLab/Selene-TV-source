@@ -260,11 +260,9 @@ fun MovieTab(
         dataState.movies.chunked(COLUMNS)
     }
     
-    // 计算可见行范围 (虚拟化渲染)
-    val visibleRowRange = remember(focusedRowIndex, rows.size) {
-        val startRow = maxOf(0, focusedRowIndex - RENDER_BUFFER)
-        val endRow = minOf(rows.size, focusedRowIndex + RENDER_BUFFER + 1)
-        startRow until endRow
+    // 判断行是否可见 (前3行始终渲染 + 聚焦点附近的行)
+    fun isRowVisible(rowIndex: Int): Boolean {
+        return rowIndex < 3 || rowIndex in (focusedRowIndex - RENDER_BUFFER)..(focusedRowIndex + RENDER_BUFFER)
     }
     
     // 筛选区域高度 (用于计算滚动位置)
@@ -457,7 +455,7 @@ fun MovieTab(
                 // 内容区域 (8列网格)
                 ContentSection(
                     rows = rows,
-                    visibleRowRange = visibleRowRange,
+                    isRowVisible = ::isRowVisible,
                     isLoading = dataState.isLoading,
                     cardGap = gridLayout.cardGap,
                     totalRows = rows.size,
@@ -751,7 +749,7 @@ private fun FilterRow(
 @Composable
 private fun ContentSection(
     rows: List<List<DoubanMovie>>,
-    visibleRowRange: IntRange,
+    isRowVisible: (Int) -> Boolean,
     isLoading: Boolean,
     cardGap: Dp,
     totalRows: Int,
@@ -785,7 +783,7 @@ private fun ContentSection(
         } else {
             // 正常内容
             rows.forEachIndexed { rowIndex, rowMovies ->
-                val isVisible = rowIndex in visibleRowRange
+                val isVisible = isRowVisible(rowIndex)
                 val isLastRow = rowIndex == rows.lastIndex
                 
                 MovieGridRow(
