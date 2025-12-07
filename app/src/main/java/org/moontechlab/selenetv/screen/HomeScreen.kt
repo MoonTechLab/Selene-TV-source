@@ -34,6 +34,7 @@ fun HomeScreen() {
     val tvCategoryFocusRequester = remember { FocusRequester() }
     val animeCategoryFocusRequester = remember { FocusRequester() }
     val showCategoryFocusRequester = remember { FocusRequester() }
+    val settingsFocusRequester = remember { FocusRequester() }
     
     // TabSwitcher 的 FocusRequester
     val tabSwitcherFocusRequester = remember { FocusRequester() }
@@ -91,6 +92,7 @@ fun HomeScreen() {
                             "series" -> tvCategoryFocusRequester.requestFocus()
                             "anime" -> animeCategoryFocusRequester.requestFocus()
                             "show" -> showCategoryFocusRequester.requestFocus()
+                            "settings" -> settingsFocusRequester.requestFocus()
                         }
                     },
                     onBackPressed = {
@@ -125,7 +127,10 @@ fun HomeScreen() {
                     scrollState = scrollState
                 )
                 "live" -> LiveTab(scrollState = scrollState)
-                "settings" -> SettingsTab(scrollState = scrollState)
+                "settings" -> SettingsTab(
+                    focusRequester = settingsFocusRequester,
+                    scrollState = scrollState
+                )
             }
         }
         }

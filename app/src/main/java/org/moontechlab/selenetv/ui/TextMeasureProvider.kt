@@ -32,7 +32,6 @@ class TextMeasureContext {
      * 请求测量文本宽度（懒测量：只在需要时调用）
      */
     fun measureText(id: String, text: String, onMeasured: (width: Int) -> Unit) {
-        Log.d(TAG, "📝 Measure requested: id=$id, text=${text.take(15)}...")
         currentRequest = MeasureRequest(id, text, onMeasured)
     }
     
@@ -41,10 +40,7 @@ class TextMeasureContext {
      */
     fun clearMeasure(id: String) {
         if (currentRequest?.id == id) {
-            Log.d(TAG, "🧹 Measure cleared: id=$id")
             currentRequest = null
-        } else {
-            Log.d(TAG, "⏭️ Skip clear: id=$id, current=${currentRequest?.id}")
         }
     }
     
@@ -60,7 +56,6 @@ class TextMeasureContext {
                 softWrap = false,
                 modifier = Modifier.onGloballyPositioned { coordinates ->
                     val width = coordinates.size.width
-                    Log.d(TAG, "📏 Measured [${request.id}]: ${request.text.take(15)}... = $width px")
                     request.onMeasured(width)
                 }
             )

@@ -3,14 +3,13 @@ package org.moontechlab.selenetv
 import android.app.Application
 import android.util.Log
 import coil.EventListener
+import org.moontechlab.selenetv.service.AppDataService
+import org.moontechlab.selenetv.server.RemoteControlServer
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import coil.decode.DecodeResult
-import coil.fetch.FetchResult
 import coil.request.CachePolicy
 import coil.request.ErrorResult
 import coil.request.ImageRequest
-import coil.request.SuccessResult
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -18,6 +17,7 @@ import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
+import kotlin.concurrent.thread
 
 /**
  * 自定义 Application 类，用于配置 Coil 图片加载
@@ -26,7 +26,25 @@ class SeleneApplication : Application(), ImageLoaderFactory {
     
     override fun onCreate() {
         super.onCreate()
+        // 初始化 AppDataService
+        AppDataService.init(this)
         Log.d("SeleneApplication", "Application initialized")
+        
+        // 启动遥控器 Web 服务器
+        startRemoteControlServer()
+    }
+    
+    private fun startRemoteControlServer() {
+        thread {
+            if (RemoteControlServer.start()) {
+                Log.i("SeleneApplication", "Remote control available at http://<device-ip>:${RemoteControlServer.getPort()}/remote_control")
+            }
+        }
+    }
+    
+    override fun onTerminate() {
+        super.onTerminate()
+        RemoteControlServer.stop()
     }
     
     override fun newImageLoader(): ImageLoader {
