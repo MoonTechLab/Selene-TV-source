@@ -293,7 +293,7 @@ private fun RemoteControlQrCode(modifier: Modifier = Modifier) {
         
         if (remoteUrl.isNotEmpty()) {
             Text(
-                text = "或浏览器打开：$remoteUrl",
+                text = "同局域网下浏览器打开：$remoteUrl",
                 fontSize = 11.sp,
                 color = TextGray
             )
