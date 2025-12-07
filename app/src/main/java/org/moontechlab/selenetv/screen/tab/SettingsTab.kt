@@ -128,6 +128,7 @@ fun SettingsTab(
             RemoteControlQrCode(
                 modifier = Modifier
                     .weight(1f)
+                    .fillMaxHeight()
             )
 
             // 右侧设置区域 - 占50%
@@ -268,6 +269,8 @@ private fun RemoteControlQrCode(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        Spacer(modifier = Modifier.height(24.dp))
+        
         qrBitmap?.let { bitmap ->
             Image(
                 bitmap = bitmap.asImageBitmap(),
