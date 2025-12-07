@@ -49,7 +49,7 @@ fun AnimatedTabContent(
     LaunchedEffect(selectedTabId) {
         if (selectedTabId != displayedTabId) {
             // 判断切换方向
-            val tabOrder = listOf("search", "home", "movies", "series", "anime", "variety", "live", "settings")
+            val tabOrder = listOf("search", "home", "movies", "series", "anime", "show", "live", "settings")
             val currentIndex = tabOrder.indexOf(displayedTabId)
             val newIndex = tabOrder.indexOf(selectedTabId)
             val isMovingRight = newIndex > currentIndex

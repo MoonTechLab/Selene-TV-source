@@ -174,7 +174,7 @@ fun FilterSelectorPreview() {
         FilterOption("movie", "电影"),
         FilterOption("tv", "电视剧"),
         FilterOption("anime", "动漫"),
-        FilterOption("variety", "综艺"),
+        FilterOption("show", "综艺"),
         FilterOption("documentary", "纪录片")
     )
     

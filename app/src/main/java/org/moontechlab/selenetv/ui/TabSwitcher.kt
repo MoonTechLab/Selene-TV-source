@@ -69,7 +69,7 @@ fun TabSwitcher(
             TabItem("movies", "电影", Icons.Default.Movie),
             TabItem("series", "剧集", Icons.Default.Tv),
             TabItem("anime", "动漫", Icons.Default.Pets),
-            TabItem("variety", "综艺", Icons.Default.Stars),
+            TabItem("show", "综艺", Icons.Default.Stars),
             TabItem("live", "直播", Icons.Default.RadioButtonChecked),
             TabItem("settings", "设置", Icons.Default.Settings)
         )
