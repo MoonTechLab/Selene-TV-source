@@ -12,9 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -46,6 +49,9 @@ import qrcode.QRCode
 import java.net.HttpURLConnection
 import java.net.NetworkInterface
 import java.net.URL
+import android.util.Log
+
+private const val TAG = "LoginScreen"
 
 // ==================== 颜色常量 ====================
 private val ItemBgDefault = Color(0x14FFFFFF)
@@ -337,7 +343,7 @@ private fun LoginScreenContent(
                 onValueChange = { serverUrl = it },
                 placeholder = "例如: 192.168.1.100:3000",
                 focusRequester = serverUrlFocusRequester,
-                onNext = { usernameFocusRequester.requestFocus() }
+                downFocusRequester = usernameFocusRequester
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -349,7 +355,8 @@ private fun LoginScreenContent(
                 onValueChange = { username = it },
                 placeholder = "请输入用户名",
                 focusRequester = usernameFocusRequester,
-                onNext = { passwordFocusRequester.requestFocus() }
+                upFocusRequester = serverUrlFocusRequester,
+                downFocusRequester = passwordFocusRequester
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -362,7 +369,8 @@ private fun LoginScreenContent(
                 placeholder = "请输入密码",
                 isPassword = true,
                 focusRequester = passwordFocusRequester,
-                onNext = { loginButtonFocusRequester.requestFocus() }
+                upFocusRequester = usernameFocusRequester,
+                downFocusRequester = loginButtonFocusRequester
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -372,7 +380,8 @@ private fun LoginScreenContent(
                 text = if (isLoading) "登录中..." else "登录",
                 enabled = !isLoading,
                 onClick = { handleLogin() },
-                modifier = Modifier.focusRequester(loginButtonFocusRequester)
+                modifier = Modifier.focusRequester(loginButtonFocusRequester),
+                upFocusRequester = passwordFocusRequester
             )
         }
     }
@@ -380,7 +389,7 @@ private fun LoginScreenContent(
 
 
 /**
- * 登录表单输入框
+ * 登录表单输入框 - 使用 focusProperties 控制焦点导航
  */
 @Composable
 private fun LoginTextField(
@@ -390,9 +399,11 @@ private fun LoginTextField(
     placeholder: String,
     isPassword: Boolean = false,
     focusRequester: FocusRequester,
-    onNext: () -> Unit = {}
+    upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     Column {
         Text(
@@ -408,7 +419,18 @@ private fun LoginTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
-                .onFocusChanged { isFocused = it.isFocused }
+                .focusProperties {
+                    // 指定上下导航的目标
+                    if (upFocusRequester != null) up = upFocusRequester
+                    if (downFocusRequester != null) down = downFocusRequester
+                    // 禁用左右方向键导航
+                    left = FocusRequester.Cancel
+                    right = FocusRequester.Cancel
+                }
+                .onFocusChanged { focusState ->
+                    Log.d(TAG, "[$label] TextField onFocusChanged: isFocused=${focusState.isFocused}")
+                    isFocused = focusState.isFocused
+                }
                 .clip(RoundedCornerShape(12.dp))
                 .background(if (isFocused) Color(0xFF3A3A3A) else Color(0xFF2A2A2A))
                 .border(
@@ -448,7 +470,8 @@ private fun LoginButton(
     text: String,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    upFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -462,6 +485,12 @@ private fun LoginButton(
         onClick = { if (enabled) onClick() },
         modifier = modifier
             .fillMaxWidth()
+            .focusProperties {
+                if (upFocusRequester != null) up = upFocusRequester
+                // 禁用左右方向键导航
+                left = FocusRequester.Cancel
+                right = FocusRequester.Cancel
+            }
             .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
