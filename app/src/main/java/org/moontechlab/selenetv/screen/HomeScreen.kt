@@ -1,6 +1,5 @@
 package org.moontechlab.selenetv.screen
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.screen.tab.*
+import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.ui.AnimatedTabContent
 import org.moontechlab.selenetv.ui.TabSwitcher
 import org.moontechlab.selenetv.ui.TextMeasureProvider
@@ -27,6 +27,14 @@ fun HomeScreen() {
     
     // 当前选中的标签页
     var selectedTabId by remember { mutableStateOf("home") }
+    
+    // 登录屏幕状态
+    var showLoginScreen by remember { mutableStateOf(false) }
+    var loginInitialServerUrl by remember { mutableStateOf("") }
+    var loginInitialUsername by remember { mutableStateOf("") }
+    
+    // SettingsTab 刷新 key，用于登录后刷新
+    var settingsRefreshKey by remember { mutableIntStateOf(0) }
     
     // 为每个 Tab 创建 FocusRequester (指向各 Tab 的分类筛选器)
     val homeTabFocusRequester = remember { FocusRequester() }
@@ -47,6 +55,12 @@ fun HomeScreen() {
     
     // 追踪焦点是否在 TabSwitcher 上
     var isTabSwitcherFocused by remember { mutableStateOf(true) }
+    
+    // 加载初始登录数据
+    LaunchedEffect(Unit) {
+        loginInitialServerUrl = AppDataService.getServerUrl() ?: ""
+        loginInitialUsername = AppDataService.getUsername() ?: ""
+    }
     
     // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
     BackHandler(enabled = !isTabSwitcherFocused) {
@@ -127,14 +141,35 @@ fun HomeScreen() {
                     scrollState = scrollState
                 )
                 "live" -> LiveTab(scrollState = scrollState)
-                "settings" -> SettingsTab(
-                    focusRequester = settingsFocusRequester,
-                    scrollState = scrollState
-                )
+                "settings" -> key(settingsRefreshKey) {
+                    SettingsTab(
+                        focusRequester = settingsFocusRequester,
+                        scrollState = scrollState,
+                        onShowLoginScreen = {
+                            coroutineScope.launch {
+                                loginInitialServerUrl = AppDataService.getServerUrl() ?: ""
+                                loginInitialUsername = AppDataService.getUsername() ?: ""
+                                showLoginScreen = true
+                            }
+                        }
+                    )
+                }
             }
         }
         }
     }
+    
+    // 登录屏幕（全屏覆盖，隐藏 TabSwitcher，带动画）
+    LoginScreen(
+        visible = showLoginScreen,
+        initialServerUrl = loginInitialServerUrl,
+        initialUsername = loginInitialUsername,
+        onDismiss = {
+            showLoginScreen = false
+            settingsRefreshKey++ // 刷新 SettingsTab
+            settingsFocusRequester.requestFocus()
+        }
+    )
 }
 
 @Preview(device = Devices.TV_1080p)

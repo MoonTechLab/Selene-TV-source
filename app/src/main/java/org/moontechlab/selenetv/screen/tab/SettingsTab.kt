@@ -94,7 +94,8 @@ private fun getPreferredIpAddress(): String? {
 @Composable
 fun SettingsTab(
     focusRequester: FocusRequester = remember { FocusRequester() },
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState = rememberScrollState(),
+    onShowLoginScreen: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -148,12 +149,10 @@ fun SettingsTab(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
+        modifier = Modifier.fillMaxSize()
     ) {
         // 顶部留出 TabSwitcher 的空间
-        Spacer(modifier = Modifier.height(78.dp))
+        Spacer(modifier = Modifier.height(64.dp))
 
         // 主内容区域 - 两栏布局（各占50%）
         Row(
@@ -173,12 +172,14 @@ fun SettingsTab(
             // 右侧设置区域 - 占50%
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(13.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 用户信息区（已登录时显示）
                 if (hasLogin) {
                     UserInfoSection(username = username, role = userRole)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(42.dp))
                 }
 
                 // 设置项组
@@ -188,7 +189,8 @@ fun SettingsTab(
                         SettingItem(
                             label = "登录实例",
                             value = serverUrl.ifEmpty { "未设置" },
-                            focusable = false
+                            focusable = false,
+                            transparentBg = true
                         )
                     }
 
@@ -196,7 +198,7 @@ fun SettingsTab(
                     if (!hasLogin) {
                         SettingButton(
                             text = "登录",
-                            onClick = { /* TODO: 实现登录逻辑 */ },
+                            onClick = { onShowLoginScreen() },
                             modifier = Modifier.focusRequester(focusRequester)
                         )
                     }
@@ -254,13 +256,7 @@ fun SettingsTab(
                             // TODO: 实现搜索缓存清理
                         },
                         onClearUserDataCache = {
-                            coroutineScope.launch {
-                                AppDataService.clearUserData()
-                                hasLogin = false
-                                username = ""
-                                serverUrl = ""
-                                userRole = "user"
-                            }
+                            // TODO: 实现用户数据缓存清理
                         }
                     )
 
@@ -843,9 +839,19 @@ private fun RemoteControlQrCode(
     Column(
         modifier = modifier.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        // verticalArrangement = Arrangement.Center
+    ) { 
+        Spacer(modifier = Modifier.height(36.dp))
+
+        // 标题
+        Text(
+            text = "Web 遥控器",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextDefault
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
         
         qrBitmap?.let { bitmap ->
             Image(
@@ -932,8 +938,8 @@ private fun UserInfoSection(
 @Composable
 private fun RoleBadge(role: String) {
     val (badgeColor, badgeText) = when (role) {
-        "admin" -> RoleBadgeOwner to "站长"
-        "manager" -> RoleBadgeAdmin to "管理"
+        "owner" -> RoleBadgeOwner to "站长"
+        "admin" -> RoleBadgeAdmin to "管理"
         else -> RoleBadgeUser to "用户"
     }
 
@@ -974,9 +980,43 @@ private fun SettingItem(
     label: String,
     value: String,
     focusable: Boolean = true,
+    transparentBg: Boolean = false,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    // 不可聚焦时使用普通 Row
+    if (!focusable) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .then(
+                    if (!transparentBg) Modifier
+                        .clip(RoundedCornerShape(40.dp))
+                        .background(ItemBgDefault)
+                    else Modifier
+                )
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = TextDefault
+            )
+            Text(
+                text = value,
+                fontSize = 11.sp,
+                color = TextGray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 260.dp)
+            )
+        }
+        return
+    }
+
     var isFocused by remember { mutableStateOf(false) }
 
     val labelColor = if (isFocused) TextFocused else TextDefault
@@ -986,12 +1026,11 @@ private fun SettingItem(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .then(if (!focusable) Modifier.focusable(false) else Modifier),
+            .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = ItemBgDefault,
+            containerColor = if (transparentBg) Color.Transparent else ItemBgDefault,
             focusedContainerColor = ItemBgFocused
         )
     ) {

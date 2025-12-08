@@ -25,15 +25,34 @@ object AppDataService {
     private const val KEY_DOUBAN_IMAGE_SOURCE = "douban_image_source"
     private const val KEY_M3U8_PROXY_URL = "m3u8_proxy_url"
     private const val KEY_TMDB_API_KEY = "tmdb_api_key"
+    private const val KEY_SESSION_TOKEN = "session_token"
 
     private lateinit var prefs: SharedPreferences
+    
+    // 当前会话的 token（每次启动重新生成）
+    private var sessionToken: String = ""
 
     /**
      * 初始化服务，需要在 Application 中调用
      */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // 每次启动生成新的 session token
+        generateSessionToken()
     }
+    
+    /**
+     * 生成随机 session token
+     */
+    private fun generateSessionToken() {
+        sessionToken = java.util.UUID.randomUUID().toString().replace("-", "")
+        Log.d(TAG, "Generated session token: $sessionToken")
+    }
+    
+    /**
+     * 获取当前会话 token
+     */
+    fun getSessionToken(): String = sessionToken
 
     // ==================== 用户数据相关 ====================
 
@@ -301,19 +320,23 @@ object AppDataService {
                 }
             }
 
-            val authCookie = cookieMap["auth"] ?: return "user"
+            val authCookie = cookieMap["auth"]
+            if (authCookie == null) {
+                return "user"
+            }
 
             // 处理可能的双重编码
             var decoded = java.net.URLDecoder.decode(authCookie, "UTF-8")
+            
             // 如果解码后仍然包含 %，说明是双重编码，需要再次解码
             if (decoded.contains("%")) {
                 decoded = java.net.URLDecoder.decode(decoded, "UTF-8")
             }
 
             val authData = JSONObject(decoded)
-            authData.optString("role", "user")
+            val role = authData.optString("role", "user")
+            role
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse role from cookies", e)
             "user"
         }
     }

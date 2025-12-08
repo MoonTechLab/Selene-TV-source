@@ -101,14 +101,12 @@ fun VideoCard(
     // 懒测量：只在聚焦时才请求测量
     LaunchedEffect(isFocused) {
         if (isFocused && !isMeasured && textMeasure != null) {
-            Log.d(TAG, "🔍 [${videoInfo.title.take(10)}] Focused, requesting measure...")
             textMeasure.measureText(
                 id = videoInfo.id,
                 text = videoInfo.title
             ) { width ->
                 titleWidth = width
                 isMeasured = true
-                Log.d(TAG, "✅ [${videoInfo.title.take(10)}] Measured: $width px, containerWidth=$containerWidth")
             }
         } else if (!isFocused) {
             // 失焦时清除测量请求（只清除自己的）
@@ -116,16 +114,10 @@ fun VideoCard(
         }
     }
     
-    // 调试日志
-    LaunchedEffect(isFocused, titleWidth, containerWidth, needsScroll) {
-        Log.d(TAG, "📊 [${videoInfo.title.take(10)}] isFocused=$isFocused, isMeasured=$isMeasured, titleWidth=$titleWidth, containerWidth=$containerWidth, needsScroll=$needsScroll")
-    }
-    
     // 滚动动画控制
     LaunchedEffect(needsScroll) {
         if (needsScroll) {
             val loopDistance = titleWidth + textGapPx
-            Log.d(TAG, "🎬 [${videoInfo.title.take(10)}] Starting scroll, loopDistance=$loopDistance")
             delay(1000) // 先停顿1秒
             while (true) {
                 scrollAnim.animateTo(
@@ -320,7 +312,6 @@ fun VideoCard(
                     .onGloballyPositioned { coordinates ->
                         val newContainerWidth = coordinates.size.width
                         if (newContainerWidth != containerWidth) {
-                            Log.d(TAG, "📐 [${videoInfo.title.take(10)}] Container: $newContainerWidth px")
                             containerWidth = newContainerWidth
                         }
                     }
