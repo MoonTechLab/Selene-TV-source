@@ -33,6 +33,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.VideoInfo
+import org.moontechlab.selenetv.util.getImageUrlSync
 import kotlin.math.roundToInt
 
 private const val TAG = "VideoCard"
@@ -184,7 +185,7 @@ fun VideoCard(
                         )
                 ) {
                     AsyncImage(
-                        model = videoInfo.cover,
+                        model = getImageUrlSync(videoInfo.cover),
                         contentDescription = videoInfo.title,
                         modifier = Modifier
                             .fillMaxSize()
