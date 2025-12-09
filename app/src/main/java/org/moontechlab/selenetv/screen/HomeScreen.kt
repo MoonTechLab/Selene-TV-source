@@ -62,6 +62,7 @@ fun HomeScreen() {
         loginInitialUsername = AppDataService.getUsername() ?: ""
     }
     
+    
     // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
     BackHandler(enabled = !isTabSwitcherFocused) {
         coroutineScope.launch {
