@@ -215,7 +215,7 @@ fun HomeTab(
             // 播放历史 - 仅在有数据时显示
             if (playRecords.isNotEmpty() || isLoadingPlayRecords) {
                 RecommendSection(
-                    title = "播放历史",
+                    title = "继续观看",
                     videos = playRecords,
                     from = VideoCardSource.PLAYRECORD,
                     isLoading = isLoadingPlayRecords,
@@ -228,7 +228,7 @@ fun HomeTab(
             // 收藏夹 - 仅在有数据时显示
             if (favorites.isNotEmpty() || isLoadingFavorites) {
                 RecommendSection(
-                    title = "收藏夹",
+                    title = "我的收藏",
                     videos = favorites,
                     from = VideoCardSource.FAVORITE,
                     isLoading = isLoadingFavorites,

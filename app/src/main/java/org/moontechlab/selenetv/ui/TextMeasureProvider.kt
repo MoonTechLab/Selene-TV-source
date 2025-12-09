@@ -51,7 +51,7 @@ class TextMeasureContext {
             Text(
                 text = request.text,
                 color = Color.Transparent,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 softWrap = false,
                 modifier = Modifier.onGloballyPositioned { coordinates ->

@@ -74,11 +74,11 @@ fun RecommendSection(
         Text(
             text = title,
             color = Color.White,
-            fontSize = 13.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier
-                .padding(start = 16.dp + 19.dp)  // paddingHorizontal 16 + marginLeft 19 = 35
-                .padding(vertical = 6.dp)         // paddingVertical 6
+                .padding(start = 16.dp + 15.dp)  // paddingHorizontal 16 + marginLeft 19 = 35
+                .padding(vertical = 7.dp)         // paddingVertical 7
         )
         
         // LazyRow 专用的 BringIntoViewSpec，保持水平滚动功能

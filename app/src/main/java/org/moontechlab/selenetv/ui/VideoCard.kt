@@ -125,7 +125,7 @@ fun VideoCard(
                 scrollAnim.animateTo(
                     targetValue = -loopDistance.toFloat(),
                     animationSpec = tween(
-                        durationMillis = loopDistance * 10, // 10ms/px，更快的滚动速度
+                        durationMillis = loopDistance * 8, // 8ms/px，更快的滚动速度
                         easing = LinearEasing
                     )
                 )
@@ -252,7 +252,8 @@ fun VideoCard(
                         Text(
                             text = if (videoInfo.index == 0) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
                             color = Color.White,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -272,7 +273,8 @@ fun VideoCard(
                         Text(
                             text = videoInfo.rate,
                             color = Color.White,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -309,7 +311,7 @@ fun VideoCard(
             Box(
                 modifier = Modifier
                     .width(90.dp)
-                    .height(14.dp)
+                    .height(18.dp)
                     .clipToBounds()
                     .onGloballyPositioned { coordinates ->
                         val newContainerWidth = coordinates.size.width
@@ -331,7 +333,7 @@ fun VideoCard(
                         Text(
                             text = videoInfo.title,
                             color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -341,7 +343,7 @@ fun VideoCard(
                         Text(
                             text = videoInfo.title,
                             color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -351,7 +353,7 @@ fun VideoCard(
                     Text(
                         text = videoInfo.title,
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -381,7 +383,7 @@ fun VideoCard(
                     Text(
                         text = videoInfo.sourceName,
                         color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 8.sp
+                        fontSize = 10.sp
                     )
                 }
             }
