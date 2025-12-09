@@ -238,19 +238,19 @@ fun VideoCard(
                      from == VideoCardSource.FAVORITE || 
                      from == VideoCardSource.SEARCH ||
                      from == VideoCardSource.SOURCE) &&
-                    videoInfo.totalEpisodes > 0) {
+                    videoInfo.totalEpisodes > 1) {
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(4.dp))
                             .background(Color(0xFF4CAF50))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
                             .align(Alignment.TopEnd)
                     ) {
                         Text(
-                            text = "${videoInfo.index}/${videoInfo.totalEpisodes}",
+                            text = if (videoInfo.index == 0) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
                             color = Color.White,
-                            fontSize = 8.sp
+                            fontSize = 10.sp
                         )
                     }
                 }
@@ -365,7 +365,7 @@ fun VideoCard(
                  from == VideoCardSource.FAVORITE || 
                  from == VideoCardSource.SOURCE) && 
                 videoInfo.sourceName.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(2.dp))

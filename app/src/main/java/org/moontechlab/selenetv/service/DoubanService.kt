@@ -708,6 +708,12 @@ class DoubanService private constructor(private val context: Context) {
      * 获取豆瓣数据源配置
      */
     private fun getDoubanDataSourceKey(): DoubanDataSourceKey {
-        return DoubanDataSourceKey.DIRECT
+        val key = AppDataService.getDoubanDataSourceKeySync()
+        return when (key) {
+            "cors_proxy" -> DoubanDataSourceKey.CORS_PROXY
+            "cdn_tencent" -> DoubanDataSourceKey.CDN_TENCENT
+            "cdn_aliyun" -> DoubanDataSourceKey.CDN_ALIYUN
+            else -> DoubanDataSourceKey.DIRECT
+        }
     }
 }

@@ -21,10 +21,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
 import org.moontechlab.selenetv.service.ApiResponse
+import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.ui.RecommendSection
@@ -38,6 +41,14 @@ fun HomeTab(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    
+    // 播放历史数据状态
+    var playRecords by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
+    var isLoadingPlayRecords by remember { mutableStateOf(true) }
+    
+    // 收藏夹数据状态
+    var favorites by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
+    var isLoadingFavorites by remember { mutableStateOf(true) }
     
     // 热门电影数据状态
     var hotMovies by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
@@ -59,6 +70,48 @@ fun HomeTab(
     LaunchedEffect(Unit) {
         val doubanService = DoubanService.getInstance(context)
         val bangumiService = BangumiService.getInstance(context)
+        
+        // 加载播放历史，然后加载收藏夹（收藏夹需要播放历史来填充 index）
+        coroutineScope.launch {
+            isLoadingPlayRecords = true
+            isLoadingFavorites = true
+            
+            // 用于匹配的播放记录 Map (source+id -> PlayRecord)
+            var playRecordsMap: Map<String, org.moontechlab.selenetv.model.PlayRecord> = emptyMap()
+            
+            try {
+                val records = withContext(Dispatchers.IO) {
+                    ApiService.getPlayRecords()
+                }
+                playRecordsMap = records
+                playRecords = records.values
+                    .sortedByDescending { it.saveTime }
+                    .map { it.toVideoInfo() }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeTab", "加载播放历史失败: ${e.message}")
+            }
+            isLoadingPlayRecords = false
+            
+            // 加载收藏夹，并根据播放历史填充 index
+            try {
+                val favList = withContext(Dispatchers.IO) {
+                    ApiService.getFavorites()
+                }
+                favorites = favList.map { fav ->
+                    val key = "${fav.source}+${fav.id}"
+                    val matchedRecord = playRecordsMap[key]
+                    val videoInfo = fav.toVideoInfo()
+                    if (matchedRecord != null) {
+                        videoInfo.copy(index = matchedRecord.index)
+                    } else {
+                        videoInfo
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeTab", "加载收藏夹失败: ${e.message}")
+            }
+            isLoadingFavorites = false
+        }
         
         // 加载热门电影
         coroutineScope.launch {
@@ -158,6 +211,32 @@ fun HomeTab(
         ) {
             // 顶部留出 TabSwitcher 的空间 + 额外间距
             Spacer(modifier = Modifier.height(56.dp))
+            
+            // 播放历史 - 仅在有数据时显示
+            if (playRecords.isNotEmpty() || isLoadingPlayRecords) {
+                RecommendSection(
+                    title = "播放历史",
+                    videos = playRecords,
+                    from = VideoCardSource.PLAYRECORD,
+                    isLoading = isLoadingPlayRecords,
+                    onVideoClick = { video ->
+                        android.util.Log.d("HomeTab", "点击播放历史: ${video.title}")
+                    }
+                )
+            }
+            
+            // 收藏夹 - 仅在有数据时显示
+            if (favorites.isNotEmpty() || isLoadingFavorites) {
+                RecommendSection(
+                    title = "收藏夹",
+                    videos = favorites,
+                    from = VideoCardSource.FAVORITE,
+                    isLoading = isLoadingFavorites,
+                    onVideoClick = { video ->
+                        android.util.Log.d("HomeTab", "点击收藏: ${video.title}")
+                    }
+                )
+            }
             
             RecommendSection(
             title = "热门电影",
