@@ -254,9 +254,6 @@ fun SettingsTab(
                         },
                         onClearSearchCache = {
                             // TODO: 实现搜索缓存清理
-                        },
-                        onClearUserDataCache = {
-                            // TODO: 实现用户数据缓存清理
                         }
                     )
 
@@ -1026,7 +1023,11 @@ private fun SettingItem(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { event ->
+                // 拦截左右方向键，阻止焦点移动
+                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+            },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
@@ -1077,7 +1078,11 @@ private fun SettingButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { event ->
+                // 拦截左右方向键，阻止焦点移动
+                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+            },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
@@ -1107,8 +1112,7 @@ private fun SettingButton(
 @Composable
 private fun CacheButtonsRow(
     onClearDoubanCache: () -> Unit,
-    onClearSearchCache: () -> Unit,
-    onClearUserDataCache: () -> Unit
+    onClearSearchCache: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1123,11 +1127,6 @@ private fun CacheButtonsRow(
             text = "清空搜索缓存",
             modifier = Modifier.weight(1f),
             onClick = onClearSearchCache
-        )
-        CacheButton(
-            text = "清空用户数据缓存",
-            modifier = Modifier.weight(1f),
-            onClick = onClearUserDataCache
         )
     }
 }
@@ -1149,7 +1148,7 @@ private fun CacheButton(
         onClick = onClick,
         modifier = modifier.onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = CacheButtonBg,
             focusedContainerColor = CacheButtonBgFocused
@@ -1163,7 +1162,8 @@ private fun CacheButton(
         ) {
             Text(
                 text = text,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
                 color = textColor
             )
         }
@@ -1185,9 +1185,13 @@ private fun LogoutButton(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged { isFocused = it.isFocused }
+            .onKeyEvent { event ->
+                // 拦截左右方向键，阻止焦点移动
+                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+            },
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = LogoutButtonBg,
             focusedContainerColor = LogoutButtonBgFocused
@@ -1202,6 +1206,7 @@ private fun LogoutButton(
             Text(
                 text = "退出登录",
                 fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
                 color = textColor
             )
         }
