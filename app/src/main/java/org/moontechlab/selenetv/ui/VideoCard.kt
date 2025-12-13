@@ -99,13 +99,13 @@ enum class VideoCardStyle(
     val titleFontSize: Int,
     val ratingBadgeSize: Dp,
     val ratingFontSize: Int,
-    val ratingTranslation: Float,
+    val ratingTranslation: Dp,
     val episodeFontSize: Int,
     val episodePaddingH: Dp,
     val episodePaddingV: Dp
 ) {
-    MEDIUM(100.dp, 150.dp, 10.dp, 2.dp, 12, 30.dp, 12, 20f, 12, 6.dp, 3.dp),  // 中等尺寸
-    LARGE(120.dp, 180.dp, 12.dp, 3.dp, 14, 36.dp, 15, 24f, 14, 8.dp, 4.dp)    // 大尺寸
+    MEDIUM(100.dp, 150.dp, 10.dp, 2.dp, 12, 30.dp, 12, 5.dp, 12, 6.dp, 3.dp),  // 中等尺寸
+    LARGE(120.dp, 180.dp, 12.dp, 3.dp, 14, 36.dp, 15, 6.dp, 14, 8.dp, 4.dp)    // 大尺寸
 }
 
 /**
@@ -348,8 +348,8 @@ fun VideoCard(
                                 .align(Alignment.Center)
                                 .graphicsLayer {
                                     rotationZ = 45f
-                                    translationX = -style.ratingTranslation
-                                    translationY = style.ratingTranslation
+                                    translationX = -style.ratingTranslation.toPx()
+                                    translationY = style.ratingTranslation.toPx()
                                 }
                         )
                     }
