@@ -10,7 +10,7 @@ data class SearchResource(
     val key: String,
     val name: String,
     val api: String,
-    val detail: String,
-    val from: String,
-    val disabled: Boolean
+    val detail: String? = null,
+    val from: String? = null,
+    val disabled: Boolean = false
 )

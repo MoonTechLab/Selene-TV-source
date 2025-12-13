@@ -1,6 +1,5 @@
 package org.moontechlab.selenetv.ui
 
-import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,8 +42,6 @@ import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.util.getImageUrlSync
 import kotlin.math.roundToInt
-
-private const val TAG = "VideoCard"
 
 // 两个文本实例之间的间隔（dp）
 private val TEXT_GAP_DP = 30.dp
@@ -168,17 +165,22 @@ fun VideoCard(
     }
     
     // 懒测量：只在聚焦时才请求测量
-    LaunchedEffect(isFocused) {
+    LaunchedEffect(isFocused, isMeasured) {
         if (isFocused && !isMeasured && textMeasure != null) {
             textMeasure.measureText(
                 id = videoInfo.id,
-                text = videoInfo.title
+                text = videoInfo.title,
+                fontSize = style.titleFontSize.toFloat()
             ) { width ->
                 titleWidth = width
                 isMeasured = true
             }
-        } else if (!isFocused) {
-            // 失焦时清除测量请求（只清除自己的）
+        }
+    }
+    
+    // 组件销毁时清除测量请求
+    DisposableEffect(videoInfo.id) {
+        onDispose {
             textMeasure?.clearMeasure(videoInfo.id)
         }
     }
@@ -220,7 +222,7 @@ fun VideoCard(
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放，使用自定义动画
         shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(cornerRadius)
+            shape = RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius, bottomStart = 0.dp, bottomEnd = 0.dp)
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
@@ -289,15 +291,16 @@ fun VideoCard(
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(4.dp))
                             .background(Color.Black.copy(alpha = 0.6f))
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .padding(horizontal = style.episodePaddingH, vertical = style.episodePaddingV)
                             .align(Alignment.TopStart)
                     ) {
                         Text(
                             text = videoInfo.year,
                             color = Color.White,
-                            fontSize = 8.sp
+                            fontSize = style.episodeFontSize.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -318,7 +321,7 @@ fun VideoCard(
                             .align(Alignment.TopEnd)
                     ) {
                         Text(
-                            text = if (videoInfo.index == 0 || from == VideoCardSource.DOUBAN) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
+                            text = if (videoInfo.index == 0) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
                             color = Color.White,
                             fontSize = style.episodeFontSize.sp,
                             fontWeight = FontWeight.Bold
@@ -445,7 +448,7 @@ fun VideoCard(
                  from == VideoCardSource.FAVORITE || 
                  from == VideoCardSource.SOURCE) && 
                 videoInfo.sourceName.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(2.dp))
@@ -459,7 +462,7 @@ fun VideoCard(
                     Text(
                         text = videoInfo.sourceName,
                         color = Color.White.copy(alpha = 0.7f),
-                        fontSize = 10.sp
+                        fontSize = 11.sp
                     )
                 }
             }

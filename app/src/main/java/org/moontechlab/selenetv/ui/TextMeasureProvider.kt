@@ -1,6 +1,5 @@
 package org.moontechlab.selenetv.ui
 
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,54 +10,81 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 
-private const val TAG = "TextMeasure"
-
 /**
  * 文本测量请求
  */
 data class MeasureRequest(
     val id: String,
     val text: String,
+    val fontSize: Float,  // sp 值
     val onMeasured: (width: Int) -> Unit
 )
 
 /**
  * 文本测量上下文
+ * 
+ * 使用队列机制处理测量请求，避免快速切换焦点时请求被覆盖
  */
 class TextMeasureContext {
-    private var currentRequest by mutableStateOf<MeasureRequest?>(null)
+    // 待处理的测量请求队列
+    private var pendingRequests = mutableStateMapOf<String, MeasureRequest>()
+    
+    // 当前正在测量的请求
+    private var currentMeasuring by mutableStateOf<MeasureRequest?>(null)
     
     /**
-     * 请求测量文本宽度（懒测量：只在需要时调用）
+     * 请求测量文本宽度
+     * 如果已有相同 id 的请求，会更新回调
+     * @param fontSize 字体大小（sp 值）
      */
-    fun measureText(id: String, text: String, onMeasured: (width: Int) -> Unit) {
-        currentRequest = MeasureRequest(id, text, onMeasured)
+    fun measureText(id: String, text: String, fontSize: Float = 14f, onMeasured: (width: Int) -> Unit) {
+        pendingRequests[id] = MeasureRequest(id, text, fontSize, onMeasured)
+        // 如果当前没有正在测量的请求，立即开始
+        if (currentMeasuring == null) {
+            processNextRequest()
+        }
     }
     
     /**
-     * 清除指定 id 的测量请求（只有当前请求匹配时才清除）
+     * 清除指定 id 的测量请求
      */
     fun clearMeasure(id: String) {
-        if (currentRequest?.id == id) {
-            currentRequest = null
-        }
+        pendingRequests.remove(id)
+    }
+    
+    /**
+     * 处理下一个待测量请求
+     */
+    private fun processNextRequest() {
+        currentMeasuring = pendingRequests.values.firstOrNull()
+    }
+    
+    /**
+     * 完成当前测量，处理下一个
+     */
+    private fun onMeasureComplete(id: String, width: Int) {
+        val request = pendingRequests.remove(id)
+        request?.onMeasured?.invoke(width)
+        currentMeasuring = null
+        processNextRequest()
     }
     
     @Composable
     internal fun MeasureElement() {
-        val request = currentRequest
+        val request = currentMeasuring
         if (request != null) {
-            Text(
-                text = request.text,
-                color = Color.Transparent,
-                fontSize = 12.sp,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.onGloballyPositioned { coordinates ->
-                    val width = coordinates.size.width
-                    request.onMeasured(width)
-                }
-            )
+            key(request.id, request.text, request.fontSize) {
+                Text(
+                    text = request.text,
+                    color = Color.Transparent,
+                    fontSize = request.fontSize.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        onMeasureComplete(request.id, coordinates.size.width)
+                    }
+                )
+            }
         }
     }
 }

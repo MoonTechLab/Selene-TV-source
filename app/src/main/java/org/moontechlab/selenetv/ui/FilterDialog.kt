@@ -164,9 +164,9 @@ private fun FilterDialogContent(
     val screenHeight = configuration.screenHeightDp.dp
 
     // 对话框尺寸
-    val dialogWidth = screenWidth * 0.6f
-    val minHeight = screenHeight * 0.3f
-    val maxHeight = screenHeight * 0.75f
+    val dialogWidth = screenWidth * 0.7f
+    val minHeight = screenHeight * 0.4f
+    val maxHeight = screenHeight * 0.8f
 
     // 滚动状态
     val scrollState = rememberScrollState()
@@ -223,18 +223,18 @@ private fun FilterDialogContent(
                 }
                 .background(
                     color = Color(0xFF1A1A1A),
-                    shape = RoundedCornerShape(9.7.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
-                .padding(19.4.dp)
+                .padding(24.dp)
         ) {
             Column {
                 // 标题
                 Text(
                     text = title,
                     color = Color.White,
-                    fontSize = 14.6.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.W600,
-                    modifier = Modifier.padding(bottom = 13.dp)
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
 
                 // 选项网格 (可滚动)
@@ -250,8 +250,8 @@ private fun FilterDialogContent(
                             .verticalScroll(scrollState)
                     ) {
                         FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(7.8.dp),
-                            verticalArrangement = Arrangement.spacedBy(7.8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             options.forEach { option ->
                                 FilterDialogOptionItem(
@@ -340,7 +340,7 @@ private fun FilterDialogOptionItem(
             .focusable(),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放
         shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(6.5.dp)
+            shape = RoundedCornerShape(8.dp)
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = backgroundColor,
@@ -349,13 +349,13 @@ private fun FilterDialogOptionItem(
     ) {
         Box(
             modifier = Modifier
-                .padding(horizontal = 13.dp, vertical = 6.5.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = option.label,
                 color = textColor,
-                fontSize = 11.3.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.W600
             )
         }

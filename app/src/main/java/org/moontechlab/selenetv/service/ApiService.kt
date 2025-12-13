@@ -282,8 +282,24 @@ object ApiService {
      * @throws ApiException 请求失败时抛出
      */
     fun getSearchHistory(): List<String> {
-        return get<List<String>>("/api/searchhistory") { jsonObject ->
-            json.decodeFromString<List<String>>(jsonObject.toString())
+        val url = buildUrl("/api/searchhistory")
+        val connection = createConnection(url, "GET")
+        
+        val statusCode = connection.responseCode
+        if (statusCode == 401) {
+            throw ApiException("登录状态失效，请重新登录", statusCode)
+        }
+        if (statusCode < 200 || statusCode >= 300) {
+            throw ApiException("网络请求失败 ($statusCode)", statusCode)
+        }
+        
+        return try {
+            val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+            json.decodeFromString<List<String>>(responseText)
+        } catch (e: Exception) {
+            throw ApiException("响应数据解析失败: ${e.message}", statusCode)
+        } finally {
+            connection.disconnect()
         }
     }
 
@@ -397,8 +413,24 @@ object ApiService {
      * @throws ApiException 请求失败时抛出
      */
     fun getSearchResources(): List<SearchResource> {
-        return get<List<SearchResource>>("/api/search/resources") { jsonObject ->
-            json.decodeFromString<List<SearchResource>>(jsonObject.toString())
+        val url = buildUrl("/api/search/resources")
+        val connection = createConnection(url, "GET")
+        
+        val statusCode = connection.responseCode
+        if (statusCode == 401) {
+            throw ApiException("登录状态失效，请重新登录", statusCode)
+        }
+        if (statusCode < 200 || statusCode >= 300) {
+            throw ApiException("网络请求失败 ($statusCode)", statusCode)
+        }
+        
+        return try {
+            val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+            json.decodeFromString<List<SearchResource>>(responseText)
+        } catch (e: Exception) {
+            throw ApiException("响应数据解析失败: ${e.message}", statusCode)
+        } finally {
+            connection.disconnect()
         }
     }
 }

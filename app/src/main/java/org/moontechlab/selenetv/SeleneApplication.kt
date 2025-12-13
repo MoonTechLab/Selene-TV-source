@@ -114,13 +114,6 @@ class SeleneApplication : Application(), ImageLoaderFactory {
             val request = chain.request()
             val response = chain.proceed(request)
             
-            if (!response.isSuccessful) {
-                Log.e(
-                    "ImageLoader",
-                    "Failed to load image: ${request.url}, Status: ${response.code}, Message: ${response.message}"
-                )
-            }
-            
             return response
         }
     }
@@ -131,11 +124,7 @@ class SeleneApplication : Application(), ImageLoaderFactory {
      */
     private class ImageEventListener : EventListener {
         override fun onError(request: ImageRequest, result: ErrorResult) {
-            Log.e(
-                "ImageLoader",
-                "Image load/decode failed: ${request.data}, Error: ${result.throwable.message}",
-                result.throwable
-            )
+            
         }
     }
 }

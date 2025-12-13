@@ -137,7 +137,7 @@ fun BangumiItem.toVideoInfo(): VideoInfo {
         sourceName = "Bangumi",
         year = year,
         cover = images.getBestImageUrl(),
-        index = 1,
+        index = 0,
         totalEpisodes = 1,
         playTime = 0,
         totalTime = 0,

@@ -22,3 +22,136 @@ data class SearchResult(
     val typeName: String? = null,
     val doubanId: Long? = null
 )
+
+/**
+ * 聚合搜索结果
+ * 将相同标题、年份、类型的结果聚合到一起
+ */
+data class AggregatedSearchResult(
+    val key: String,
+    val title: String,
+    val year: String,
+    val type: String,  // "movie" 或 "tv"
+    val cover: String,
+    val episodeCounts: MutableMap<String, Int> = mutableMapOf(),  // 源名称 -> 集数
+    val doubanIds: MutableMap<Long, Int> = mutableMapOf(),        // 豆瓣ID -> 出现次数
+    val sourceNames: MutableList<String> = mutableListOf(),       // 所有来源
+    val originalResults: MutableList<SearchResult> = mutableListOf()  // 原始结果
+) {
+    /**
+     * 获取众数集数（出现最多的集数）
+     */
+    fun getModeEpisodeCount(): Int {
+        if (episodeCounts.isEmpty()) return 1
+        return episodeCounts.values
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key ?: 1
+    }
+    
+    /**
+     * 获取最可能的豆瓣 ID（出现次数最多的）
+     */
+    fun getBestDoubanId(): Long? {
+        return doubanIds.maxByOrNull { it.value }?.key
+    }
+    
+    /**
+     * 转换为 VideoInfo 用于显示
+     */
+    fun toVideoInfo(): VideoInfo {
+        return VideoInfo(
+            id = key,
+            source = originalResults.firstOrNull()?.source ?: "",
+            title = title,
+            sourceName = sourceNames.joinToString(", "),
+            year = year,
+            cover = cover,
+            index = 0,
+            totalEpisodes = getModeEpisodeCount(),
+            playTime = 0,
+            totalTime = 0,
+            saveTime = System.currentTimeMillis(),
+            searchTitle = title,
+            doubanId = getBestDoubanId()?.toString()
+        )
+    }
+}
+
+/**
+ * 生成聚合键
+ */
+fun SearchResult.generateAggregateKey(): String {
+    val episodeCount = episodes.size.coerceAtLeast(1)
+    val type = if (episodeCount > 1) "tv" else "movie"
+    return "${title}_${year}_$type"
+}
+
+/**
+ * 聚合搜索结果
+ */
+fun aggregateSearchResults(results: List<SearchResult>): List<AggregatedSearchResult> {
+    val aggregatedMap = mutableMapOf<String, AggregatedSearchResult>()
+    
+    for (result in results) {
+        val key = result.generateAggregateKey()
+        val episodeCount = result.episodes.size.coerceAtLeast(1)
+        val type = if (episodeCount > 1) "tv" else "movie"
+        
+        val aggregated = aggregatedMap.getOrPut(key) {
+            AggregatedSearchResult(
+                key = key,
+                title = result.title,
+                year = result.year,
+                type = type,
+                cover = result.poster
+            )
+        }
+        
+        // 更新集数统计
+        aggregated.episodeCounts[result.sourceName] = episodeCount
+        
+        // 更新豆瓣 ID 统计
+        result.doubanId?.let { id ->
+            aggregated.doubanIds[id] = (aggregated.doubanIds[id] ?: 0) + 1
+        }
+        
+        // 添加来源（去重）
+        if (result.sourceName !in aggregated.sourceNames) {
+            aggregated.sourceNames.add(result.sourceName)
+        }
+        
+        // 保存原始结果
+        aggregated.originalResults.add(result)
+        
+        // 更新封面（优先使用有豆瓣 ID 的结果的封面）
+        if (result.doubanId != null && aggregated.cover.isEmpty()) {
+            aggregatedMap[key] = aggregated.copy(cover = result.poster)
+        }
+    }
+    
+    return aggregatedMap.values.toList()
+}
+
+/**
+ * 将搜索结果转换为 VideoInfo
+ */
+fun SearchResult.toVideoInfo(): VideoInfo {
+    return VideoInfo(
+        id = id,
+        source = source,
+        title = title,
+        sourceName = sourceName,
+        year = year,
+        cover = poster,
+        index = 0,
+        totalEpisodes = episodes.size.coerceAtLeast(1),
+        playTime = 0,
+        totalTime = 0,
+        saveTime = System.currentTimeMillis(),
+        searchTitle = title,
+        doubanId = doubanId?.toString(),
+        episodesTitles = episodesTitles
+    )
+}
