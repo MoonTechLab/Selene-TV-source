@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "org.moontechlab.selenetv"
-        minSdk = 24
+        minSdk = 23
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -44,6 +44,24 @@ android {
                 "META-INF/INDEX.LIST",
                 "META-INF/io.netty.versions.properties"
             )
+        }
+    }
+    splits {
+        abi {
+            // 开启分包功能
+            isEnable = true
+
+            // 重置默认列表（默认包含所有架构）
+            reset()
+
+            // 明确指定要分离的架构
+            // 注意：armv8 对应 "arm64-v8a"，armv7a 对应 "armeabi-v7a"
+            include("arm64-v8a", "armeabi-v7a")
+
+            // 是否还需要生成一个包含所有架构的通用包 (Fat APK)？
+            // 如果你只想要两个独立的包，设为 false。
+            // 如果你想顺便打一个“通吃”的包，设为 true。
+            isUniversalApk = false
         }
     }
 }
