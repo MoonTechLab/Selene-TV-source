@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.moontechlab.selenetv.model.FavoriteItem
 import org.moontechlab.selenetv.model.PlayRecord
+import org.moontechlab.selenetv.model.SearchResource
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -387,5 +388,17 @@ object ApiService {
      */
     fun clearPlayRecords() {
         delete<JsonObject>("/api/playrecords") { it }
+    }
+
+    // ==================== 搜索资源 API ====================
+
+    /**
+     * 获取搜索资源列表
+     * @throws ApiException 请求失败时抛出
+     */
+    fun getSearchResources(): List<SearchResource> {
+        return get<List<SearchResource>>("/api/search/resources") { jsonObject ->
+            json.decodeFromString<List<SearchResource>>(jsonObject.toString())
+        }
     }
 }

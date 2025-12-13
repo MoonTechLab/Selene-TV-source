@@ -1,6 +1,7 @@
 package org.moontechlab.selenetv.screen.tab
 
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -44,6 +45,7 @@ import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.server.RemoteControlServer
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.DoubanCacheService
+import org.moontechlab.selenetv.service.SearchCacheService
 import qrcode.QRCode
 import java.net.NetworkInterface
 
@@ -132,6 +134,14 @@ fun SettingsTab(
     // 输入弹框状态
     var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
     var showM3u8ProxyDialog by remember { mutableStateOf(false) }
+
+    // 缓存清理确认弹框状态
+    var showClearDoubanCacheDialog by remember { mutableStateOf(false) }
+    var showClearSearchCacheDialog by remember { mutableStateOf(false) }
+
+    // 缓存按钮 FocusRequester
+    val clearDoubanCacheFocusRequester = remember { FocusRequester() }
+    val clearSearchCacheFocusRequester = remember { FocusRequester() }
 
     // 加载数据
     LaunchedEffect(Unit) {
@@ -247,14 +257,10 @@ fun SettingsTab(
 
                     // 缓存清理按钮组
                     CacheButtonsRow(
-                        onClearDoubanCache = {
-                            coroutineScope.launch {
-                                doubanCacheService.clearAll()
-                            }
-                        },
-                        onClearSearchCache = {
-                            // TODO: 实现搜索缓存清理
-                        }
+                        onClearDoubanCache = { showClearDoubanCacheDialog = true },
+                        onClearSearchCache = { showClearSearchCacheDialog = true },
+                        clearDoubanCacheFocusRequester = clearDoubanCacheFocusRequester,
+                        clearSearchCacheFocusRequester = clearSearchCacheFocusRequester
                     )
 
                     // 退出登录按钮（已登录时显示）
@@ -370,6 +376,46 @@ fun SettingsTab(
                 coroutineScope.launch {
                     AppDataService.saveM3u8ProxyUrl(value)
                     m3u8ProxyUrl = value
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 清空豆瓣缓存确认弹框
+    AnimatedSelectDialog(
+        visible = showClearDoubanCacheDialog,
+        onDismiss = { showClearDoubanCacheDialog = false },
+        onClosed = { clearDoubanCacheFocusRequester.requestFocus() }
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "清空豆瓣缓存",
+            message = "确定要清空所有豆瓣缓存数据吗？",
+            onConfirm = {
+                coroutineScope.launch {
+                    doubanCacheService.clearAll()
+                    Toast.makeText(context, "豆瓣缓存已清空", Toast.LENGTH_SHORT).show()
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 清空搜索缓存确认弹框
+    AnimatedSelectDialog(
+        visible = showClearSearchCacheDialog,
+        onDismiss = { showClearSearchCacheDialog = false },
+        onClosed = { clearSearchCacheFocusRequester.requestFocus() }
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "清空搜索缓存",
+            message = "确定要清空所有搜索缓存数据吗？",
+            onConfirm = {
+                coroutineScope.launch {
+                    SearchCacheService.clearCache()
+                    Toast.makeText(context, "搜索缓存已清空", Toast.LENGTH_SHORT).show()
                 }
                 onClose()
             },
@@ -838,7 +884,7 @@ private fun RemoteControlQrCode(
         horizontalAlignment = Alignment.CenterHorizontally,
         // verticalArrangement = Arrangement.Center
     ) { 
-        Spacer(modifier = Modifier.height(36.dp))
+        Spacer(modifier = Modifier.height(48.dp))
 
         // 标题
         Text(
@@ -876,7 +922,7 @@ private fun RemoteControlQrCode(
         if (remoteUrl.isNotEmpty()) {
             Text(
                 text = "同局域网下浏览器打开：$remoteUrl",
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = TextGray
             )
             
@@ -884,7 +930,7 @@ private fun RemoteControlQrCode(
             
             Text(
                 text = "若 IP 非本机 IP，可在右侧选项调整",
-                fontSize = 10.sp,
+                fontSize = 13.sp,
                 color = TextGray.copy(alpha = 0.7f)
             )
         }
@@ -906,20 +952,20 @@ private fun UserInfoSection(
         // 当前用户标签
         Text(
             text = "当前用户",
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             color = TextGray
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 用户名 + 角色徽章
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = username,
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextDefault
             )
@@ -944,11 +990,11 @@ private fun RoleBadge(role: String) {
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .background(badgeColor)
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .padding(horizontal = 10.dp, vertical = 3.dp)
     ) {
         Text(
             text = badgeText,
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = Color.White
         )
@@ -992,19 +1038,19 @@ private fun SettingItem(
                         .background(ItemBgDefault)
                     else Modifier
                 )
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextDefault
             )
             Text(
                 text = value,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = TextGray,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1038,19 +1084,19 @@ private fun SettingItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = label,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = labelColor
             )
             Text(
                 text = value,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1093,14 +1139,81 @@ private fun SettingButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = textColor
+            )
+        }
+    }
+}
+
+/**
+ * 确认弹框内容
+ */
+@Composable
+private fun ConfirmDialogContent(
+    title: String,
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val confirmButtonFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(100)
+        confirmButtonFocusRequester.requestFocus()
+    }
+
+    Column(
+        modifier = Modifier
+            .width(400.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1A1A1A))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = title,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextDefault
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = message,
+            fontSize = 14.sp,
+            color = TextGray
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 按钮行
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 取消按钮
+            DialogButton(
+                text = "取消",
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f)
+            )
+
+            // 确认按钮
+            DialogButton(
+                text = "确定",
+                onClick = onConfirm,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(confirmButtonFocusRequester),
+                isPrimary = true
             )
         }
     }
@@ -1112,7 +1225,9 @@ private fun SettingButton(
 @Composable
 private fun CacheButtonsRow(
     onClearDoubanCache: () -> Unit,
-    onClearSearchCache: () -> Unit
+    onClearSearchCache: () -> Unit,
+    clearDoubanCacheFocusRequester: FocusRequester = remember { FocusRequester() },
+    clearSearchCacheFocusRequester: FocusRequester = remember { FocusRequester() }
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1120,12 +1235,16 @@ private fun CacheButtonsRow(
     ) {
         CacheButton(
             text = "清空豆瓣缓存",
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(clearDoubanCacheFocusRequester),
             onClick = onClearDoubanCache
         )
         CacheButton(
             text = "清空搜索缓存",
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(clearSearchCacheFocusRequester),
             onClick = onClearSearchCache
         )
     }
@@ -1157,12 +1276,12 @@ private fun CacheButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = textColor
             )
@@ -1200,12 +1319,12 @@ private fun LogoutButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "退出登录",
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = textColor
             )
