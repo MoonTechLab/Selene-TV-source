@@ -161,6 +161,7 @@ private const val ROW_GAP = 28             // 行间距 28dp
 private const val ROW_HEIGHT = 202         // 行高 = 180 + 22 (标题区域)
 private const val PAGE_LIMIT = 25          // 每页数据量
 private const val RENDER_BUFFER = 3        // 缓冲行数
+private const val HORIZONTAL_PADDING = 58  // 固定左右边距 58dp
 
 // ==================== 布局计算 ====================
 
@@ -171,19 +172,20 @@ data class GridLayout(
 
 /**
  * 动态计算网格布局参数
+ * 保持固定左右 padding，卡片间距根据剩余空间均匀分配
  */
 fun calculateGridLayout(screenWidthDp: Float): GridLayout {
     val totalCardWidth = CARD_WIDTH * COLUMNS  // 720dp
-    val availableSpace = screenWidthDp - totalCardWidth
+    val totalPadding = HORIZONTAL_PADDING * 2  // 116dp
     
-    // 左右边距: 剩余空间的 15%, 最小 20dp
-    val horizontalPadding = maxOf(20f, availableSpace * 0.15f)
+    // 可用于间距的空间 = 屏幕宽度 - 卡片总宽度 - 左右边距
+    val availableForGaps = screenWidthDp - totalCardWidth - totalPadding
     
-    // 卡片间距: 剩余空间的 70% 分给 5 个间隙, 最小 28dp
-    val cardGap = maxOf(28f, (availableSpace * 0.7f) / (COLUMNS - 1))
+    // 卡片间距 = 剩余空间 / 间隙数量 (6列有5个间隙)
+    val cardGap = availableForGaps / (COLUMNS - 1)
     
     return GridLayout(
-        horizontalPadding = horizontalPadding.dp,
+        horizontalPadding = HORIZONTAL_PADDING.dp,
         cardGap = cardGap.dp
     )
 }
@@ -846,8 +848,10 @@ private fun MovieGridRow(
     }
     
     Row(
-        horizontalArrangement = Arrangement.spacedBy(cardGap),
-        modifier = Modifier.height(ROW_HEIGHT.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ROW_HEIGHT.dp)
     ) {
         // 渲染实际卡片
         movies.forEach { movie ->

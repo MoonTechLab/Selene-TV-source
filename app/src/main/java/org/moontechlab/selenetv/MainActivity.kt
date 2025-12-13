@@ -20,12 +20,18 @@ import java.net.URL
 
 private const val TAG = "MainActivity"
 
+// TV 设计基准：1080p 分辨率，density = 1.0（即 1dp = 1px）
+// 这样在 4K 电视上 1dp = 2px，保持视觉一致性
+private const val DESIGN_WIDTH_PX = 1080f
+
 class MainActivity : ComponentActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val activityScope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 在 super.onCreate 之前调整 density
+        adjustDensity()
         super.onCreate(savedInstanceState)
         
         // 启动时自动刷新登录 cookie
@@ -132,5 +138,38 @@ class MainActivity : ComponentActivity() {
             }
         }
         return cookies.joinToString("; ")
+    }
+    
+    /**
+     * 调整屏幕密度，确保在不同 TV 设备上保持一致的视觉效果
+     * 
+     * 原理：以 1920px 宽度为基准，计算出合适的 density
+     * - 1080p (1920x1080): density = 1.0, 1dp = 1px
+     * - 4K (3840x2160): density = 2.0, 1dp = 2px
+     * 
+     * 这样无论电视报告什么 density，UI 元素的物理大小都会保持一致
+     */
+    private fun adjustDensity() {
+        val displayMetrics = resources.displayMetrics
+        val screenWidthPx = displayMetrics.widthPixels.coerceAtLeast(displayMetrics.heightPixels)
+        
+        // 计算目标 density：屏幕宽度 / 设计基准宽度
+        val targetDensity = screenWidthPx / DESIGN_WIDTH_PX
+        val targetScaledDensity = targetDensity * (displayMetrics.scaledDensity / displayMetrics.density)
+        val targetDensityDpi = (targetDensity * 160).toInt()
+        
+        Log.d(TAG, "Screen: ${displayMetrics.widthPixels}x${displayMetrics.heightPixels}")
+        Log.d(TAG, "Original density: ${displayMetrics.density}, dpi: ${displayMetrics.densityDpi}")
+        Log.d(TAG, "Target density: $targetDensity, dpi: $targetDensityDpi")
+        
+        // 应用新的 density
+        displayMetrics.density = targetDensity
+        displayMetrics.scaledDensity = targetScaledDensity
+        displayMetrics.densityDpi = targetDensityDpi
+        
+        // 同时更新 Configuration 中的 densityDpi
+        val configuration = resources.configuration
+        configuration.densityDpi = targetDensityDpi
+        resources.updateConfiguration(configuration, displayMetrics)
     }
 }

@@ -184,24 +184,24 @@ private fun handleVerticalNavigation(
 }
 
 /**
- * 骨架屏占位卡片
+ * 骨架屏占位卡片 (LARGE 尺寸: 120x180)
  */
 @Composable
 private fun SkeletonVideoCard(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.width(100.dp),
+        modifier = modifier.width(120.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 封面占位
         Box(
             modifier = Modifier
-                .width(100.dp)
-                .height(150.dp)
+                .width(120.dp)
+                .height(180.dp)
                 .background(
                     color = Color(0xFF2A2A2A),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
         )
         
@@ -210,7 +210,7 @@ private fun SkeletonVideoCard(
         // 标题占位
         Box(
             modifier = Modifier
-                .width(70.dp)
+                .width(84.dp)
                 .height(14.dp)
                 .background(
                     color = Color(0xFF2A2A2A),

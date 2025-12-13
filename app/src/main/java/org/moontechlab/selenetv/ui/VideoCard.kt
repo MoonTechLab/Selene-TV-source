@@ -125,7 +125,7 @@ fun VideoCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
-    style: VideoCardStyle = VideoCardStyle.MEDIUM
+    style: VideoCardStyle = VideoCardStyle.LARGE
 ) {
     val cardWidth = style.width
     val cardHeight = style.height
