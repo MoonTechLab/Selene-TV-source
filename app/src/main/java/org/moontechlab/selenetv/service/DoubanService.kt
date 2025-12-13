@@ -58,26 +58,6 @@ class DoubanService private constructor(private val context: Context) {
     }
     
     /**
-     * 将豆瓣 API 返回的 Item 转换为 DoubanMovie
-     * 返回 null 如果缺少必要字段
-     */
-    private fun parseItemToMovie(item: DoubanItem): DoubanMovie? {
-        val id = item.id ?: return null
-        val title = item.title ?: return null
-        val poster = item.pic?.large ?: item.pic?.normal ?: item.pic?.small ?: ""
-        val rate = item.rating?.value?.toString() ?: item.rating?.starCount?.toString()
-        val year = item.cardSubtitle?.split("/")?.firstOrNull()?.trim() ?: ""
-        
-        return DoubanMovie(
-            id = id,
-            title = title,
-            poster = poster,
-            rate = rate,
-            year = year
-        )
-    }
-    
-    /**
      * 生成唯一的 Origin 头（用于 CORS 代理）
      */
     private fun getUniqueOrigin(): String {
@@ -263,7 +243,7 @@ class DoubanService private constructor(private val context: Context) {
                         return ApiResponse.Error("豆瓣数据格式错误: items 为空")
                     }
                     
-                    val movies = data.items.mapNotNull { parseItemToMovie(it) }
+                    val movies = data.items.mapNotNull { it.toDoubanMovie() }
                     
                     // 缓存成功的结果，缓存时间为 6 小时
                     try {
@@ -416,7 +396,7 @@ class DoubanService private constructor(private val context: Context) {
                     
                     val filteredItems = data.items
                         .filter { it.type == "movie" || it.type == "tv" }
-                        .mapNotNull { parseItemToMovie(it) }
+                        .mapNotNull { it.toDoubanMovie() }
                     
                     // 缓存成功的结果，缓存时间为 6 小时
                     try {

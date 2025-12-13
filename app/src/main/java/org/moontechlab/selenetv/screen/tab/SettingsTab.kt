@@ -152,7 +152,7 @@ fun SettingsTab(
         modifier = Modifier.fillMaxSize()
     ) {
         // 顶部留出 TabSwitcher 的空间
-        Spacer(modifier = Modifier.height(64.dp))
+        Spacer(modifier = Modifier.height(68.dp))
 
         // 主内容区域 - 两栏布局（各占50%）
         Row(

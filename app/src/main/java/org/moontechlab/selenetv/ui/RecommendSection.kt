@@ -67,7 +67,7 @@ fun RecommendSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 24.dp)  // container 底部 margin: 24
+            .padding(bottom = 18.dp)  // container 底部 margin: 24
     ) {
         // 区块标题 - 纯展示，不可获得焦点
         // titleContainer: paddingHorizontal 16, paddingVertical 6, marginLeft 19
@@ -99,7 +99,7 @@ fun RecommendSection(
         ) {
             LazyRow(
                 state = listState,
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(28.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -191,14 +191,14 @@ private fun SkeletonVideoCard(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.width(90.dp),
+        modifier = modifier.width(100.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 封面占位
         Box(
             modifier = Modifier
-                .width(90.dp)
-                .height(135.dp)
+                .width(100.dp)
+                .height(150.dp)
                 .background(
                     color = Color(0xFF2A2A2A),
                     shape = RoundedCornerShape(6.dp)

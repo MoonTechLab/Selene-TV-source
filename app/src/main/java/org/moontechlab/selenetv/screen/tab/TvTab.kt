@@ -49,6 +49,7 @@ import org.moontechlab.selenetv.ui.TransparentFilterOption
 import org.moontechlab.selenetv.ui.TransparentFilterSelector
 import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
+import org.moontechlab.selenetv.ui.VideoCardStyle
 
 private const val TAG = "TvTab"
 
@@ -167,11 +168,11 @@ val TV_FILTER_SORT_OPTIONS = listOf(
 
 // ==================== 布局常量 ====================
 
-private const val TV_COLUMNS = 8              // 每行8列
-private const val TV_CARD_WIDTH = 90          // 卡片宽度 90dp
-private const val TV_CARD_HEIGHT = 135        // 卡片封面高度 135dp
-private const val TV_ROW_GAP = 20             // 行间距 20dp
-private const val TV_ROW_HEIGHT = 155         // 行高 = 135 + 20
+private const val TV_COLUMNS = 6              // 每行6列
+private const val TV_CARD_WIDTH = 120         // 卡片宽度 120dp
+private const val TV_CARD_HEIGHT = 180        // 卡片封面高度 180dp (2:3 比例)
+private const val TV_ROW_GAP = 28             // 行间距 28dp
+private const val TV_ROW_HEIGHT = 202         // 行高 = 180 + 22 (标题区域)
 private const val TV_PAGE_LIMIT = 25          // 每页数据量
 private const val TV_RENDER_BUFFER = 3        // 缓冲行数
 
@@ -192,8 +193,8 @@ fun calculateTvGridLayout(screenWidthDp: Float): TvGridLayout {
     // 左右边距: 剩余空间的 15%, 最小 20dp
     val horizontalPadding = maxOf(20f, availableSpace * 0.15f)
     
-    // 卡片间距: 剩余空间的 70% 分给 7 个间隙, 最小 20dp
-    val cardGap = maxOf(20f, (availableSpace * 0.7f) / (TV_COLUMNS - 1))
+    // 卡片间距: 剩余空间的 70% 分给 5 个间隙, 最小 28dp
+    val cardGap = maxOf(28f, (availableSpace * 0.7f) / (TV_COLUMNS - 1))
     
     return TvGridLayout(
         horizontalPadding = horizontalPadding.dp,
@@ -286,7 +287,7 @@ fun TvTab(
     // 行高 (px)
     val rowHeightPx = with(density) { TV_ROW_HEIGHT.dp.toPx() }
     val rowGapPx = with(density) { TV_ROW_GAP.dp.toPx() }
-    val topSpacerPx = with(density) { 56.dp.toPx() } // TabSwitcher 空间
+    val topSpacerPx = with(density) { 64.dp.toPx() } // TabSwitcher 空间
     
     // 计算滚动到指定行使其居中的目标位置
     fun calculateScrollTarget(rowIndex: Int): Int {
@@ -439,7 +440,7 @@ fun TvTab(
                     .padding(bottom = bottomPadding)
             ) {
                 // 顶部留出 TabSwitcher 的空间
-                Spacer(modifier = Modifier.height(56.dp))
+                Spacer(modifier = Modifier.height(64.dp))
                 
                 // 筛选区域
                 Box(
@@ -882,6 +883,7 @@ private fun TvGridRow(
                 videoInfo = tvShow.toVideoInfo(),
                 from = VideoCardSource.DOUBAN,
                 onClick = { onTvShowClick(tvShow) },
+                style = VideoCardStyle.LARGE,
                 modifier = Modifier
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {

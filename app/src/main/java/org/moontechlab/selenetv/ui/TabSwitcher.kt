@@ -119,21 +119,21 @@ fun TabSwitcher(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 13.dp, bottom = 7.dp, start = 20.dp, end = 20.dp),
+            .padding(top = 16.dp, bottom = 8.dp, start = 24.dp, end = 24.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
                 .shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(18.dp),
+                    elevation = 14.dp,
+                    shape = RoundedCornerShape(22.dp),
                     spotColor = Color.Black.copy(alpha = 0.3f)
                 )
                 .background(
                     color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(22.dp)
                 )
-                .padding(2.dp)
+                .padding(2.4.dp)
                 .focusRequester(focusRequester)
                 .onFocusChanged { focusState ->
                     // 通知父组件焦点状态变化
@@ -226,7 +226,7 @@ private fun TabButton(
     Surface(
         onClick = onTabClick,
         modifier = Modifier
-            .height(26.dp)
+            .height(31.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
@@ -265,7 +265,7 @@ private fun TabButton(
                     false
                 }
             },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(13.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = backgroundColor,
             focusedContainerColor = backgroundColor,
@@ -276,18 +276,18 @@ private fun TabButton(
         Row(
             modifier = Modifier
                 .padding(
-                    horizontal = if (tab.isIconOnly) 8.dp else 10.8.dp,
+                    horizontal = if (tab.isIconOnly) 10.dp else 13.dp,
                     vertical = 0.dp
                 )
                 .fillMaxHeight(),
-            horizontalArrangement = Arrangement.spacedBy(4.5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 图标
             Icon(
                 imageVector = tab.icon,
                 contentDescription = tab.label,
-                modifier = Modifier.size(12.dp),
+                modifier = Modifier.size(14.dp),
                 tint = contentColor
             )
             
@@ -295,7 +295,7 @@ private fun TabButton(
             if (!tab.isIconOnly) {
                 Text(
                     text = tab.label,
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold, // 600
                     color = contentColor
                 )

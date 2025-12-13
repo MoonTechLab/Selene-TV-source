@@ -91,12 +91,12 @@ fun TransparentFilterSelector(
         modifier = modifier
             .background(
                 color = Color.Transparent,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(19.dp)
             )
-            .padding(1.8.dp)
+            .padding(2.2.dp)
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically,
             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
         ) {
@@ -173,7 +173,7 @@ private fun TransparentFilterOptionItem(
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放
         shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(13.dp)
+            shape = RoundedCornerShape(16.dp)
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = backgroundColor,
@@ -182,22 +182,22 @@ private fun TransparentFilterOptionItem(
     ) {
         Row(
             modifier = Modifier
-                .height(25.dp)
-                .padding(horizontal = 10.8.dp),
+                .height(30.dp)
+                .padding(horizontal = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = displayText,
                 color = contentColor,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.W600
             )
-            Spacer(modifier = Modifier.width(3.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "展开",
                 tint = contentColor,
-                modifier = Modifier.size(13.dp)
+                modifier = Modifier.size(16.dp)
             )
         }
     }

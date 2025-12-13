@@ -210,7 +210,7 @@ fun HomeTab(
                 }
         ) {
             // 顶部留出 TabSwitcher 的空间 + 额外间距
-            Spacer(modifier = Modifier.height(56.dp))
+            Spacer(modifier = Modifier.height(64.dp))
             
             // 播放历史 - 仅在有数据时显示
             if (playRecords.isNotEmpty() || isLoadingPlayRecords) {

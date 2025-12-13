@@ -12,7 +12,8 @@ data class DoubanMovie(
     val title: String,
     val poster: String,
     val rate: String? = null,
-    val year: String
+    val year: String,
+    val totalEpisodes: Int? = null
 )
 
 /**
@@ -27,7 +28,7 @@ fun DoubanMovie.toVideoInfo(): VideoInfo {
         year = year,
         cover = poster,
         index = 1,
-        totalEpisodes = 1,
+        totalEpisodes = totalEpisodes ?: 1,
         playTime = 0,
         totalTime = 0,
         saveTime = System.currentTimeMillis(),
@@ -188,7 +189,8 @@ fun DoubanItem.toDoubanMovie(): DoubanMovie? {
         title = itemTitle,
         poster = pic?.large ?: pic?.normal ?: pic?.small ?: "",
         rate = rating?.value?.takeIf { it > 0.0 }?.toString(),
-        year = extractYear(cardSubtitle)
+        year = extractYear(cardSubtitle),
+        totalEpisodes = extractTotalEpisodes(episodesInfo)
     )
 }
 

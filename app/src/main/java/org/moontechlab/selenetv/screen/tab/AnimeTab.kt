@@ -50,6 +50,7 @@ import org.moontechlab.selenetv.ui.TransparentFilterOption
 import org.moontechlab.selenetv.ui.TransparentFilterSelector
 import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
+import org.moontechlab.selenetv.ui.VideoCardStyle
 import java.util.Calendar
 
 private const val TAG = "AnimeTab"
@@ -239,13 +240,13 @@ val ANIME_SORT_OPTIONS = listOf(
 
 // ==================== 布局常量 ====================
 
-private const val ANIME_COLUMNS = 8
-private const val ANIME_CARD_WIDTH = 90
-private const val ANIME_CARD_HEIGHT = 135
-private const val ANIME_ROW_GAP = 20
-private const val ANIME_ROW_HEIGHT = 155
-private const val ANIME_PAGE_LIMIT = 25
-private const val ANIME_RENDER_BUFFER = 3
+private const val ANIME_COLUMNS = 6              // 每行6列
+private const val ANIME_CARD_WIDTH = 120         // 卡片宽度 120dp
+private const val ANIME_CARD_HEIGHT = 180        // 卡片封面高度 180dp (2:3 比例)
+private const val ANIME_ROW_GAP = 28             // 行间距 28dp
+private const val ANIME_ROW_HEIGHT = 202         // 行高 = 180 + 22 (标题区域)
+private const val ANIME_PAGE_LIMIT = 25          // 每页数据量
+private const val ANIME_RENDER_BUFFER = 3        // 缓冲行数
 
 // ==================== 布局计算 ====================
 
@@ -255,10 +256,15 @@ data class AnimeGridLayout(
 )
 
 fun calculateAnimeGridLayout(screenWidthDp: Float): AnimeGridLayout {
-    val totalCardWidth = ANIME_CARD_WIDTH * ANIME_COLUMNS
+    val totalCardWidth = ANIME_CARD_WIDTH * ANIME_COLUMNS  // 720dp
     val availableSpace = screenWidthDp - totalCardWidth
+    
+    // 左右边距: 剩余空间的 15%, 最小 20dp
     val horizontalPadding = maxOf(20f, availableSpace * 0.15f)
-    val cardGap = maxOf(20f, (availableSpace * 0.7f) / (ANIME_COLUMNS - 1))
+    
+    // 卡片间距: 剩余空间的 70% 分给 5 个间隙, 最小 28dp
+    val cardGap = maxOf(28f, (availableSpace * 0.7f) / (ANIME_COLUMNS - 1))
+    
     return AnimeGridLayout(
         horizontalPadding = horizontalPadding.dp,
         cardGap = cardGap.dp
@@ -343,7 +349,7 @@ fun AnimeTab(
     var filterSectionHeight by remember { mutableIntStateOf(0) }
     val rowHeightPx = with(density) { ANIME_ROW_HEIGHT.dp.toPx() }
     val rowGapPx = with(density) { ANIME_ROW_GAP.dp.toPx() }
-    val topSpacerPx = with(density) { 56.dp.toPx() }
+    val topSpacerPx = with(density) { 64.dp.toPx() }
     
     fun calculateScrollTarget(rowIndex: Int): Int {
         val rowTopPosition = topSpacerPx + filterSectionHeight + (rowIndex * (rowHeightPx + rowGapPx))
@@ -502,7 +508,7 @@ fun AnimeTab(
                     .padding(horizontal = gridLayout.horizontalPadding)
                     .padding(bottom = bottomPadding)
             ) {
-                Spacer(modifier = Modifier.height(56.dp))
+                Spacer(modifier = Modifier.height(64.dp))
                 
                 Box(
                     modifier = Modifier.onGloballyPositioned { coordinates ->
@@ -931,6 +937,7 @@ private fun AnimeGridRow(
                         is AnimeContentItem.Douban -> onDoubanClick(item.item)
                     }
                 },
+                style = VideoCardStyle.LARGE,
                 modifier = Modifier
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {

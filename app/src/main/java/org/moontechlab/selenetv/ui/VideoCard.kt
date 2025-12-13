@@ -25,6 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -43,6 +50,33 @@ private const val TAG = "VideoCard"
 private val TEXT_GAP_DP = 30.dp
 
 /**
+ * 左下角带圆角的三角形 Shape
+ * @param cornerRadiusDp 左下角圆角半径 (dp)
+ */
+private class RoundedTriangleShape(private val cornerRadiusDp: Dp) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val cornerRadiusPx = with(density) { cornerRadiusDp.toPx() }
+        val path = Path().apply {
+            // 从左上角开始
+            moveTo(0f, 0f)
+            // 到左下角前的圆角起点
+            lineTo(0f, size.height - cornerRadiusPx)
+            // 左下角圆角
+            quadraticTo(0f, size.height, cornerRadiusPx, size.height)
+            // 到右下角
+            lineTo(size.width, size.height)
+            // 回到左上角
+            close()
+        }
+        return Outline.Generic(path)
+    }
+}
+
+/**
  * 视频来源类型
  */
 enum class VideoCardSource {
@@ -55,7 +89,34 @@ enum class VideoCardSource {
 }
 
 /**
+ * 视频卡片尺寸样式
+ */
+enum class VideoCardStyle(
+    val width: Dp,
+    val height: Dp,
+    val cornerRadius: Dp,
+    val borderWidth: Dp,
+    val titleFontSize: Int,
+    val ratingBadgeSize: Dp,
+    val ratingFontSize: Int,
+    val ratingTranslation: Float,
+    val episodeFontSize: Int,
+    val episodePaddingH: Dp,
+    val episodePaddingV: Dp
+) {
+    MEDIUM(100.dp, 150.dp, 10.dp, 2.dp, 12, 30.dp, 12, 20f, 12, 6.dp, 3.dp),  // 中等尺寸
+    LARGE(120.dp, 180.dp, 12.dp, 3.dp, 14, 36.dp, 15, 24f, 14, 8.dp, 4.dp)    // 大尺寸
+}
+
+/**
  * TV 专用视频卡片组件
+ * 
+ * @param videoInfo 视频信息
+ * @param from 视频来源类型
+ * @param onClick 点击回调
+ * @param modifier 修饰符
+ * @param isSelected 是否选中
+ * @param style 卡片尺寸样式，默认 MEDIUM
  */
 @Composable
 fun VideoCard(
@@ -63,8 +124,14 @@ fun VideoCard(
     from: VideoCardSource,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    style: VideoCardStyle = VideoCardStyle.MEDIUM
 ) {
+    val cardWidth = style.width
+    val cardHeight = style.height
+    val cornerRadius = style.cornerRadius
+    val innerCornerRadius = (cornerRadius.value * 0.67f).dp  // 聚焦时内部圆角
+    val titleFontSize = style.titleFontSize.sp
     var isFocused by remember { mutableStateOf(false) }
     var titleWidth by remember { mutableStateOf(0) }
     var containerWidth by remember { mutableStateOf(0) }
@@ -143,7 +210,7 @@ fun VideoCard(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .width(90.dp)
+            .width(cardWidth)
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
             }
@@ -153,7 +220,7 @@ fun VideoCard(
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放，使用自定义动画
         shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(6.dp)
+            shape = RoundedCornerShape(cornerRadius)
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
@@ -166,21 +233,21 @@ fun VideoCard(
             // 封面区域
             Box(
                 modifier = Modifier
-                    .width(90.dp)
-                    .height(135.dp)
+                    .width(cardWidth)
+                    .height(cardHeight)
             ) {
                 // 封面图片
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(cornerRadius))
                         .background(Color(0xFF2A2A2A))
                         .then(
                             if (isFocused) {
                                 Modifier.border(
-                                    width = 2.dp,
+                                    width = style.borderWidth,
                                     color = Color.White,
-                                    shape = RoundedCornerShape(6.dp)
+                                    shape = RoundedCornerShape(cornerRadius)
                                 )
                             } else Modifier
                         )
@@ -191,7 +258,7 @@ fun VideoCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(if (isFocused) 2.dp else 0.dp)
-                            .clip(RoundedCornerShape(if (isFocused) 4.dp else 6.dp)),
+                            .clip(RoundedCornerShape(if (isFocused) innerCornerRadius else cornerRadius)),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -239,42 +306,51 @@ fun VideoCard(
                 if ((from == VideoCardSource.PLAYRECORD || 
                      from == VideoCardSource.FAVORITE || 
                      from == VideoCardSource.SEARCH ||
-                     from == VideoCardSource.SOURCE) &&
+                     from == VideoCardSource.SOURCE ||
+                     from == VideoCardSource.DOUBAN) &&
                     videoInfo.totalEpisodes > 1) {
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
                             .clip(RoundedCornerShape(4.dp))
                             .background(Color(0xFF4CAF50))
-                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                            .padding(horizontal = style.episodePaddingH, vertical = style.episodePaddingV)
                             .align(Alignment.TopEnd)
                     ) {
                         Text(
-                            text = if (videoInfo.index == 0) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
+                            text = if (videoInfo.index == 0 || from == VideoCardSource.DOUBAN) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
                             color = Color.White,
-                            fontSize = 11.sp,
+                            fontSize = style.episodeFontSize.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                // 评分徽章（番剧/豆瓣场景）
+                // 评分徽章（番剧/豆瓣场景）- 左下角粉红色三角形
                 if ((from == VideoCardSource.BANGUMI || from == VideoCardSource.DOUBAN) && 
                     videoInfo.rate != null && videoInfo.rate != "0.0") {
                     Box(
                         modifier = Modifier
-                            .padding(4.dp)
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE91E63))
-                            .align(Alignment.TopEnd),
-                        contentAlignment = Alignment.Center
+                            .size(style.ratingBadgeSize)
+                            .align(Alignment.BottomStart)
+                            .background(
+                                color = Color(0xFFE91E63),
+                                shape = RoundedTriangleShape(cornerRadius)
+                            )
                     ) {
+                        // 文字沿三角形斜边居中
                         Text(
                             text = videoInfo.rate,
                             color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = style.ratingFontSize.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .graphicsLayer {
+                                    rotationZ = 45f
+                                    translationX = -style.ratingTranslation
+                                    translationY = style.ratingTranslation
+                                }
                         )
                     }
                 }
@@ -310,7 +386,7 @@ fun VideoCard(
             // 标题区域
             Box(
                 modifier = Modifier
-                    .width(90.dp)
+                    .width(cardWidth)
                     .height(18.dp)
                     .clipToBounds()
                     .onGloballyPositioned { coordinates ->
@@ -333,7 +409,7 @@ fun VideoCard(
                         Text(
                             text = videoInfo.title,
                             color = Color.White,
-                            fontSize = 12.sp,
+                            fontSize = titleFontSize,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -343,7 +419,7 @@ fun VideoCard(
                         Text(
                             text = videoInfo.title,
                             color = Color.White,
-                            fontSize = 12.sp,
+                            fontSize = titleFontSize,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -353,7 +429,7 @@ fun VideoCard(
                     Text(
                         text = videoInfo.title,
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = titleFontSize,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

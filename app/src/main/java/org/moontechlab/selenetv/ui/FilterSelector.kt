@@ -63,9 +63,9 @@ fun FilterSelector(
         modifier = modifier
             .background(
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(19.dp)
             )
-            .padding(1.8.dp)
+            .padding(2.2.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { focusState ->
                 // 当组件从无焦点变为有焦点时，请求焦点到当前选中项
@@ -77,7 +77,7 @@ fun FilterSelector(
             .focusGroup()
     ) {
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically,
             // 为缩放动画留出空间，避免边缘裁切
             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
@@ -143,7 +143,7 @@ private fun FilterOptionItem(
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放
         shape = ClickableSurfaceDefaults.shape(
-            shape = RoundedCornerShape(13.dp)
+            shape = RoundedCornerShape(16.dp)
         ),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = backgroundColor,
@@ -152,14 +152,14 @@ private fun FilterOptionItem(
     ) {
         Box(
             modifier = Modifier
-                .height(25.dp)
-                .padding(horizontal = 10.8.dp),
+                .height(30.dp)
+                .padding(horizontal = 13.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = option.label,
                 color = textColor,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.W600
             )
         }
