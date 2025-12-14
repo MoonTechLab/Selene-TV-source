@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
@@ -192,6 +193,7 @@ fun SearchTab(
     // 焦点管理
     val searchInputFocusRequester = focusRequester
     val searchButtonFocusRequester = remember { FocusRequester() }
+    val clearButtonFocusRequester = remember { FocusRequester() }
     val historyFocusRequester = remember { FocusRequester() }
     val filterFocusRequester = remember { FocusRequester() }
     val resultsFocusRequester = remember { FocusRequester() }
@@ -371,12 +373,27 @@ fun SearchTab(
         }
     }
     
+    // 更新本地搜索历史：如果关键词已存在则移到第一个，否则添加到第一个
+    fun updateLocalSearchHistory(keyword: String) {
+        searchHistory = listOf(keyword) + searchHistory.filter { it != keyword }
+    }
+    
     // 执行搜索
     val performSearch: (String) -> Unit = { query ->
         if (query.isNotBlank()) {
             showHistory = false
             searchButtonFocusRequester.requestFocus()
+            // 更新本地搜索历史
+            updateLocalSearchHistory(query)
             coroutineScope.launch {
+                // 同步到服务器
+                try {
+                    withContext(Dispatchers.IO) {
+                        ApiService.addSearchHistory(query)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "添加搜索历史失败: ${e.message}")
+                }
                 delay(300) // 等待动画完成
                 rawSearchResults = emptyList()
                 allSearchResults = emptyList()
@@ -395,7 +412,17 @@ fun SearchTab(
         searchQuery = keyword
         showHistory = false
         searchButtonFocusRequester.requestFocus()
+        // 更新本地搜索历史
+        updateLocalSearchHistory(keyword)
         coroutineScope.launch {
+            // 同步到服务器
+            try {
+                withContext(Dispatchers.IO) {
+                    ApiService.addSearchHistory(keyword)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "添加搜索历史失败: ${e.message}")
+            }
             delay(300) // 等待动画完成
             rawSearchResults = emptyList()
             allSearchResults = emptyList()
@@ -453,8 +480,27 @@ fun SearchTab(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
                 onSearch = { performSearch(searchQuery) },
+                onClear = {
+                    // 清空搜索结果，回到初始状态
+                    SearchService.stopSearch()
+                    rawSearchResults = emptyList()
+                    allSearchResults = emptyList()
+                    searchResults = emptyList()
+                    searchProgress = null
+                    isSearching = false
+                    focusedRowIndex = 0
+                    filterState = SearchFilterState()
+                    showHistory = true
+                    searchQuery = ""
+                    coroutineScope.launch {
+                        scrollState.animateScrollTo(0)
+                        searchInputFocusRequester.requestFocus()
+                    }
+                },
+                showClearButton = !showHistory,
                 inputFocusRequester = searchInputFocusRequester,
                 buttonFocusRequester = searchButtonFocusRequester,
+                clearButtonFocusRequester = clearButtonFocusRequester,
                 onNavigateDown = { 
                     if (showHistory && searchHistory.isNotEmpty()) {
                         historyFocusRequester.requestFocus() 
@@ -879,10 +925,16 @@ private fun SearchInputSection(
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
+    onClear: () -> Unit,
+    showClearButton: Boolean,
     inputFocusRequester: FocusRequester,
     buttonFocusRequester: FocusRequester,
+    clearButtonFocusRequester: FocusRequester,
     onNavigateDown: () -> Unit
 ) {
+    // 跟踪清空按钮的焦点状态
+    var isClearButtonFocused by remember { mutableStateOf(false) }
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -893,7 +945,11 @@ private fun SearchInputSection(
         SearchInputField(
             value = query,
             onValueChange = onQueryChange,
+            onClear = onClear,
+            showClearButton = showClearButton,
             focusRequester = inputFocusRequester,
+            clearButtonFocusRequester = clearButtonFocusRequester,
+            onClearButtonFocusChanged = { isClearButtonFocused = it },
             modifier = Modifier
                 .weight(1f)
                 .widthIn(max = 600.dp)
@@ -901,7 +957,11 @@ private fun SearchInputSection(
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
                             Key.DirectionRight -> {
-                                buttonFocusRequester.requestFocus()
+                                if (showClearButton) {
+                                    clearButtonFocusRequester.requestFocus()
+                                } else {
+                                    buttonFocusRequester.requestFocus()
+                                }
                                 true
                             }
                             Key.DirectionDown -> {
@@ -909,8 +969,13 @@ private fun SearchInputSection(
                                 true
                             }
                             Key.Enter -> {
-                                onSearch()
-                                true
+                                // 如果清空按钮获得焦点，不处理 Enter 键，让子组件处理
+                                if (isClearButtonFocused) {
+                                    false
+                                } else {
+                                    onSearch()
+                                    true
+                                }
                             }
                             else -> false
                         }
@@ -927,7 +992,11 @@ private fun SearchInputSection(
                 if (keyEvent.type == KeyEventType.KeyDown) {
                     when (keyEvent.key) {
                         Key.DirectionLeft -> {
-                            inputFocusRequester.requestFocus()
+                            if (showClearButton) {
+                                clearButtonFocusRequester.requestFocus()
+                            } else {
+                                inputFocusRequester.requestFocus()
+                            }
                             true
                         }
                         Key.DirectionDown -> {
@@ -949,7 +1018,11 @@ private fun SearchInputSection(
 private fun SearchInputField(
     value: String,
     onValueChange: (String) -> Unit,
+    onClear: () -> Unit,
+    showClearButton: Boolean,
     focusRequester: FocusRequester,
+    clearButtonFocusRequester: FocusRequester,
+    onClearButtonFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -969,37 +1042,82 @@ private fun SearchInputField(
                     )
                 } else Modifier
             )
-            .padding(horizontal = 18.dp),
+            .padding(start = 18.dp, end = if (showClearButton) 8.dp else 18.dp),
         contentAlignment = Alignment.CenterStart
     ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .focusRequester(focusRequester)
-                .onFocusChanged { focusState ->
-                    isFocused = focusState.isFocused
-                },
-            textStyle = TextStyle(
-                color = Color.White,
-                fontSize = 16.sp
-            ),
-            cursorBrush = SolidColor(Color.White),
-            singleLine = true,
-            decorationBox = { innerTextField ->
-                Box {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = "输入关键词搜索",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 16.sp
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                    },
+                textStyle = TextStyle(
+                    color = Color.White,
+                    fontSize = 16.sp
+                ),
+                cursorBrush = SolidColor(Color.White),
+                singleLine = true,
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = "输入关键词搜索",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 16.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+            
+            // 清空按钮 - X 图标
+            if (showClearButton) {
+                var clearFocused by remember { mutableStateOf(false) }
+                Surface(
+                    onClick = { onClear() },
+                    modifier = Modifier
+                        .focusRequester(clearButtonFocusRequester)
+                        .onFocusChanged { 
+                            clearFocused = it.isFocused
+                            onClearButtonFocusChanged(it.isFocused)
+                        }
+                        .size(28.dp)
+                        .onPreviewKeyEvent { keyEvent ->
+                            // 阻止 Enter 键冒泡到父级触发搜索
+                            if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Enter) {
+                                onClear()
+                                true
+                            } else false
+                        },
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(14.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.Transparent,
+                        focusedContainerColor = Color.White.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "清空",
+                            tint = if (clearFocused) Color.White else Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    innerTextField()
                 }
             }
-        )
+        }
     }
 }
 

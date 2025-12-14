@@ -308,8 +308,27 @@ object ApiService {
      * @throws ApiException 请求失败时抛出
      */
     fun addSearchHistory(query: String) {
-        val body = mapOf("keyword" to query)
-        post<JsonObject>("/api/searchhistory", body) { it }
+        val url = buildUrl("/api/searchhistory")
+        val connection = createConnection(url, "POST")
+        connection.doOutput = true
+        
+        val jsonBody = json.encodeToString(
+            JsonObject.serializer(),
+            buildJsonObject(mapOf("keyword" to query))
+        )
+        OutputStreamWriter(connection.outputStream).use { writer ->
+            writer.write(jsonBody)
+            writer.flush()
+        }
+        
+        val statusCode = connection.responseCode
+        if (statusCode == 401) {
+            throw ApiException("登录状态失效，请重新登录", statusCode)
+        }
+        if (statusCode < 200 || statusCode >= 300) {
+            throw ApiException("网络请求失败 ($statusCode)", statusCode)
+        }
+        connection.disconnect()
     }
 
     /**

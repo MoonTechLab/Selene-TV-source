@@ -99,7 +99,7 @@ fun RecommendSection(
         ) {
             LazyRow(
                 state = listState,
-                horizontalArrangement = Arrangement.spacedBy(28.dp),
+                horizontalArrangement = Arrangement.spacedBy(32.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
