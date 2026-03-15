@@ -45,40 +45,47 @@ fun HomeTab(
     // 播放历史数据状态
     var playRecords by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingPlayRecords by remember { mutableStateOf(true) }
-    
+    var errorPlayRecords by remember { mutableStateOf<String?>(null) }
+
     // 收藏夹数据状态
     var favorites by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingFavorites by remember { mutableStateOf(true) }
-    
+    var errorFavorites by remember { mutableStateOf<String?>(null) }
+
     // 热门电影数据状态
     var hotMovies by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingMovies by remember { mutableStateOf(true) }
-    
+    var errorMovies by remember { mutableStateOf<String?>(null) }
+
     // 热门剧集数据状态
     var hotTvShows by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingTvShows by remember { mutableStateOf(true) }
-    
+    var errorTvShows by remember { mutableStateOf<String?>(null) }
+
     // 新番放送数据状态
     var bangumiCalendar by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingBangumi by remember { mutableStateOf(true) }
-    
+    var errorBangumi by remember { mutableStateOf<String?>(null) }
+
     // 热门综艺数据状态
     var hotShows by remember { mutableStateOf<List<VideoInfo>>(emptyList()) }
     var isLoadingShows by remember { mutableStateOf(true) }
-    
-    // 加载数据
-    LaunchedEffect(Unit) {
-        val doubanService = DoubanService.getInstance(context)
-        val bangumiService = BangumiService.getInstance(context)
-        
-        // 加载播放历史，然后加载收藏夹（收藏夹需要播放历史来填充 index）
+    var errorShows by remember { mutableStateOf<String?>(null) }
+
+    val doubanService = remember { DoubanService.getInstance(context) }
+    val bangumiService = remember { BangumiService.getInstance(context) }
+
+    // 用于匹配的播放记录 Map（收藏夹需要）
+    var playRecordsMap by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.PlayRecord>>(emptyMap()) }
+
+    // 加载播放历史 + 收藏夹（收藏夹依赖播放历史的 index）
+    fun loadPlayRecordsAndFavorites() {
         coroutineScope.launch {
             isLoadingPlayRecords = true
+            errorPlayRecords = null
             isLoadingFavorites = true
-            
-            // 用于匹配的播放记录 Map (source+id -> PlayRecord)
-            var playRecordsMap: Map<String, org.moontechlab.selenetv.model.PlayRecord> = emptyMap()
-            
+            errorFavorites = null
+
             try {
                 val records = withContext(Dispatchers.IO) {
                     ApiService.getPlayRecords()
@@ -87,12 +94,13 @@ fun HomeTab(
                 playRecords = records.values
                     .sortedByDescending { it.saveTime }
                     .map { it.toVideoInfo() }
+                errorPlayRecords = null
             } catch (e: Exception) {
+                errorPlayRecords = e.message ?: "加载失败"
                 android.util.Log.e("HomeTab", "加载播放历史失败: ${e.message}")
             }
             isLoadingPlayRecords = false
-            
-            // 加载收藏夹，并根据播放历史填充 index
+
             try {
                 val favList = withContext(Dispatchers.IO) {
                     ApiService.getFavorites()
@@ -107,67 +115,94 @@ fun HomeTab(
                         videoInfo
                     }
                 }
+                errorFavorites = null
             } catch (e: Exception) {
+                errorFavorites = e.message ?: "加载失败"
                 android.util.Log.e("HomeTab", "加载收藏夹失败: ${e.message}")
             }
             isLoadingFavorites = false
         }
-        
-        // 加载热门电影
+    }
+
+    fun loadHotMovies() {
         coroutineScope.launch {
             isLoadingMovies = true
+            errorMovies = null
             when (val response = doubanService.getHotMovies(pageLimit = 20, page = 0)) {
                 is ApiResponse.Success -> {
                     hotMovies = response.data.map { it.toVideoInfo() }
+                    errorMovies = null
                 }
                 is ApiResponse.Error -> {
+                    errorMovies = response.message
                     android.util.Log.e("HomeTab", "加载热门电影失败: ${response.message}")
                 }
             }
             isLoadingMovies = false
         }
-        
-        // 加载热门剧集
+    }
+
+    fun loadHotTvShows() {
         coroutineScope.launch {
             isLoadingTvShows = true
+            errorTvShows = null
             when (val response = doubanService.getHotTvShows(pageLimit = 20, page = 0)) {
                 is ApiResponse.Success -> {
                     hotTvShows = response.data.map { it.toVideoInfo() }
+                    errorTvShows = null
                 }
                 is ApiResponse.Error -> {
+                    errorTvShows = response.message
                     android.util.Log.e("HomeTab", "加载热门剧集失败: ${response.message}")
                 }
             }
             isLoadingTvShows = false
         }
-        
-        // 加载新番放送
+    }
+
+    fun loadBangumi() {
         coroutineScope.launch {
             isLoadingBangumi = true
+            errorBangumi = null
             when (val response = bangumiService.getTodayCalendar()) {
                 is ApiResponse.Success -> {
                     bangumiCalendar = response.data.map { it.toVideoInfo() }
+                    errorBangumi = null
                 }
                 is ApiResponse.Error -> {
+                    errorBangumi = response.message
                     android.util.Log.e("HomeTab", "加载新番放送失败: ${response.message}")
                 }
             }
             isLoadingBangumi = false
         }
-        
-        // 加载热门综艺
+    }
+
+    fun loadHotShows() {
         coroutineScope.launch {
             isLoadingShows = true
+            errorShows = null
             when (val response = doubanService.getHotShows(pageLimit = 20, page = 0)) {
                 is ApiResponse.Success -> {
                     hotShows = response.data.map { it.toVideoInfo() }
+                    errorShows = null
                 }
                 is ApiResponse.Error -> {
+                    errorShows = response.message
                     android.util.Log.e("HomeTab", "加载热门综艺失败: ${response.message}")
                 }
             }
             isLoadingShows = false
         }
+    }
+
+    // 初始加载
+    LaunchedEffect(Unit) {
+        loadPlayRecordsAndFavorites()
+        loadHotMovies()
+        loadHotTvShows()
+        loadBangumi()
+        loadHotShows()
     }
     
     // 追踪是否是垂直方向的按键
@@ -212,75 +247,83 @@ fun HomeTab(
             // 顶部留出 TabSwitcher 的空间 + 额外间距
             Spacer(modifier = Modifier.height(64.dp))
             
-            // 播放历史 - 仅在有数据时显示
-            if (playRecords.isNotEmpty() || isLoadingPlayRecords) {
+            // 播放历史 - 仅在有数据或加载中或有错误时显示
+            if (playRecords.isNotEmpty() || isLoadingPlayRecords || errorPlayRecords != null) {
                 RecommendSection(
                     title = "继续观看",
                     videos = playRecords,
                     from = VideoCardSource.PLAYRECORD,
                     isLoading = isLoadingPlayRecords,
+                    errorMessage = errorPlayRecords,
+                    onRetry = { loadPlayRecordsAndFavorites() },
                     onVideoClick = { video ->
                         android.util.Log.d("HomeTab", "点击播放历史: ${video.title}")
                     }
                 )
             }
-            
-            // 收藏夹 - 仅在有数据时显示
-            if (favorites.isNotEmpty() || isLoadingFavorites) {
+
+            // 收藏夹 - 仅在有数据或加载中或有错误时显示
+            if (favorites.isNotEmpty() || isLoadingFavorites || errorFavorites != null) {
                 RecommendSection(
                     title = "我的收藏",
                     videos = favorites,
                     from = VideoCardSource.FAVORITE,
                     isLoading = isLoadingFavorites,
+                    errorMessage = errorFavorites,
+                    onRetry = { loadPlayRecordsAndFavorites() },
                     onVideoClick = { video ->
                         android.util.Log.d("HomeTab", "点击收藏: ${video.title}")
                     }
                 )
             }
-            
+
             RecommendSection(
-            title = "热门电影",
-            videos = hotMovies,
-            from = VideoCardSource.DOUBAN,
-            isLoading = isLoadingMovies,
-            onVideoClick = { video ->
-                // TODO: 处理视频点击事件
-                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-            }
-        )
-        
-        RecommendSection(
-            title = "热门剧集",
-            videos = hotTvShows,
-            from = VideoCardSource.DOUBAN,
-            isLoading = isLoadingTvShows,
-            onVideoClick = { video ->
-                // TODO: 处理视频点击事件
-                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-            }
-        )
-        
-        RecommendSection(
-            title = "新番放送",
-            videos = bangumiCalendar,
-            from = VideoCardSource.BANGUMI,
-            isLoading = isLoadingBangumi,
-            onVideoClick = { video ->
-                // TODO: 处理视频点击事件
-                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-            }
-        )
-        
-        RecommendSection(
-            title = "热门综艺",
-            videos = hotShows,
-            from = VideoCardSource.DOUBAN,
-            isLoading = isLoadingShows,
-            onVideoClick = { video ->
-                // TODO: 处理视频点击事件
-                android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-            }
-        )
+                title = "热门电影",
+                videos = hotMovies,
+                from = VideoCardSource.DOUBAN,
+                isLoading = isLoadingMovies,
+                errorMessage = errorMovies,
+                onRetry = { loadHotMovies() },
+                onVideoClick = { video ->
+                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+                }
+            )
+
+            RecommendSection(
+                title = "热门剧集",
+                videos = hotTvShows,
+                from = VideoCardSource.DOUBAN,
+                isLoading = isLoadingTvShows,
+                errorMessage = errorTvShows,
+                onRetry = { loadHotTvShows() },
+                onVideoClick = { video ->
+                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+                }
+            )
+
+            RecommendSection(
+                title = "新番放送",
+                videos = bangumiCalendar,
+                from = VideoCardSource.BANGUMI,
+                isLoading = isLoadingBangumi,
+                errorMessage = errorBangumi,
+                onRetry = { loadBangumi() },
+                onVideoClick = { video ->
+                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+                }
+            )
+
+            RecommendSection(
+                title = "热门综艺",
+                videos = hotShows,
+                from = VideoCardSource.DOUBAN,
+                isLoading = isLoadingShows,
+                errorMessage = errorShows,
+                onRetry = { loadHotShows() },
+                onVideoClick = { video ->
+                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
+                }
+            )
         }
     }
 }

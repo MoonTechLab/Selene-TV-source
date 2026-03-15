@@ -35,17 +35,21 @@ import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.VideoInfo
 
 /**
  * 推荐区块组件
- * 
+ *
  * @param title 区块标题
  * @param videos 视频列表数据
  * @param from 视频来源类型
  * @param isLoading 是否处于加载状态
+ * @param errorMessage 错误信息，非空时显示错误态
+ * @param onRetry 重试回调，非空时显示重试按钮
  * @param onVideoClick 视频卡片点击回调
  * @param modifier 修饰符
  */
@@ -56,6 +60,8 @@ fun RecommendSection(
     videos: List<VideoInfo>,
     from: VideoCardSource,
     isLoading: Boolean = false,
+    errorMessage: String? = null,
+    onRetry: (() -> Unit)? = null,
     onVideoClick: (VideoInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -63,7 +69,7 @@ fun RecommendSection(
     val coroutineScope = rememberCoroutineScope()
     val firstItemFocusRequester = remember { FocusRequester() }
     var isRowFocused by remember { mutableStateOf(false) }
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -80,7 +86,17 @@ fun RecommendSection(
                 .padding(start = 16.dp + 15.dp)  // paddingHorizontal 16 + marginLeft 19 = 35
                 .padding(vertical = 7.dp)         // paddingVertical 7
         )
-        
+
+        // 错误态：显示错误信息 + 重试按钮
+        if (errorMessage != null && !isLoading && videos.isEmpty()) {
+            SectionErrorState(
+                message = errorMessage,
+                onRetry = onRetry,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            return
+        }
+
         // LazyRow 专用的 BringIntoViewSpec，保持水平滚动功能
         val rowBringIntoViewSpec = remember {
             object : BringIntoViewSpec {
@@ -91,7 +107,7 @@ fun RecommendSection(
                 }
             }
         }
-        
+
         // 卡片列表
         // cardsContainer: paddingHorizontal 16, paddingVertical 8
         CompositionLocalProvider(
@@ -158,7 +174,57 @@ fun RecommendSection(
             }
             }
         }
-        
+
+    }
+}
+
+/**
+ * 区块错误状态 UI
+ */
+@Composable
+private fun SectionErrorState(
+    message: String,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(196.dp),  // 与骨架屏等高 (180 + 16 padding)
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "加载失败",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 13.sp
+            )
+
+            if (onRetry != null) {
+                Surface(
+                    onClick = onRetry,
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0x14FFFFFF),
+                        focusedContainerColor = Color(0xFF4CAF50)
+                    ),
+                    modifier = Modifier.onFocusChanged { isFocused = it.isFocused }
+                ) {
+                    Text(
+                        text = "重试",
+                        color = if (isFocused) Color.White else Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

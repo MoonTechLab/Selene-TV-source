@@ -50,6 +50,8 @@ import org.moontechlab.selenetv.ui.TransparentFilterSelector
 import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
 import org.moontechlab.selenetv.ui.VideoCardStyle
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 
 private const val TAG = "ShowTab"
 
@@ -445,6 +447,8 @@ fun ShowTab(
                     rows = rows,
                     isRowVisible = ::isRowVisible,
                     isLoading = dataState.isLoading,
+                    errorMessage = dataState.errorMessage,
+                    onRetry = { loadData(isInitial = true) },
                     cardGap = gridLayout.cardGap,
                     totalRows = rows.size,
                     onVerticalNavigate = ::handleVerticalScroll,
@@ -735,6 +739,8 @@ private fun ShowContentSection(
     rows: List<List<DoubanMovie>>,
     isRowVisible: (Int) -> Boolean,
     isLoading: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit,
     cardGap: Dp,
     totalRows: Int,
     onVerticalNavigate: (Int) -> Unit,
@@ -749,7 +755,12 @@ private fun ShowContentSection(
             .focusGroup(),
         verticalArrangement = Arrangement.spacedBy(SHOW_ROW_GAP.dp)
     ) {
-        if (isLoading && rows.isEmpty()) {
+        if (!isLoading && errorMessage != null && rows.isEmpty()) {
+            ShowGridErrorState(
+                message = errorMessage,
+                onRetry = onRetry
+            )
+        } else if (isLoading && rows.isEmpty()) {
             repeat(3) {
                 ShowGridRow(
                     shows = emptyList(),
@@ -917,6 +928,50 @@ private fun ShowCardSkeleton() {
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color.White.copy(alpha = alpha * 0.7f))
         )
+    }
+}
+
+@Composable
+private fun ShowGridErrorState(
+    message: String,
+    onRetry: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "加载失败",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 14.sp
+            )
+
+            Surface(
+                onClick = onRetry,
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0x14FFFFFF),
+                    focusedContainerColor = Color(0xFF4CAF50)
+                ),
+                modifier = Modifier.onFocusChanged { isFocused = it.isFocused }
+            ) {
+                Text(
+                    text = "重试",
+                    color = if (isFocused) Color.White else Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp)
+                )
+            }
+        }
     }
 }
 

@@ -190,14 +190,19 @@ fun VideoCard(
         if (needsScroll) {
             val loopDistance = titleWidth + textGapPx
             delay(1000) // 先停顿1秒
-            while (true) {
-                scrollAnim.animateTo(
-                    targetValue = -loopDistance.toFloat(),
-                    animationSpec = tween(
-                        durationMillis = loopDistance * 8, // 8ms/px，更快的滚动速度
-                        easing = LinearEasing
+            try {
+                while (true) {
+                    scrollAnim.animateTo(
+                        targetValue = -loopDistance.toFloat(),
+                        animationSpec = tween(
+                            durationMillis = loopDistance * 8, // 8ms/px，更快的滚动速度
+                            easing = LinearEasing
+                        )
                     )
-                )
+                    scrollAnim.snapTo(0f)
+                }
+            } finally {
+                // 协程取消时（组件销毁/失焦），重置滚动位置
                 scrollAnim.snapTo(0f)
             }
         } else {
