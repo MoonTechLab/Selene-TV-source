@@ -35,6 +35,7 @@ fun HomeScreen() {
     
     // SettingsTab 刷新 key，用于登录后刷新
     var settingsRefreshKey by remember { mutableIntStateOf(0) }
+
     
     // 为每个 Tab 创建 FocusRequester (指向各 Tab 的分类筛选器)
     val searchFocusRequester = remember { FocusRequester() }
@@ -43,6 +44,7 @@ fun HomeScreen() {
     val tvCategoryFocusRequester = remember { FocusRequester() }
     val animeCategoryFocusRequester = remember { FocusRequester() }
     val showCategoryFocusRequester = remember { FocusRequester() }
+    val liveFocusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
     
     // TabSwitcher 的 FocusRequester
@@ -109,6 +111,7 @@ fun HomeScreen() {
                             "series" -> tvCategoryFocusRequester.requestFocus()
                             "anime" -> animeCategoryFocusRequester.requestFocus()
                             "show" -> showCategoryFocusRequester.requestFocus()
+                            "live" -> liveFocusRequester.requestFocus()
                             "settings" -> settingsFocusRequester.requestFocus()
                         }
                     },
@@ -146,7 +149,10 @@ fun HomeScreen() {
                     categoryFocusRequester = showCategoryFocusRequester,
                     scrollState = scrollState
                 )
-                "live" -> LiveTab(scrollState = scrollState)
+                "live" -> LiveTab(
+                    focusRequester = liveFocusRequester,
+                    scrollState = scrollState
+                )
                 "settings" -> key(settingsRefreshKey) {
                     SettingsTab(
                         focusRequester = settingsFocusRequester,

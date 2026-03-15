@@ -11,7 +11,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonArray
 import org.moontechlab.selenetv.model.FavoriteItem
+import org.moontechlab.selenetv.model.LiveSource
 import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResource
 import java.io.BufferedReader
@@ -423,6 +426,57 @@ object ApiService {
      */
     fun clearPlayRecords() {
         delete<JsonObject>("/api/playrecords") { it }
+    }
+
+    // ==================== 直播源 API ====================
+
+    /**
+     * 获取直播源列表
+     * @throws ApiException 请求失败时抛出
+     */
+    fun getLiveSources(): List<LiveSource> {
+        val url = buildUrl("/api/live/sources")
+        val connection = createConnection(url, "GET")
+
+        val statusCode = connection.responseCode
+        if (statusCode == 401) {
+            throw ApiException("登录状态失效，请重新登录", statusCode)
+        }
+        if (statusCode < 200 || statusCode >= 300) {
+            throw ApiException("网络请求失败 ($statusCode)", statusCode)
+        }
+
+        return try {
+            val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+            val rootObj = json.parseToJsonElement(responseText).jsonObject
+            val dataArray = rootObj["data"]?.jsonArray ?: return emptyList()
+
+            dataArray.mapNotNull { element ->
+                try {
+                    val obj = element.jsonObject
+                    val disabled = obj["disabled"]?.jsonPrimitive?.booleanOrNull ?: false
+                    if (disabled) return@mapNotNull null
+                    LiveSource(
+                        key = obj["key"]?.jsonPrimitive?.contentOrNull ?: "",
+                        name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                        url = obj["url"]?.jsonPrimitive?.contentOrNull ?: "",
+                        ua = obj["ua"]?.jsonPrimitive?.contentOrNull ?: "",
+                        epg = obj["epg"]?.jsonPrimitive?.contentOrNull ?: "",
+                        from = obj["from"]?.jsonPrimitive?.contentOrNull ?: "",
+                        disabled = disabled
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "解析直播源条目失败: ${e.message}")
+                    null
+                }
+            }.filter { it.key.isNotEmpty() && it.url.isNotEmpty() }
+        } catch (e: ApiException) {
+            throw e
+        } catch (e: Exception) {
+            throw ApiException("响应数据解析失败: ${e.message}", statusCode)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     // ==================== 搜索资源 API ====================
