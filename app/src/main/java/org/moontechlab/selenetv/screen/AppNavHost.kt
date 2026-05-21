@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 
 @Composable
 fun AppNavHost() {
@@ -41,6 +42,19 @@ fun AppNavHost() {
             },
         ) {
             LoginScreen(navController = navController)
+        }
+        composable<DetailRoute>(
+            enterTransition = {
+                fadeIn(animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)) +
+                        scaleIn(initialScale = 0.95f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f)) +
+                        scaleOut(targetScale = 0.95f, animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f))
+            },
+        ) { backStackEntry ->
+            val route = backStackEntry.toRoute<DetailRoute>()
+            DetailScreen(navController = navController, route = route)
         }
     }
 }
