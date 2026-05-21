@@ -96,6 +96,9 @@ lint/tmp/
 # VSCode
 .vscode/
 
+# Superpowers brainstorm sessions
+.superpowers/
+
 # macOS
 .DS_Store
 .AppleDouble
