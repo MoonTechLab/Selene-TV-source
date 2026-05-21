@@ -10,12 +10,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -62,15 +60,6 @@ private val LoginButtonBgFocused = Color(0xFF4CAF50)
 
 @Composable
 fun LoginScreen(navController: androidx.navigation.NavController) {
-    val context = LocalContext.current
-    var initialServerUrl by remember { mutableStateOf("") }
-    var initialUsername by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        initialServerUrl = AppDataService.getServerUrl() ?: ""
-        initialUsername = AppDataService.getUsername() ?: ""
-    }
-
     BackHandler { navController.popBackStack() }
 
     val gradientBrush = Brush.verticalGradient(
@@ -86,28 +75,27 @@ fun LoginScreen(navController: androidx.navigation.NavController) {
             .background(brush = gradientBrush),
         contentAlignment = Alignment.Center,
     ) {
-        LoginScreenContent(
-            initialServerUrl = initialServerUrl,
-            initialUsername = initialUsername,
-            onDismiss = { navController.popBackStack() },
-        )
+        LoginScreenContent(onDismiss = { navController.popBackStack() })
     }
 }
 
 
 @Composable
 private fun LoginScreenContent(
-    initialServerUrl: String,
-    initialUsername: String,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     // 表单状态
-    var serverUrl by remember { mutableStateOf(initialServerUrl) }
-    var username by remember { mutableStateOf(initialUsername) }
+    var serverUrl by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        serverUrl = AppDataService.getServerUrl() ?: ""
+        username = AppDataService.getUsername() ?: ""
+    }
     var isLoading by remember { mutableStateOf(false) }
     
     // Toast 显示函数
@@ -328,7 +316,6 @@ private fun LoginTextField(
     downFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
 
     Column {
         Text(

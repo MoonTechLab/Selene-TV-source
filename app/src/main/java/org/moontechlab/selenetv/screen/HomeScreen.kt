@@ -39,7 +39,6 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         }
     }
 
-    
     // 为每个 Tab 创建 FocusRequester (指向各 Tab 的分类筛选器)
     val searchFocusRequester = remember { FocusRequester() }
     val homeTabFocusRequester = remember { FocusRequester() }

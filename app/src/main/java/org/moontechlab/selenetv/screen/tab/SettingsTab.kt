@@ -143,6 +143,14 @@ fun SettingsTab(
     val clearDoubanCacheFocusRequester = remember { FocusRequester() }
     val clearSearchCacheFocusRequester = remember { FocusRequester() }
 
+    // 重建后请求焦点
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(50)
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Exception) {}
+    }
+
     // 加载数据
     LaunchedEffect(Unit) {
         hasLogin = AppDataService.isLoggedIn()
