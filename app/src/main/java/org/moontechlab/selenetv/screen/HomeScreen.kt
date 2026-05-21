@@ -15,6 +15,7 @@ import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hasRoute
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.screen.tab.*
@@ -32,12 +33,15 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     var homeRefreshKey by remember { mutableIntStateOf(0) }
 
     // 每次返回 HomeRoute 时自增，让 Tab 重拉数据
+    // drop(1) 跳过初始发射，避免启动时 homeRefreshKey 被 0→1 触发 HomeTab 二次加载
     LaunchedEffect(navController) {
-        navController.currentBackStackEntryFlow.collect { entry ->
-            if (entry.destination.hasRoute<HomeRoute>()) {
-                homeRefreshKey++
+        navController.currentBackStackEntryFlow
+            .drop(1)
+            .collect { entry ->
+                if (entry.destination.hasRoute<HomeRoute>()) {
+                    homeRefreshKey++
+                }
             }
-        }
     }
 
     val openDetail: (VideoInfo) -> Unit = remember(navController) {
@@ -52,6 +56,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                         year = video.year,
                     )
                 )
+            } else {
+                android.util.Log.d("HomeScreen", "openDetail skipped: no doubanId for '${video.title}' (source=${video.source})")
             }
         }
     }
