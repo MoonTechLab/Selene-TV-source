@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,10 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
 
     var state by remember { mutableStateOf(DetailUiState(route = route)) }
 
+    DisposableEffect(Unit) {
+        onDispose { SearchService.stopSearch() }
+    }
+
     BackHandler { navController.popBackStack() }
 
     // 拉豆瓣详情
@@ -58,7 +63,7 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
     LaunchedEffect(route.doubanId) {
         SearchService.stopSearch() // 清掉上一次的状态
         // 与事件流的订阅必须在 startSearch 之前先挂上，避免漏掉 Results
-        val collectorJob = scope.launch {
+        scope.launch {
             SearchService.eventFlow.collect { event ->
                 when (event) {
                     is SearchEvent.Results -> {
@@ -78,12 +83,8 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                 }
             }
         }
-        try {
-            withContext(Dispatchers.IO) {
-                SearchService.startSearch(route.title)
-            }
-        } finally {
-            // collectorJob 会在 composable 离开时随 scope 自动取消
+        withContext(Dispatchers.IO) {
+            SearchService.startSearch(route.title)
         }
     }
 
@@ -92,7 +93,7 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
         try {
             val records = withContext(Dispatchers.IO) { ApiService.getPlayRecords() }
             state = state.copy(playRecords = records)
-        } catch (_: Exception) { /* 失败不阻塞 UI */ }
+        } catch (e: Exception) { android.util.Log.w("DetailScreen", "播放记录加载失败", e) }
     }
 
     // 拉收藏列表
@@ -101,7 +102,7 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
             val favs = withContext(Dispatchers.IO) { ApiService.getFavorites() }
             val keys = favs.map { "${it.source}+${it.id}" }.toSet()
             state = state.copy(favoriteKeys = keys)
-        } catch (_: Exception) { /* 失败不阻塞 UI */ }
+        } catch (e: Exception) { android.util.Log.w("DetailScreen", "收藏列表加载失败", e) }
     }
 
     // 默认选中源
