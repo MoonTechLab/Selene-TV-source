@@ -12,7 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.moontechlab.selenetv.screen.HomeScreen
+import org.moontechlab.selenetv.screen.AppNavHost
 import org.moontechlab.selenetv.server.RemoteControlServer
 import org.moontechlab.selenetv.service.AppDataService
 import java.net.HttpURLConnection
@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            HomeScreen()
+            AppNavHost()
         }
     }
     

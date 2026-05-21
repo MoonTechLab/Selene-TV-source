@@ -22,7 +22,7 @@ import org.moontechlab.selenetv.ui.TabSwitcher
 import org.moontechlab.selenetv.ui.TextMeasureProvider
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(navController: androidx.navigation.NavController) {
     val context = LocalContext.current
     
     // 当前选中的标签页
@@ -187,5 +187,5 @@ fun HomeScreen() {
 @Preview(device = Devices.TV_1080p)
 @Composable
 fun HomeScreenPreview() {
-    HomeScreen()
+    HomeScreen(navController = androidx.navigation.compose.rememberNavController())
 }
