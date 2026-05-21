@@ -3,7 +3,10 @@ package org.moontechlab.selenetv.screen
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -144,12 +147,22 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
             enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
             exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(0)),
         ) {
-            // 占位：下个阶段塞入 DetailHero + DetailSourcesSection
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "details ready: ${state.details?.title ?: state.route.title}",
-                    color = Color.White,
-                    fontSize = 18.sp,
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                org.moontechlab.selenetv.screen.detail.DetailHero(
+                    route = state.route,
+                    details = state.details,
+                    actionsRow = {
+                        // 下个任务塞入真实按钮行
+                        androidx.tv.material3.Text(
+                            text = "[actions placeholder]",
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontSize = 11.sp,
+                        )
+                    },
                 )
             }
         }
