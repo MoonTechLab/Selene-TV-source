@@ -134,6 +134,96 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
         }
     }
 
+    val primaryFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    // 详情就绪后请求初始焦点（等 cross-fade 结束）
+    LaunchedEffect(state.detailsLoading, state.sources.isNotEmpty()) {
+        if (!state.detailsLoading) {
+            kotlinx.coroutines.delay(220) // 等 cross-fade 结束
+            try { primaryFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    fun showToast(msg: String) {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    val onToggleFavorite: () -> Unit = lam@{
+        val source = state.selectedSource ?: return@lam
+        val key = sourceKey(source)
+        val details = state.details
+        val wasFav = state.isSelectedFavorite
+
+        // 乐观更新
+        state = state.copy(
+            favoriteKeys = if (wasFav) state.favoriteKeys - key else state.favoriteKeys + key
+        )
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    if (wasFav) {
+                        ApiService.unfavorite(source.source, source.id)
+                    } else {
+                        val favData = mapOf<String, Any?>(
+                            "title" to (details?.title ?: state.route.title),
+                            "source_name" to source.sourceName,
+                            "year" to (details?.year ?: state.route.year),
+                            "cover" to source.poster,
+                            "total_episodes" to source.episodes.size,
+                            "save_time" to System.currentTimeMillis(),
+                            "origin" to "",
+                        )
+                        ApiService.addFavorite(source.source, source.id, favData)
+                    }
+                }
+            } catch (e: Exception) {
+                // 回滚
+                state = state.copy(
+                    favoriteKeys = if (wasFav) state.favoriteKeys + key else state.favoriteKeys - key
+                )
+                showToast("收藏操作失败：${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    val onDeleteRecord: () -> Unit = lam@{
+        val source = state.selectedSource ?: return@lam
+        val key = sourceKey(source)
+        val backup = state.playRecords[key] ?: return@lam
+        state = state.copy(playRecords = state.playRecords - key)
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(source.source, source.id) }
+                showToast("已删除播放记录")
+            } catch (e: Exception) {
+                state = state.copy(playRecords = state.playRecords + (key to backup))
+                showToast("删除失败：${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    val onContinue: () -> Unit = lam@{
+        val source = state.selectedSource ?: return@lam
+        val rec = state.selectedPlayRecord
+        android.util.Log.d("DetailScreen", "continue: source=${source.source}+${source.id} ep=${rec?.index} pos=${rec?.playTime}")
+    }
+
+    val onPlay: () -> Unit = lam@{
+        val source = state.selectedSource ?: return@lam
+        val rec = state.selectedPlayRecord
+        when {
+            rec != null -> {
+                android.util.Log.d("DetailScreen", "play (resume): source=${source.source}+${source.id} ep=${rec.index} pos=${rec.playTime}")
+            }
+            source.episodes.size > 1 -> {
+                state = state.copy(episodePickerVisible = true)
+            }
+            else -> {
+                android.util.Log.d("DetailScreen", "play (single): source=${source.source}+${source.id} ep=0")
+            }
+        }
+    }
+
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
         0.4f to Color(0xFF1a1a1a),
@@ -156,11 +246,20 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                     route = state.route,
                     details = state.details,
                     actionsRow = {
-                        // 下个任务塞入真实按钮行
-                        androidx.tv.material3.Text(
-                            text = "[actions placeholder]",
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 11.sp,
+                        val hasRecord = state.selectedPlayRecord != null
+                        val hasSource = state.selectedSource != null
+                        org.moontechlab.selenetv.screen.detail.DetailActionButtons(
+                            showContinue = hasSource && hasRecord,
+                            showPlay = hasSource,
+                            showDelete = hasSource && hasRecord,
+                            showFavorite = hasSource,
+                            isFavorite = state.isSelectedFavorite,
+                            sourceName = state.selectedSource?.sourceName,
+                            onContinue = onContinue,
+                            onPlay = onPlay,
+                            onDelete = onDeleteRecord,
+                            onToggleFavorite = onToggleFavorite,
+                            primaryFocusRequester = primaryFocus,
                         )
                     },
                 )
