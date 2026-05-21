@@ -281,5 +281,19 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
         ) {
             org.moontechlab.selenetv.screen.detail.MoonLoadingOverlay(title = state.route.title)
         }
+
+        state.selectedSource?.let { source ->
+            org.moontechlab.selenetv.screen.detail.EpisodePickerDialog(
+                visible = state.episodePickerVisible,
+                sourceName = source.sourceName,
+                episodes = source.episodes,
+                episodesTitles = source.episodesTitles,
+                onSelect = { idx ->
+                    android.util.Log.d("DetailScreen", "play: source=${source.source}+${source.id} ep=$idx")
+                    state = state.copy(episodePickerVisible = false)
+                },
+                onDismiss = { state = state.copy(episodePickerVisible = false) },
+            )
+        }
     }
 }
