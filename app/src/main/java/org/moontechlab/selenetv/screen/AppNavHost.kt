@@ -30,5 +30,17 @@ fun AppNavHost() {
         ) {
             HomeScreen(navController = navController)
         }
+        composable<LoginRoute>(
+            enterTransition = {
+                fadeIn(animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)) +
+                        scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f))
+            },
+            exitTransition = {
+                fadeOut(animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f)) +
+                        scaleOut(targetScale = 0.8f, animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f))
+            },
+        ) {
+            LoginScreen(navController = navController)
+        }
     }
 }

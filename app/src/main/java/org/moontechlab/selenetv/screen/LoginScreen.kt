@@ -1,8 +1,6 @@
 package org.moontechlab.selenetv.screen
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -21,7 +19,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -40,7 +37,6 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import org.moontechlab.selenetv.server.RemoteControlServer
@@ -64,81 +60,19 @@ private val SuccessColor = Color(0xFF2ECC71)
 private val LoginButtonBg = Color(0x334CAF50)
 private val LoginButtonBgFocused = Color(0xFF4CAF50)
 
-/**
- * 登录屏幕 - 全屏页面，带动画效果
- */
 @Composable
-fun LoginScreen(
-    visible: Boolean,
-    initialServerUrl: String = "",
-    initialUsername: String = "",
-    onDismiss: () -> Unit
-) {
-    // 控制动画状态
-    var showScreen by remember { mutableStateOf(false) }
-    var animateIn by remember { mutableStateOf(false) }
+fun LoginScreen(navController: androidx.navigation.NavController) {
+    val context = LocalContext.current
+    var initialServerUrl by remember { mutableStateOf("") }
+    var initialUsername by remember { mutableStateOf("") }
 
-    // 处理显示/隐藏逻辑
-    LaunchedEffect(visible) {
-        if (visible) {
-            showScreen = true
-            delay(16) // 等待一帧让内容渲染
-            animateIn = true
-        } else {
-            animateIn = false
-            delay(150) // 等待关闭动画完成
-            showScreen = false
-        }
+    LaunchedEffect(Unit) {
+        initialServerUrl = AppDataService.getServerUrl() ?: ""
+        initialUsername = AppDataService.getUsername() ?: ""
     }
 
-    if (showScreen) {
-        LoginScreenWithAnimation(
-            initialServerUrl = initialServerUrl,
-            initialUsername = initialUsername,
-            animateIn = animateIn,
-            onDismiss = onDismiss
-        )
-    }
-}
+    BackHandler { navController.popBackStack() }
 
-@Composable
-private fun LoginScreenWithAnimation(
-    initialServerUrl: String,
-    initialUsername: String,
-    animateIn: Boolean,
-    onDismiss: () -> Unit
-) {
-    // 返回键处理
-    BackHandler(enabled = true) {
-        onDismiss()
-    }
-
-    // 动画参数 - 展示: 更快更少回弹; 隐藏: 快速收起
-    val showSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
-    val hideSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 500f)
-
-    // 内容缩放动画: 0.8 <-> 1.0
-    val contentScale by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0.8f,
-        animationSpec = if (animateIn) showSpring else hideSpring,
-        label = "content_scale"
-    )
-
-    // 内容透明度动画: 0 <-> 1
-    val contentOpacity by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0f,
-        animationSpec = if (animateIn) showSpring else hideSpring,
-        label = "content_opacity"
-    )
-
-    // 背景透明度动画: 0 <-> 1
-    val bgOpacity by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0f,
-        animationSpec = if (animateIn) showSpring else hideSpring,
-        label = "bg_opacity"
-    )
-
-    // 与 HomeScreen 一致的渐变背景
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
         0.4f to Color(0xFF1a1a1a),
@@ -149,23 +83,14 @@ private fun LoginScreenWithAnimation(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = bgOpacity }
             .background(brush = gradientBrush),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.graphicsLayer {
-                scaleX = contentScale
-                scaleY = contentScale
-                alpha = contentOpacity
-            }
-        ) {
-            LoginScreenContent(
-                initialServerUrl = initialServerUrl,
-                initialUsername = initialUsername,
-                onDismiss = onDismiss
-            )
-        }
+        LoginScreenContent(
+            initialServerUrl = initialServerUrl,
+            initialUsername = initialUsername,
+            onDismiss = { navController.popBackStack() },
+        )
     }
 }
 
