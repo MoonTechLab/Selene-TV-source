@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -17,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -237,40 +239,56 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
             enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
             exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(0)),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                org.moontechlab.selenetv.screen.detail.DetailHero(
-                    route = state.route,
-                    details = state.details,
-                    actionsRow = {
-                        val hasRecord = state.selectedPlayRecord != null
-                        val hasSource = state.selectedSource != null
-                        org.moontechlab.selenetv.screen.detail.DetailActionButtons(
-                            showContinue = hasSource && hasRecord,
-                            showPlay = hasSource,
-                            showDelete = hasSource && hasRecord,
-                            showFavorite = hasSource,
-                            isFavorite = state.isSelectedFavorite,
-                            sourceName = state.selectedSource?.sourceName,
-                            onContinue = onContinue,
-                            onPlay = onPlay,
-                            onDelete = onDeleteRecord,
-                            onToggleFavorite = onToggleFavorite,
-                            primaryFocusRequester = primaryFocus,
-                        )
+            val err = state.detailsError
+            if (err != null && state.details == null) {
+                HeroErrorState(
+                    message = err,
+                    onRetry = {
+                        scope.launch {
+                            state = state.copy(detailsLoading = true, detailsError = null)
+                            when (val resp = doubanService.getDoubanDetails(state.route.doubanId)) {
+                                is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+                                is ApiResponse.Error -> state = state.copy(detailsError = resp.message, detailsLoading = false)
+                            }
+                        }
                     },
                 )
-                org.moontechlab.selenetv.screen.detail.DetailSourcesSection(
-                    sources = state.sources,
-                    selectedSourceKey = state.selectedSourceKey,
-                    playRecords = state.playRecords,
-                    progress = state.sourcesProgress,
-                    complete = state.sourcesComplete,
-                    onSelect = { key -> state = state.copy(selectedSourceKey = key) },
-                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    org.moontechlab.selenetv.screen.detail.DetailHero(
+                        route = state.route,
+                        details = state.details,
+                        actionsRow = {
+                            val hasRecord = state.selectedPlayRecord != null
+                            val hasSource = state.selectedSource != null
+                            org.moontechlab.selenetv.screen.detail.DetailActionButtons(
+                                showContinue = hasSource && hasRecord,
+                                showPlay = hasSource,
+                                showDelete = hasSource && hasRecord,
+                                showFavorite = hasSource,
+                                isFavorite = state.isSelectedFavorite,
+                                sourceName = state.selectedSource?.sourceName,
+                                onContinue = onContinue,
+                                onPlay = onPlay,
+                                onDelete = onDeleteRecord,
+                                onToggleFavorite = onToggleFavorite,
+                                primaryFocusRequester = primaryFocus,
+                            )
+                        },
+                    )
+                    org.moontechlab.selenetv.screen.detail.DetailSourcesSection(
+                        sources = state.sources,
+                        selectedSourceKey = state.selectedSourceKey,
+                        playRecords = state.playRecords,
+                        progress = state.sourcesProgress,
+                        complete = state.sourcesComplete,
+                        onSelect = { key -> state = state.copy(selectedSourceKey = key) },
+                    )
+                }
             }
         }
 
@@ -294,6 +312,43 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                 },
                 onDismiss = { state = state.copy(episodePickerVisible = false) },
             )
+        }
+    }
+}
+
+@Composable
+private fun HeroErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Column(
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+        ) {
+            androidx.tv.material3.Text(
+                text = "加载失败：$message",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 14.sp,
+            )
+            androidx.tv.material3.Surface(
+                onClick = onRetry,
+                shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = Color(0x14FFFFFF),
+                    focusedContainerColor = Color(0xFF4CAF50),
+                ),
+                modifier = Modifier.onFocusChanged { focused = it.isFocused },
+            ) {
+                androidx.tv.material3.Text(
+                    text = "重试",
+                    color = if (focused) Color.White else Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp),
+                )
+            }
         }
     }
 }
