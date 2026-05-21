@@ -263,6 +263,14 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                         )
                     },
                 )
+                org.moontechlab.selenetv.screen.detail.DetailSourcesSection(
+                    sources = state.sources,
+                    selectedSourceKey = state.selectedSourceKey,
+                    playRecords = state.playRecords,
+                    progress = state.sourcesProgress,
+                    complete = state.sourcesComplete,
+                    onSelect = { key -> state = state.copy(selectedSourceKey = key) },
+                )
             }
         }
 
