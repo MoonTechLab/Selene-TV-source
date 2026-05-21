@@ -16,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hasRoute
 import kotlinx.coroutines.launch
+import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.screen.tab.*
 import org.moontechlab.selenetv.ui.AnimatedTabContent
 import org.moontechlab.selenetv.ui.TabSwitcher
@@ -35,6 +36,22 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         navController.currentBackStackEntryFlow.collect { entry ->
             if (entry.destination.hasRoute<HomeRoute>()) {
                 homeRefreshKey++
+            }
+        }
+    }
+
+    val openDetail: (VideoInfo) -> Unit = remember(navController) {
+        { video ->
+            val doubanId = video.doubanId
+            if (doubanId != null) {
+                navController.navigate(
+                    DetailRoute(
+                        doubanId = doubanId,
+                        title = video.title,
+                        poster = video.cover,
+                        year = video.year,
+                    )
+                )
             }
         }
     }
@@ -126,23 +143,29 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                 )
                 "home" -> HomeTab(
                     focusRequester = homeTabFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onVideoSelected = openDetail,
+                    homeRefreshKey = homeRefreshKey,
                 )
                 "movies" -> MovieTab(
                     categoryFocusRequester = movieCategoryFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onVideoSelected = openDetail,
                 )
                 "series" -> TvTab(
                     categoryFocusRequester = tvCategoryFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onVideoSelected = openDetail,
                 )
                 "anime" -> AnimeTab(
                     categoryFocusRequester = animeCategoryFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onVideoSelected = openDetail,
                 )
                 "show" -> ShowTab(
                     categoryFocusRequester = showCategoryFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onVideoSelected = openDetail,
                 )
                 "live" -> LiveTab(
                     focusRequester = liveFocusRequester,

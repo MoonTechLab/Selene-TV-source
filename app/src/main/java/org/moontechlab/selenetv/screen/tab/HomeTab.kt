@@ -37,7 +37,9 @@ import org.moontechlab.selenetv.ui.VideoCardSource
 @Composable
 fun HomeTab(
     focusRequester: FocusRequester = remember { FocusRequester() },
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState = rememberScrollState(),
+    onVideoSelected: (VideoInfo) -> Unit = {},
+    homeRefreshKey: Int = 0,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -204,7 +206,13 @@ fun HomeTab(
         loadBangumi()
         loadHotShows()
     }
-    
+
+    LaunchedEffect(homeRefreshKey) {
+        if (homeRefreshKey > 0) {  // 跳过首次（已由 LaunchedEffect(Unit) 触发）
+            loadPlayRecordsAndFavorites()
+        }
+    }
+
     // 追踪是否是垂直方向的按键
     var isVerticalNavigation by remember { mutableStateOf(false) }
     
@@ -256,9 +264,7 @@ fun HomeTab(
                     isLoading = isLoadingPlayRecords,
                     errorMessage = errorPlayRecords,
                     onRetry = { loadPlayRecordsAndFavorites() },
-                    onVideoClick = { video ->
-                        android.util.Log.d("HomeTab", "点击播放历史: ${video.title}")
-                    }
+                    onVideoClick = onVideoSelected
                 )
             }
 
@@ -271,9 +277,7 @@ fun HomeTab(
                     isLoading = isLoadingFavorites,
                     errorMessage = errorFavorites,
                     onRetry = { loadPlayRecordsAndFavorites() },
-                    onVideoClick = { video ->
-                        android.util.Log.d("HomeTab", "点击收藏: ${video.title}")
-                    }
+                    onVideoClick = onVideoSelected
                 )
             }
 
@@ -284,9 +288,7 @@ fun HomeTab(
                 isLoading = isLoadingMovies,
                 errorMessage = errorMovies,
                 onRetry = { loadHotMovies() },
-                onVideoClick = { video ->
-                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-                }
+                onVideoClick = onVideoSelected
             )
 
             RecommendSection(
@@ -296,9 +298,7 @@ fun HomeTab(
                 isLoading = isLoadingTvShows,
                 errorMessage = errorTvShows,
                 onRetry = { loadHotTvShows() },
-                onVideoClick = { video ->
-                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-                }
+                onVideoClick = onVideoSelected
             )
 
             RecommendSection(
@@ -308,9 +308,7 @@ fun HomeTab(
                 isLoading = isLoadingBangumi,
                 errorMessage = errorBangumi,
                 onRetry = { loadBangumi() },
-                onVideoClick = { video ->
-                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-                }
+                onVideoClick = onVideoSelected
             )
 
             RecommendSection(
@@ -320,9 +318,7 @@ fun HomeTab(
                 isLoading = isLoadingShows,
                 errorMessage = errorShows,
                 onRetry = { loadHotShows() },
-                onVideoClick = { video ->
-                    android.util.Log.d("HomeTab", "点击视频: ${video.title}")
-                }
+                onVideoClick = onVideoSelected
             )
         }
     }

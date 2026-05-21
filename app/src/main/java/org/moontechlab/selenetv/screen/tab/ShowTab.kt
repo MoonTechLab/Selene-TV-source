@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.DoubanKind
 import org.moontechlab.selenetv.model.DoubanMovie
 import org.moontechlab.selenetv.model.DoubanRecommendsParams
+import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.DoubanService
@@ -220,7 +221,7 @@ data class ShowTabState(
 fun ShowTab(
     categoryFocusRequester: FocusRequester = remember { FocusRequester() },
     scrollState: ScrollState = rememberScrollState(),
-    onShowClick: (DoubanMovie) -> Unit = {}
+    onVideoSelected: (VideoInfo) -> Unit = {}
 ) {
     val context = LocalContext.current
     val doubanService = remember { DoubanService.getInstance(context) }
@@ -453,7 +454,7 @@ fun ShowTab(
                     totalRows = rows.size,
                     onVerticalNavigate = ::handleVerticalScroll,
                     onCardFocus = ::onCardFocus,
-                    onShowClick = onShowClick,
+                    onShowClick = { show -> onVideoSelected(show.toVideoInfo()) },
                     focusRequester = contentFocusRequester,
                     onNavigateUp = { regionFocusRequester.requestFocus() }
                 )

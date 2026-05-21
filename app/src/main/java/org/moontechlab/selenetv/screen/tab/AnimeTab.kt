@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.BangumiItem
 import org.moontechlab.selenetv.model.DoubanMovie
 import org.moontechlab.selenetv.model.DoubanRecommendsParams
+import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.BangumiService
@@ -313,8 +314,7 @@ data class AnimeTabState(
 fun AnimeTab(
     categoryFocusRequester: FocusRequester = remember { FocusRequester() },
     scrollState: ScrollState = rememberScrollState(),
-    onBangumiClick: (BangumiItem) -> Unit = {},
-    onDoubanClick: (DoubanMovie) -> Unit = {}
+    onVideoSelected: (VideoInfo) -> Unit = {}
 ) {
     val context = LocalContext.current
     val bangumiService = remember { BangumiService.getInstance(context) }
@@ -545,8 +545,8 @@ fun AnimeTab(
                     totalRows = rows.size,
                     onVerticalNavigate = ::handleVerticalScroll,
                     onCardFocus = ::onCardFocus,
-                    onBangumiClick = onBangumiClick,
-                    onDoubanClick = onDoubanClick,
+                    onBangumiClick = { item -> onVideoSelected(item.toVideoInfo()) },
+                    onDoubanClick = { movie -> onVideoSelected(movie.toVideoInfo()) },
                     focusRequester = contentFocusRequester,
                     onNavigateUp = { typeFocusRequester.requestFocus() }
                 )
