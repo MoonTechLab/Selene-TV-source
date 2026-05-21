@@ -28,6 +28,7 @@ import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.screen.detail.DetailUiState
 import org.moontechlab.selenetv.screen.detail.SourceFilter
@@ -64,10 +65,18 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
 
     // 启动搜索 + 订阅事件流，按 doubanId/title/year 筛选
     LaunchedEffect(route.doubanId) {
-        SearchService.stopSearch() // 清掉上一次的状态
-        // 与事件流的订阅必须在 startSearch 之前先挂上，避免漏掉 Results
-        scope.launch {
-            SearchService.eventFlow.collect { event ->
+        // Known limitation: SearchService is a global singleton, so opening DetailScreen while
+        // SearchTab is actively searching will interrupt the SearchTab's search. Follow-up:
+        // scope SearchService per-screen or route detail searches through a separate channel.
+        SearchService.stopSearch()
+        SearchService.eventFlow
+            .onSubscription {
+                // 订阅注册完成后再启动搜索，避免漏掉首批 Results
+                scope.launch(Dispatchers.IO) {
+                    SearchService.startSearch(route.title)
+                }
+            }
+            .collect { event ->
                 when (event) {
                     is SearchEvent.Results -> {
                         val accepted = event.results
@@ -85,10 +94,6 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                     is SearchEvent.Error    -> {} // 单源错误已被 SearchService 内部记录
                 }
             }
-        }
-        withContext(Dispatchers.IO) {
-            SearchService.startSearch(route.title)
-        }
     }
 
     // 拉播放记录
@@ -265,6 +270,8 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                         actionsRow = {
                             val hasRecord = state.selectedPlayRecord != null
                             val hasSource = state.selectedSource != null
+                            // 收藏与选中源绑定（按 source+id 存储，参考 plan 文档的 Plan-vs-Spec 微调）。
+                            // 当 selectedSource 为空时整组按钮（含 ♡）隐藏；后续可重新评估是否引入"按 doubanId 收藏"概念。
                             org.moontechlab.selenetv.screen.detail.DetailActionButtons(
                                 showContinue = hasSource && hasRecord,
                                 showPlay = hasSource,
