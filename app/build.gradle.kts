@@ -83,7 +83,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.compose.animation.core)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    
+    implementation(libs.androidx.navigation.compose)
+
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")
     implementation("io.ktor:ktor-server-netty:2.3.12")
