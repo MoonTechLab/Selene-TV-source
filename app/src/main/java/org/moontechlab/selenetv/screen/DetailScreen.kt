@@ -3,9 +3,7 @@ package org.moontechlab.selenetv.screen
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -122,26 +120,46 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
         }
     }
 
-    // 临时调试展示（下一个阶段替换为真正 UI）
+    // 是否真正展示加载层（延迟 150ms，避免命中缓存时闪屏）
+    var showMoonOverlay by remember { mutableStateOf(false) }
+    LaunchedEffect(state.detailsLoading) {
+        if (state.detailsLoading) {
+            kotlinx.coroutines.delay(150)
+            if (state.detailsLoading) showMoonOverlay = true
+        } else {
+            showMoonOverlay = false
+        }
+    }
+
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
         0.4f to Color(0xFF1a1a1a),
         0.7f to Color(0xFF0f0f0f),
         1.0f to Color(0xFF050505),
     )
-    Box(
-        modifier = Modifier.fillMaxSize().background(brush = gradientBrush),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(modifier = Modifier.padding(32.dp)) {
-            Text("loading=${state.detailsLoading}", color = Color.White, fontSize = 14.sp)
-            Text("title=${state.details?.title ?: route.title}", color = Color.White, fontSize = 14.sp)
-            Text("year=${state.details?.year ?: route.year}", color = Color.White, fontSize = 14.sp)
-            Text("sources=${state.sources.size} / complete=${state.sourcesComplete}", color = Color.White, fontSize = 14.sp)
-            Text("selected=${state.selectedSourceKey}", color = Color.White, fontSize = 14.sp)
-            Text("hasRecord=${state.selectedPlayRecord != null}", color = Color.White, fontSize = 14.sp)
-            Text("isFav=${state.isSelectedFavorite}", color = Color.White, fontSize = 14.sp)
-            state.detailsError?.let { Text("err=$it", color = Color.Red, fontSize = 14.sp) }
+
+    Box(modifier = Modifier.fillMaxSize().background(brush = gradientBrush)) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !state.detailsLoading,
+            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
+            exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(0)),
+        ) {
+            // 占位：下个阶段塞入 DetailHero + DetailSourcesSection
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "details ready: ${state.details?.title ?: state.route.title}",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                )
+            }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showMoonOverlay,
+            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
+            exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(200)),
+        ) {
+            org.moontechlab.selenetv.screen.detail.MoonLoadingOverlay(title = state.route.title)
         }
     }
 }
