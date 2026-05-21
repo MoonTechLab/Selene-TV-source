@@ -7,37 +7,140 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.tv.material3.Text
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.moontechlab.selenetv.screen.detail.DetailUiState
+import org.moontechlab.selenetv.screen.detail.SourceFilter
+import org.moontechlab.selenetv.screen.detail.sourceKey
+import org.moontechlab.selenetv.service.ApiResponse
+import org.moontechlab.selenetv.service.ApiService
+import org.moontechlab.selenetv.service.ContentFilterService
+import org.moontechlab.selenetv.service.DoubanService
+import org.moontechlab.selenetv.service.SearchEvent
+import org.moontechlab.selenetv.service.SearchService
 
 @Composable
 fun DetailScreen(navController: NavController, route: DetailRoute) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val doubanService = remember { DoubanService.getInstance(context) }
+
+    var state by remember { mutableStateOf(DetailUiState(route = route)) }
+
     BackHandler { navController.popBackStack() }
 
+    // 拉豆瓣详情
+    LaunchedEffect(route.doubanId) {
+        state = state.copy(detailsLoading = true, detailsError = null)
+        when (val resp = doubanService.getDoubanDetails(route.doubanId)) {
+            is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+            is ApiResponse.Error   -> state = state.copy(detailsError = resp.message, detailsLoading = false)
+        }
+    }
+
+    // 启动搜索 + 订阅事件流，按 doubanId/title/year 筛选
+    LaunchedEffect(route.doubanId) {
+        SearchService.stopSearch() // 清掉上一次的状态
+        // 与事件流的订阅必须在 startSearch 之前先挂上，避免漏掉 Results
+        val collectorJob = scope.launch {
+            SearchService.eventFlow.collect { event ->
+                when (event) {
+                    is SearchEvent.Results -> {
+                        val accepted = event.results
+                            .asSequence()
+                            .filter { SourceFilter.matchesContent(it, route.doubanId, route.title, route.year) }
+                            .filter { !ContentFilterService.shouldFilter(it.typeName) }
+                            .toList()
+                        if (accepted.isNotEmpty()) {
+                            val merged = SearchService.deduplicateResults(state.sources + accepted)
+                            state = state.copy(sources = merged)
+                        }
+                    }
+                    is SearchEvent.Progress -> state = state.copy(sourcesProgress = event.progress)
+                    is SearchEvent.Complete -> state = state.copy(sourcesComplete = true)
+                    is SearchEvent.Error    -> {} // 单源错误已被 SearchService 内部记录
+                }
+            }
+        }
+        try {
+            withContext(Dispatchers.IO) {
+                SearchService.startSearch(route.title)
+            }
+        } finally {
+            // collectorJob 会在 composable 离开时随 scope 自动取消
+        }
+    }
+
+    // 拉播放记录
+    LaunchedEffect(route.doubanId) {
+        try {
+            val records = withContext(Dispatchers.IO) { ApiService.getPlayRecords() }
+            state = state.copy(playRecords = records)
+        } catch (_: Exception) { /* 失败不阻塞 UI */ }
+    }
+
+    // 拉收藏列表
+    LaunchedEffect(route.doubanId) {
+        try {
+            val favs = withContext(Dispatchers.IO) { ApiService.getFavorites() }
+            val keys = favs.map { "${it.source}+${it.id}" }.toSet()
+            state = state.copy(favoriteKeys = keys)
+        } catch (_: Exception) { /* 失败不阻塞 UI */ }
+    }
+
+    // 默认选中源
+    LaunchedEffect(state.sources, state.playRecords) {
+        val current = state.selectedSourceKey
+        val stillValid = current != null && state.sources.any { sourceKey(it) == current }
+        if (!stillValid && state.sources.isNotEmpty()) {
+            val withRecord = state.sources
+                .mapNotNull { src ->
+                    val key = sourceKey(src)
+                    state.playRecords[key]?.let { rec -> src to rec.saveTime }
+                }
+                .maxByOrNull { it.second }
+                ?.first
+            val pick = withRecord ?: state.sources.first()
+            state = state.copy(selectedSourceKey = sourceKey(pick))
+        }
+    }
+
+    // 临时调试展示（下一个阶段替换为真正 UI）
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
         0.4f to Color(0xFF1a1a1a),
         0.7f to Color(0xFF0f0f0f),
         1.0f to Color(0xFF050505),
     )
-
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(brush = gradientBrush),
+        modifier = Modifier.fillMaxSize().background(brush = gradientBrush),
         contentAlignment = Alignment.Center,
     ) {
-        Column {
-            Text("DetailScreen scaffold", color = Color.White, fontSize = 24.sp)
-            Text("doubanId = ${route.doubanId}", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
-            Text("title = ${route.title}", color = Color.White, fontSize = 14.sp)
-            Text("year = ${route.year}", color = Color.White, fontSize = 14.sp)
+        Column(modifier = Modifier.padding(32.dp)) {
+            Text("loading=${state.detailsLoading}", color = Color.White, fontSize = 14.sp)
+            Text("title=${state.details?.title ?: route.title}", color = Color.White, fontSize = 14.sp)
+            Text("year=${state.details?.year ?: route.year}", color = Color.White, fontSize = 14.sp)
+            Text("sources=${state.sources.size} / complete=${state.sourcesComplete}", color = Color.White, fontSize = 14.sp)
+            Text("selected=${state.selectedSourceKey}", color = Color.White, fontSize = 14.sp)
+            Text("hasRecord=${state.selectedPlayRecord != null}", color = Color.White, fontSize = 14.sp)
+            Text("isFav=${state.isSelectedFavorite}", color = Color.White, fontSize = 14.sp)
+            state.detailsError?.let { Text("err=$it", color = Color.Red, fontSize = 14.sp) }
         }
     }
 }
