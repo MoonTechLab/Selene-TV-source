@@ -8,6 +8,12 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.moontechlab.selenetv.model.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -441,39 +447,50 @@ class DoubanService private constructor(private val context: Context) {
         }
         
         val dataSourceKey = getDoubanDataSourceKey()
-        
-        val apiUrl = when (dataSourceKey) {
-            DoubanDataSourceKey.CDN_TENCENT -> "https://movie.douban.cmliussss.net/subject/$doubanId"
-            DoubanDataSourceKey.CDN_ALIYUN -> "https://movie.douban.cmliussss.com/subject/$doubanId"
-            DoubanDataSourceKey.CORS_PROXY -> "https://ciao-cors.is-an.org/${URLEncoder.encode("https://movie.douban.com/subject/$doubanId", "UTF-8")}"
-            else -> "https://movie.douban.com/subject/$doubanId"
+
+        // 改用 rexxar JSON 接口替代抓取 HTML 网页：
+        // HTML 详情页 movie.douban.com/subject/{id} 会被豆瓣反爬 302 跳到 sec.douban.com 校验页（按 IP 拦截，
+        // 改 cookie/UA 都绕不过）；而 rexxar JSON 接口与首页推荐同源、未被拦截，且字段更全。
+        val rexxarUrl = when (dataSourceKey) {
+            DoubanDataSourceKey.CDN_TENCENT -> "https://m.douban.cmliussss.net/rexxar/api/v2/subject/$doubanId"
+            DoubanDataSourceKey.CDN_ALIYUN -> "https://m.douban.cmliussss.com/rexxar/api/v2/subject/$doubanId"
+            else -> "https://m.douban.com/rexxar/api/v2/subject/$doubanId"
         }
-        
+        val apiUrl = if (dataSourceKey == DoubanDataSourceKey.CORS_PROXY) {
+            "https://ciao-cors.is-an.org/${URLEncoder.encode(rexxarUrl, "UTF-8")}"
+        } else {
+            rexxarUrl
+        }
+
         return try {
             val headers = mutableMapOf(
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
                 "Referer" to "https://movie.douban.com/",
                 "Accept" to "application/json, text/plain, */*"
             )
-            
+
             if (dataSourceKey == DoubanDataSourceKey.CORS_PROXY) {
                 headers["Origin"] = getUniqueOrigin()
             }
-            
+
             val (statusCode, responseBody) = httpGet(apiUrl, headers)
-            
+
             if (statusCode == HttpURLConnection.HTTP_OK) {
                 try {
-                    val details = parseDoubanHtmlDetails(responseBody, doubanId)
-                    
-                    // 缓存成功的结果，缓存时间为3天
-                    try {
-                        val jsonData = json.encodeToString(details)
-                        cacheService.set(cacheKey, jsonData, 3 * 24 * 60 * 60 * 1000L)
-                    } catch (cacheError: Exception) {
-                        android.util.Log.d("DoubanService", "缓存豆瓣详情数据失败: ${cacheError.message}")
+                    val details = parseDoubanRexxarDetails(responseBody, doubanId)
+
+                    // 仅在解析出有效标题时缓存，避免把异常响应缓存 3 天
+                    if (details.title.isNotBlank()) {
+                        try {
+                            val jsonData = json.encodeToString(details)
+                            cacheService.set(cacheKey, jsonData, 3 * 24 * 60 * 60 * 1000L)
+                        } catch (cacheError: Exception) {
+                            android.util.Log.d("DoubanService", "缓存豆瓣详情数据失败: ${cacheError.message}")
+                        }
+                    } else {
+                        android.util.Log.d("DoubanService", "豆瓣详情解析为空，跳过缓存: $doubanId")
                     }
-                    
+
                     ApiResponse.Success(details, statusCode)
                 } catch (parseError: Exception) {
                     ApiResponse.Error("豆瓣详情数据解析失败: ${parseError.message}")
@@ -485,205 +502,57 @@ class DoubanService private constructor(private val context: Context) {
             ApiResponse.Error("豆瓣详情数据请求异常: ${e.message}")
         }
     }
-    
+
     /**
-     * 解析豆瓣HTML详情页面
+     * 解析豆瓣 rexxar JSON 详情（m.douban.com/rexxar/api/v2/subject/{id}）。
+     * 字段映射到 DoubanMovieDetails。
      */
-    private fun parseDoubanHtmlDetails(html: String, id: String): DoubanMovieDetails {
-        return try {
-            // 提取标题
-            val titleRegex = Regex("""<h1[^>]*>[\s\S]*?<span[^>]*property="v:itemreviewed"[^>]*>([^<]+)</span>""")
-            val title = titleRegex.find(html)?.groupValues?.get(1)?.trim() ?: ""
-            
-            // 提取海报
-            val posterRegex = Regex("""<a[^>]*class="nbgnbg"[^>]*>[\s\S]*?<img[^>]*src="([^"]+)"""")
-            val poster = posterRegex.find(html)?.groupValues?.get(1) ?: ""
-            
-            // 提取评分
-            val ratingRegex = Regex("""<strong[^>]*class="ll rating_num"[^>]*property="v:average">([^<]+)</strong>""")
-            val rate = ratingRegex.find(html)?.groupValues?.get(1)
-            
-            // 提取年份
-            val yearRegex = Regex("""<span[^>]*class="year">[(]([^)]+)[)]</span>""")
-            val year = yearRegex.find(html)?.groupValues?.get(1) ?: ""
-            
-            // 提取导演
-            val directors = mutableListOf<String>()
-            val directorRegex = Regex("""<span class=["']pl["']>导演</span>:\s*<span class=["']attrs["']>(.*?)</span>""")
-            directorRegex.find(html)?.groupValues?.get(1)?.let { directorHtml ->
-                val directorLinks = Regex("""<a[^>]*>([^<]+)</a>""").findAll(directorHtml)
-                directors.addAll(directorLinks.map { it.groupValues[1].trim() }.filter { it.isNotEmpty() })
-            }
-            
-            // 提取编剧
-            val screenwriters = mutableListOf<String>()
-            val writerRegex = Regex("""<span class=["']pl["']>编剧</span>:\s*<span class=["']attrs["']>(.*?)</span>""")
-            writerRegex.find(html)?.groupValues?.get(1)?.let { writerHtml ->
-                val writerLinks = Regex("""<a[^>]*>([^<]+)</a>""").findAll(writerHtml)
-                screenwriters.addAll(writerLinks.map { it.groupValues[1].trim() }.filter { it.isNotEmpty() })
-            }
-            
-            // 提取主演
-            val actors = mutableListOf<String>()
-            val castRegex = Regex("""<span class=["']pl["']>主演</span>:\s*<span class=["']attrs["']>(.*?)</span>""")
-            castRegex.find(html)?.groupValues?.get(1)?.let { castHtml ->
-                val castLinks = Regex("""<a[^>]*>([^<]+)</a>""").findAll(castHtml)
-                actors.addAll(castLinks.map { it.groupValues[1].trim() }.filter { it.isNotEmpty() })
-            }
-            
-            // 提取类型
-            val genreRegex = Regex("""<span[^>]*property="v:genre">([^<]+)</span>""")
-            val genres = genreRegex.findAll(html).map { it.groupValues[1] }.filter { it.isNotEmpty() }.toList()
-            
-            // 提取制片国家/地区
-            val countryRegex = Regex("""<span[^>]*class="pl">制片国家/地区:</span>([^<]+)""")
-            val countries = countryRegex.find(html)?.groupValues?.get(1)?.trim()
-                ?.split("/")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-            
-            // 提取语言
-            val languageRegex = Regex("""<span[^>]*class="pl">语言:</span>([^<]+)""")
-            val languages = languageRegex.find(html)?.groupValues?.get(1)?.trim()
-                ?.split("/")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-            
-            // 提取首播/上映日期
-            var releaseDate: String? = null
-            val firstAiredRegex = Regex("""<span class="pl">首播:</span>\s*<span[^>]*property="v:initialReleaseDate"[^>]*content="([^"]*)"[^>]*>([^<]*)</span>""")
-            firstAiredRegex.find(html)?.let {
-                releaseDate = it.groupValues[1]
-            }
-            if (releaseDate == null) {
-                val releaseDateRegex = Regex("""<span class="pl">上映日期:</span>\s*<span[^>]*property="v:initialReleaseDate"[^>]*content="([^"]*)"[^>]*>([^<]*)</span>""")
-                releaseDateRegex.find(html)?.let {
-                    releaseDate = it.groupValues[1]
-                }
-            }
-            
-            // 提取集数
-            var episodes: Int? = null
-            val episodesRegex = Regex("""<span[^>]*class="pl">集数:</span>([^<]+)""")
-            episodesRegex.find(html)?.groupValues?.get(1)?.trim()?.let { episodesStr ->
-                episodes = episodesStr.toIntOrNull()
-            }
-            
-            // 提取时长
-            var duration: String? = null
-            val singleEpisodeDurationRegex = Regex("""<span[^>]*class="pl">单集片长:</span>([^<]+)""")
-            singleEpisodeDurationRegex.find(html)?.groupValues?.get(1)?.trim()?.let { lenStr ->
-                lenStr.toIntOrNull()?.let { duration = "${it}分钟" }
-            }
-            if (duration == null) {
-                val movieDurationRegex = Regex("""<span[^>]*class="pl">片长:</span>([^<]+)""")
-                movieDurationRegex.find(html)?.groupValues?.get(1)?.trim()?.let { durStr ->
-                    durStr.toIntOrNull()?.let { duration = "${it}分钟" }
-                }
-            }
-            
-            // 提取剧情简介
-            var summary: String? = null
-            val summaryRegex1 = Regex("""<span[^>]*class="all hidden">([\s\S]*?)</span>""")
-            val summary1 = summaryRegex1.find(html)?.groupValues?.get(1)
-                ?.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "|||LINEBREAK|||")
-                ?.replace(Regex("""<[^>]*>"""), "")
-                ?.replace(Regex("""\s+"""), " ")
-                ?.replace("|||LINEBREAK|||", "\n")
-                ?.trim()
-            
-            val summaryRegex2 = Regex("""<span[^>]*property="v:summary"[^>]*>([\s\S]*?)</span>""")
-            val summary2 = summaryRegex2.find(html)?.groupValues?.get(1)
-                ?.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "|||LINEBREAK|||")
-                ?.replace(Regex("""<[^>]*>"""), "")
-                ?.replace(Regex("""\s+"""), " ")
-                ?.replace("|||LINEBREAK|||", "\n")
-                ?.trim()
-            
-            summary = when {
-                summary1 != null && summary2 != null -> if (summary1.length >= summary2.length) summary1 else summary2
-                summary1 != null -> summary1
-                summary2 != null -> summary2
-                else -> null
-            }
-            
-            // 提取 IMDb ID
-            var imdbId: String? = null
-            val imdbRegex = Regex("""<span[^>]*class="pl">IMDb:</span>([^<]+)""")
-            imdbRegex.find(html)?.groupValues?.get(1)?.trim()?.let {
-                imdbId = it
-            }
-            
-            // 提取推荐
-            val recommends = mutableListOf<DoubanRecommendItem>()
-            try {
-                val recommendationsRegex = Regex("""<div[^>]*id="recommendations"[^>]*>([\s\S]*?)</div>""")
-                recommendationsRegex.find(html)?.groupValues?.get(1)?.let { recommendationsContent ->
-                    val dlRegex = Regex("""<dl>([\s\S]*?)</dl>""")
-                    dlRegex.findAll(recommendationsContent).forEach { dlMatch ->
-                        val dlContent = dlMatch.groupValues[1]
-                        
-                        val linkRegex = Regex("""<a[^>]*href="https://movie\.douban\.com/subject/(\d+)/[^"]*"[^>]*>""")
-                        val imgRegex = Regex("""<img[^>]*src="([^"]+)"[^>]*alt="([^"]*)"""")
-                        val rateRegex = Regex("""<span[^>]*class="subject-rate"[^>]*>([^<]*)</span>""")
-                        
-                        val recommendId = linkRegex.find(dlContent)?.groupValues?.get(1)
-                        val imgMatch = imgRegex.find(dlContent)
-                        val posterUrl = imgMatch?.groupValues?.get(1)
-                        val recommendTitle = imgMatch?.groupValues?.get(2)
-                        val recommendRate = rateRegex.find(dlContent)?.groupValues?.get(1)?.trim()
-                        
-                        if (recommendId != null && recommendTitle != null && posterUrl != null) {
-                            recommends.add(
-                                DoubanRecommendItem(
-                                    id = recommendId,
-                                    title = recommendTitle,
-                                    poster = posterUrl,
-                                    rate = if (recommendRate.isNullOrEmpty()) null else recommendRate
-                                )
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.d("DoubanService", "解析推荐区域失败: ${e.message}")
-            }
-            
-            DoubanMovieDetails(
-                id = id,
-                title = title,
-                poster = poster,
-                rate = rate,
-                year = year,
-                summary = summary,
-                genres = genres,
-                directors = directors,
-                screenwriters = screenwriters,
-                actors = actors,
-                duration = duration,
-                countries = countries,
-                languages = languages,
-                releaseDate = releaseDate,
-                originalTitle = null,
-                imdbId = imdbId,
-                recommends = recommends,
-                totalEpisodes = episodes,
-                backdrop = null,
-                logo = null
-            )
-        } catch (e: Exception) {
-            DoubanMovieDetails(
-                id = id,
-                title = "解析失败",
-                poster = "",
-                year = "",
-                genres = emptyList(),
-                directors = emptyList(),
-                screenwriters = emptyList(),
-                actors = emptyList(),
-                countries = emptyList(),
-                languages = emptyList(),
-                recommends = emptyList()
-            )
-        }
+    private fun parseDoubanRexxarDetails(body: String, id: String): DoubanMovieDetails {
+        val root = json.parseToJsonElement(body).jsonObject
+
+        fun str(key: String): String? =
+            root[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() && it != "null" }
+
+        fun strList(key: String): List<String> =
+            (root[key] as? JsonArray)?.mapNotNull {
+                it.jsonPrimitive.contentOrNull?.takeIf { s -> s.isNotBlank() }
+            } ?: emptyList()
+
+        // directors / actors 是对象数组，取其 name 字段
+        fun nameList(key: String): List<String> =
+            (root[key] as? JsonArray)?.mapNotNull { el ->
+                (el as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            } ?: emptyList()
+
+        val poster = str("cover_url")
+            ?: (root["pic"] as? JsonObject)?.get("large")?.jsonPrimitive?.contentOrNull
+            ?: ""
+        val rate = (root["rating"] as? JsonObject)?.get("value")?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() && it != "0" && it != "0.0" }
+
+        return DoubanMovieDetails(
+            id = str("id") ?: id,
+            title = str("title") ?: "",
+            poster = poster,
+            rate = rate,
+            year = str("year") ?: "",
+            summary = str("intro"),
+            genres = strList("genres"),
+            directors = nameList("directors"),
+            screenwriters = emptyList(),
+            actors = nameList("actors"),
+            duration = strList("durations").firstOrNull(),
+            countries = strList("countries"),
+            languages = strList("languages"),
+            releaseDate = strList("pubdate").firstOrNull(),
+            originalTitle = str("original_title"),
+            imdbId = str("imdb"),
+            totalEpisodes = root["episodes_count"]?.jsonPrimitive?.intOrNull,
+            recommends = emptyList(),
+            backdrop = null,
+            logo = null,
+        )
     }
-    
     /**
      * 获取豆瓣数据源配置
      */

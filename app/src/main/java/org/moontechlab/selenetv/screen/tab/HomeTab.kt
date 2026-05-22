@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Devices
@@ -28,6 +29,7 @@ import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.ApiService
+import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.ui.RecommendSection
@@ -77,11 +79,25 @@ fun HomeTab(
     val doubanService = remember { DoubanService.getInstance(context) }
     val bangumiService = remember { BangumiService.getInstance(context) }
 
+    // 登录态：未登录时隐藏「继续观看」「我的收藏」并跳过其加载。
+    // 随 homeRefreshKey 重新读取（登录后从其他页返回会刷新）。
+    val isLoggedIn = remember(homeRefreshKey) { AppDataService.isLoggedInSync() }
+
     // 用于匹配的播放记录 Map（收藏夹需要）
     var playRecordsMap by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.PlayRecord>>(emptyMap()) }
 
     // 加载播放历史 + 收藏夹（收藏夹依赖播放历史的 index）
     fun loadPlayRecordsAndFavorites() {
+        // 未登录：不请求（会抛「未登录」异常），直接清空并置为非加载态，区块由 isLoggedIn 隐藏
+        if (!AppDataService.isLoggedInSync()) {
+            playRecords = emptyList()
+            favorites = emptyList()
+            isLoadingPlayRecords = false
+            isLoadingFavorites = false
+            errorPlayRecords = null
+            errorFavorites = null
+            return
+        }
         coroutineScope.launch {
             isLoadingPlayRecords = true
             errorPlayRecords = null
@@ -238,6 +254,8 @@ fun HomeTab(
                 .verticalScroll(scrollState)
                 .focusRequester(focusRequester)
                 .focusGroup()
+                // 关闭详情覆盖层后还原焦点到上次聚焦的卡片（配合各 RecommendSection 的 focusRestorer）
+                .focusRestorer()
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
@@ -255,8 +273,8 @@ fun HomeTab(
             // 顶部留出 TabSwitcher 的空间 + 额外间距
             Spacer(modifier = Modifier.height(64.dp))
             
-            // 播放历史 - 仅在有数据或加载中或有错误时显示
-            if (playRecords.isNotEmpty() || isLoadingPlayRecords || errorPlayRecords != null) {
+            // 播放历史 - 仅登录后、且有数据/加载中/有错误时显示（#4 未登录隐藏）
+            if (isLoggedIn && (playRecords.isNotEmpty() || isLoadingPlayRecords || errorPlayRecords != null)) {
                 RecommendSection(
                     title = "继续观看",
                     videos = playRecords,
@@ -268,8 +286,8 @@ fun HomeTab(
                 )
             }
 
-            // 收藏夹 - 仅在有数据或加载中或有错误时显示
-            if (favorites.isNotEmpty() || isLoadingFavorites || errorFavorites != null) {
+            // 收藏夹 - 仅登录后、且有数据/加载中/有错误时显示（#4 未登录隐藏）
+            if (isLoggedIn && (favorites.isNotEmpty() || isLoadingFavorites || errorFavorites != null)) {
                 RecommendSection(
                     title = "我的收藏",
                     videos = favorites,

@@ -9,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -57,6 +60,17 @@ fun DetailSourcesSection(
 ) {
     val listState = rememberLazyListState()
     val firstItemFocus = remember { FocusRequester() }
+
+    // 详情内容禁用了垂直 bringIntoView（会向下级联），这里给横向 LazyRow 重新提供横向滚动 spec，
+    // 否则左右选源时不会把卡片滚入视野。
+    val horizontalSpec = remember {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+                val targetOffset = containerSize * 0.35f
+                return offset - targetOffset + (size / 2f)
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 40.dp)) {
         // 标题行
@@ -100,6 +114,7 @@ fun DetailSourcesSection(
                 }
             }
             else -> {
+                CompositionLocalProvider(LocalBringIntoViewSpec provides horizontalSpec) {
                 LazyRow(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -134,6 +149,7 @@ fun DetailSourcesSection(
                             modifier = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier,
                         )
                     }
+                }
                 }
             }
         }

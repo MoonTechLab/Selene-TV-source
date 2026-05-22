@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.toRoute
 
 @Composable
 fun AppNavHost() {
@@ -43,18 +42,7 @@ fun AppNavHost() {
         ) {
             LoginScreen(navController = navController)
         }
-        composable<DetailRoute>(
-            enterTransition = {
-                fadeIn(animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)) +
-                        scaleIn(initialScale = 0.95f, animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f))
-            },
-            exitTransition = {
-                fadeOut(animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f)) +
-                        scaleOut(targetScale = 0.95f, animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f))
-            },
-        ) { backStackEntry ->
-            val route = backStackEntry.toRoute<DetailRoute>()
-            DetailScreen(navController = navController, route = route)
-        }
+        // 详情页不再是独立的导航目的地，而是作为覆盖层渲染在 HomeScreen 之上
+        // （见 HomeScreen 的 detailRoute overlay），以保持首页组合存活、数据与焦点不丢失。
     }
 }

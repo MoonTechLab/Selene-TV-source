@@ -1,7 +1,11 @@
 package org.moontechlab.selenetv.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -17,14 +22,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,8 +47,9 @@ import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchService
 
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun DetailScreen(navController: NavController, route: DetailRoute) {
+fun DetailScreen(route: DetailRoute, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val doubanService = remember { DoubanService.getInstance(context) }
@@ -52,7 +60,7 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
         onDispose { SearchService.stopSearch() }
     }
 
-    BackHandler { navController.popBackStack() }
+    BackHandler { onBack() }
 
     // 拉豆瓣详情
     LaunchedEffect(route.doubanId) {
@@ -142,12 +150,24 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
     }
 
     val primaryFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val scrollState = rememberScrollState()
 
-    // 详情就绪后请求初始焦点（等 cross-fade 结束）
-    LaunchedEffect(state.detailsLoading, state.sources.isNotEmpty()) {
-        if (!state.detailsLoading) {
-            kotlinx.coroutines.delay(220) // 等 cross-fade 结束
+    // 禁用详情内容（垂直）的自动 bringIntoView：聚焦按钮/播放源不再自动滚动，
+    // 改为手动控制（按钮行→顶部，播放源→底部），消除进入时"先下滚再回顶"的抖动。
+    val noVerticalAutoScroll = remember {
+        object : BringIntoViewSpec {
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = 0f
+        }
+    }
+
+    // 详情就绪后请求初始焦点。等 selectedSource 就绪（播放按钮才会渲染）再请求，
+    // 并把滚动复位到顶部——否则聚焦位于较长 hero 下方的播放按钮会触发 bringIntoView，
+    // 把标题滚出视口（#3）。播放按钮在顶部视口内，复位后仍可见且保持焦点。
+    LaunchedEffect(state.detailsLoading, state.selectedSource != null) {
+        if (!state.detailsLoading && state.selectedSource != null) {
+            kotlinx.coroutines.delay(260)
             try { primaryFocus.requestFocus() } catch (_: Exception) {}
+            scrollState.scrollTo(0)
         }
     }
 
@@ -259,10 +279,15 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                     },
                 )
             } else {
+                CompositionLocalProvider(LocalBringIntoViewSpec provides noVerticalAutoScroll) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
+                        // 把焦点限制在详情覆盖层内：到达边界时取消方向搜索，
+                        // 避免焦点逃逸到覆盖层下方的首页（#4，用户已确认此现象）
+                        .focusGroup()
+                        .focusProperties { exit = { FocusRequester.Cancel } }
+                        .verticalScroll(scrollState),
                 ) {
                     org.moontechlab.selenetv.screen.detail.DetailHero(
                         route = state.route,
@@ -270,6 +295,12 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                         actionsRow = {
                             val hasRecord = state.selectedPlayRecord != null
                             val hasSource = state.selectedSource != null
+                            // 焦点落在按钮行时把页面滚到顶部（垂直自动滚动已禁用，这里手动控制）
+                            Box(
+                                modifier = Modifier.onFocusChanged {
+                                    if (it.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
+                                },
+                            ) {
                             // 收藏与选中源绑定（按 source+id 存储，参考 plan 文档的 Plan-vs-Spec 微调）。
                             // 当 selectedSource 为空时整组按钮（含 ♡）隐藏；后续可重新评估是否引入"按 doubanId 收藏"概念。
                             org.moontechlab.selenetv.screen.detail.DetailActionButtons(
@@ -285,16 +316,25 @@ fun DetailScreen(navController: NavController, route: DetailRoute) {
                                 onToggleFavorite = onToggleFavorite,
                                 primaryFocusRequester = primaryFocus,
                             )
+                            }
                         },
                     )
-                    org.moontechlab.selenetv.screen.detail.DetailSourcesSection(
-                        sources = state.sources,
-                        selectedSourceKey = state.selectedSourceKey,
-                        playRecords = state.playRecords,
-                        progress = state.sourcesProgress,
-                        complete = state.sourcesComplete,
-                        onSelect = { key -> state = state.copy(selectedSourceKey = key) },
-                    )
+                    // 焦点进入播放源时把页面滚到底部以完整显示播放源（垂直自动滚动已禁用）
+                    Box(
+                        modifier = Modifier.onFocusChanged {
+                            if (it.hasFocus) scope.launch { scrollState.animateScrollTo(scrollState.maxValue) }
+                        },
+                    ) {
+                        org.moontechlab.selenetv.screen.detail.DetailSourcesSection(
+                            sources = state.sources,
+                            selectedSourceKey = state.selectedSourceKey,
+                            playRecords = state.playRecords,
+                            progress = state.sourcesProgress,
+                            complete = state.sourcesComplete,
+                            onSelect = { key -> state = state.copy(selectedSourceKey = key) },
+                        )
+                    }
+                }
                 }
             }
         }

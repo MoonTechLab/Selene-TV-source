@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -214,9 +215,18 @@ fun VideoCard(
         }
     }
 
+    // 详情关闭后用于把焦点还原到来源卡片：匹配的卡片挂上还原 requester
+    val returnFocus = org.moontechlab.selenetv.screen.LocalDetailReturnFocus.current
+    val returnKey = "${videoInfo.source}+${videoInfo.id}"
+
     Surface(
         onClick = onClick,
         modifier = modifier
+            .then(
+                if (returnFocus != null && returnFocus.matches(returnKey))
+                    Modifier.focusRequester(returnFocus.requester)
+                else Modifier
+            )
             .width(cardWidth)
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused

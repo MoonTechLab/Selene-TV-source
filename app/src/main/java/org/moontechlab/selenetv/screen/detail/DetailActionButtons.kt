@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -36,6 +39,14 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+
+// 焦点态 = 黑白反色：聚焦时白底黑字，非聚焦时半透明白底白字
+private val FocusedBg = Color.White
+private val FocusedFg = Color(0xFF0A0A0A)
+private val UnfocusedBg = Color.White.copy(alpha = 0.15f)
+private val UnfocusedFg = Color.White
+private val ButtonHeight = 44.dp
+private val ButtonShape = RoundedCornerShape(22.dp)
 
 @Composable
 fun DetailActionButtons(
@@ -53,19 +64,22 @@ fun DetailActionButtons(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        // 取消向上的焦点搜索：播放按钮上方无可聚焦元素，按上键不应让焦点逃逸到覆盖层下的首页（#4）
+        modifier = modifier
+            .fillMaxWidth()
+            .focusProperties { up = FocusRequester.Cancel },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (showContinue) {
-            PrimaryActionButton(
+            PillActionButton(
                 text = "继续播放",
                 onClick = onContinue,
                 modifier = Modifier.focusRequester(primaryFocusRequester),
             )
         }
         if (showPlay) {
-            SecondaryActionButton(
+            PillActionButton(
                 text = "播放",
                 onClick = onPlay,
                 modifier = if (showContinue) Modifier else Modifier.focusRequester(primaryFocusRequester),
@@ -95,76 +109,39 @@ fun DetailActionButtons(
 }
 
 @Composable
-private fun PrimaryActionButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PillActionButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (focused) 1.05f else 1f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
-        label = "primary_scale",
+        label = "pill_scale",
     )
+    val fg = if (focused) FocusedFg else UnfocusedFg
     Surface(
         onClick = onClick,
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .height(38.dp),
+            .height(ButtonHeight),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(19.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = ButtonShape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White,
-            focusedContainerColor = Color.White,
+            containerColor = UnfocusedBg,
+            focusedContainerColor = FocusedBg,
         ),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 22.dp),
+            modifier = Modifier.fillMaxHeight().padding(horizontal = 24.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.PlayArrow,
                 contentDescription = null,
-                tint = Color(0xFF0A0A0A),
-                modifier = Modifier.size(18.dp),
+                tint = fg,
+                modifier = Modifier.size(20.dp),
             )
-            Text(text = text, color = Color(0xFF0A0A0A), fontSize = 13.sp, fontWeight = FontWeight.W600)
-        }
-    }
-}
-
-@Composable
-private fun SecondaryActionButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (focused) 1.05f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
-        label = "secondary_scale",
-    )
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .height(38.dp)
-            .then(if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(19.dp)) else Modifier),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(19.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.15f),
-            focusedContainerColor = Color.White.copy(alpha = 0.15f),
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 22.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(text = text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.W600)
+            Text(text = text, color = fg, fontSize = 15.sp, fontWeight = FontWeight.W600)
         }
     }
 }
@@ -187,17 +164,21 @@ private fun IconActionButton(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .size(38.dp)
-            .then(if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(19.dp)) else Modifier),
+            .size(ButtonHeight),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(19.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = ButtonShape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.12f),
-            focusedContainerColor = Color.White.copy(alpha = 0.12f),
+            containerColor = UnfocusedBg,
+            focusedContainerColor = FocusedBg,
         ),
     ) {
-        Box(modifier = Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(18.dp))
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (focused) FocusedFg else UnfocusedFg,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }
@@ -212,7 +193,7 @@ private fun SourceNameLabel(name: String) {
         Text(
             text = name,
             color = Color.White.copy(alpha = 0.7f),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.W500,
         )
     }

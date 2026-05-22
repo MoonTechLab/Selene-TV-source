@@ -1,14 +1,23 @@
 package org.moontechlab.selenetv.screen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.delay
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import android.app.Activity
@@ -32,7 +41,13 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
 
     var homeRefreshKey by remember { mutableIntStateOf(0) }
 
-    // 每次返回 HomeRoute 时自增，让 Tab 重拉数据
+    // 详情页作为覆盖层渲染（而非导航目的地），首页组合保持存活 → 数据与焦点不丢失。
+    var detailRoute by remember { mutableStateOf<DetailRoute?>(null) }
+
+    // 详情关闭后把焦点确定性还原到来源卡片
+    val detailReturn = remember { DetailReturnFocusState() }
+
+    // 每次返回 HomeRoute 时自增，让 Tab 重拉数据（例如从 Login 返回）
     // drop(1) 跳过初始发射，避免启动时 homeRefreshKey 被 0→1 触发 HomeTab 二次加载
     LaunchedEffect(navController) {
         navController.currentBackStackEntryFlow
@@ -44,17 +59,16 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             }
     }
 
-    val openDetail: (VideoInfo) -> Unit = remember(navController) {
+    val openDetail: (VideoInfo) -> Unit = remember {
         { video ->
             val doubanId = video.doubanId
             if (doubanId != null) {
-                navController.navigate(
-                    DetailRoute(
-                        doubanId = doubanId,
-                        title = video.title,
-                        poster = video.cover,
-                        year = video.year,
-                    )
+                detailReturn.setTarget("${video.source}+${video.id}")
+                detailRoute = DetailRoute(
+                    doubanId = doubanId,
+                    title = video.title,
+                    poster = video.cover,
+                    year = video.year,
                 )
             } else {
                 android.util.Log.d("HomeScreen", "openDetail skipped: no doubanId for '${video.title}' (source=${video.source})")
@@ -74,6 +88,10 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     
     // TabSwitcher 的 FocusRequester
     val tabSwitcherFocusRequester = remember { FocusRequester() }
+
+    // 关闭详情覆盖层后用于把焦点还原到来源卡片：包裹全部 Tab 内容，
+    // 其 focusRestorer 会恢复上次聚焦的后代（即用户点进详情前的那张卡片）。
+    val contentRestoreFocusRequester = remember { FocusRequester() }
     
     // 协程作用域
     val coroutineScope = rememberCoroutineScope()
@@ -85,15 +103,16 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     var isTabSwitcherFocused by remember { mutableStateOf(true) }
     
     // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
-    BackHandler(enabled = !isTabSwitcherFocused) {
+    // （详情覆盖层打开时由 DetailScreen 自己的 BackHandler 处理，这里禁用）
+    BackHandler(enabled = detailRoute == null && !isTabSwitcherFocused) {
         coroutineScope.launch {
             scrollState.animateScrollTo(0)
         }
         tabSwitcherFocusRequester.requestFocus()
     }
-    
+
     // 当焦点在 TabSwitcher 且不在首页时，拦截返回键，切换到首页
-    BackHandler(enabled = isTabSwitcherFocused && selectedTabId != "home") {
+    BackHandler(enabled = detailRoute == null && isTabSwitcherFocused && selectedTabId != "home") {
         selectedTabId = "home"
     }
     
@@ -104,7 +123,38 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         0.7f to Color(0xFF0f0f0f),
         1.0f to Color(0xFF050505)
     )
-    
+
+    // 关闭详情覆盖层后，把焦点确定性还原到来源卡片（来源卡片挂了 detailReturn.requester）；
+    // 若来源卡片已不在组合中（例如所在行被回收），回退到内容包裹层的 focusRestorer。
+    val restoreActiveTabFocus: () -> Unit = {
+        try {
+            detailReturn.requester.requestFocus()
+        } catch (_: Exception) {
+            try { contentRestoreFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    val closeDetail: () -> Unit = {
+        detailRoute = null
+        homeRefreshKey++
+    }
+
+    // 覆盖层关闭后（仅在曾打开过详情时），待滑出动画推进再恢复首页焦点。
+    // 避免在 App 启动时（detailRoute 初始即为 null）抢走 TabSwitcher 的初始焦点。
+    var hadDetailOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(detailRoute) {
+        if (detailRoute != null) {
+            hadDetailOpen = true
+        } else if (hadDetailOpen) {
+            hadDetailOpen = false
+            delay(300) // 等覆盖层滑出动画(280ms)结束、DetailScreen 释放焦点后再恢复
+            restoreActiveTabFocus()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+    // 仅在首页内容内提供还原状态（不含详情覆盖层，避免播放源卡片误匹配）
+    CompositionLocalProvider(LocalDetailReturnFocus provides detailReturn) {
     TextMeasureProvider {
         Box(
             modifier = Modifier
@@ -142,6 +192,13 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                 )
             }
         ) { currentTabId ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(contentRestoreFocusRequester)
+                    .focusGroup()
+                    .focusRestorer(),
+            ) {
             when (currentTabId) {
                 "search" -> SearchTab(
                     focusRequester = searchFocusRequester,
@@ -187,10 +244,32 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                     )
                 }
             }
+            }
         }
         }
     }
-    
+    }
+
+        // 详情覆盖层：从右侧滑入、滑出（#2）。首页内容保持在底层不被销毁（#3）。
+        // 在动画退出期间保留最后一次的 route，避免内容提前消失。
+        val retainedDetailRoute = remember { mutableStateOf<DetailRoute?>(null) }
+        detailRoute?.let { retainedDetailRoute.value = it }
+        AnimatedVisibility(
+            visible = detailRoute != null,
+            enter = slideInHorizontally(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                initialOffsetX = { fullWidth -> fullWidth },
+            ),
+            exit = slideOutHorizontally(
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                targetOffsetX = { fullWidth -> fullWidth },
+            ),
+        ) {
+            retainedDetailRoute.value?.let { route ->
+                DetailScreen(route = route, onBack = closeDetail)
+            }
+        }
+    }
 }
 
 @Preview(device = Devices.TV_1080p)
