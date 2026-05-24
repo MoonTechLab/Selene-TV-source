@@ -29,19 +29,21 @@ sealed interface DetailEntry {
     data class History(
         val source: String,
         val id: String,
+        /** 用于向聚合源发起搜索的关键词，可能与显示标题 [title] 不同。 */
         val searchTitle: String,
         override val title: String,
         override val poster: String,
         override val year: String,
     ) : DetailEntry
 
-    /** 搜索页聚合卡片：直接携带聚合结果（含 originalResults 快照）。 */
+    /** 搜索页聚合卡片：直接携带聚合结果（含 originalResults 快照）。title/poster/year 委托给 agg。 */
     data class SearchAggregate(
         val agg: AggregatedSearchResult,
-        override val title: String,
-        override val poster: String,
-        override val year: String,
-    ) : DetailEntry
+    ) : DetailEntry {
+        override val title: String get() = agg.title
+        override val poster: String get() = agg.cover
+        override val year: String get() = agg.year
+    }
 }
 
 /**
