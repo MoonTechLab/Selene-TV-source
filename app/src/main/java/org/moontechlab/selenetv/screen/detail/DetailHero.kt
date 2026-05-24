@@ -26,29 +26,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import org.moontechlab.selenetv.model.DoubanMovieDetails
-import org.moontechlab.selenetv.screen.DetailRoute
+import org.moontechlab.selenetv.screen.DetailEntry
 import org.moontechlab.selenetv.util.getImageUrlSync
 
 @Composable
 fun DetailHero(
-    route: DetailRoute,
-    details: DoubanMovieDetails?,
+    entry: DetailEntry,
+    info: HeroInfo?,
     actionsRow: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 详情可能因网络/反爬返回空字段对象（非 null），空标题需回退到 route 数据
-    val title = details?.title?.takeIf { it.isNotBlank() } ?: route.title
-    val poster = details?.poster?.takeIf { it.isNotEmpty() } ?: route.poster
+    // info 可能字段为空，标题/海报回退到 entry
+    val title = info?.title?.takeIf { it.isNotBlank() } ?: entry.title
+    val poster = info?.poster?.takeIf { it.isNotEmpty() } ?: entry.poster
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            // 取 hero 内最高子项（海报 300dp）作为行高，使左列可 fillMaxHeight 把按钮推到底部
             .height(IntrinsicSize.Min)
             .padding(start = 58.dp, top = 60.dp, end = 48.dp, bottom = 40.dp),
     ) {
-        // 左列：元信息在上、动作按钮在底部
         Column(modifier = Modifier.weight(1f).fillMaxHeight().padding(end = 36.dp)) {
             Text(
                 text = title,
@@ -58,43 +55,31 @@ fun DetailHero(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // chips + rating
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                details?.genres?.forEach { genre ->
+                info?.genres?.forEach { genre ->
                     Text(
                         text = genre,
                         color = Color.White.copy(alpha = 0.85f),
                         fontSize = 14.sp,
                     )
                 }
-                details?.rate?.let { rate ->
-                    if (rate.isNotEmpty() && rate != "0.0") {
-                        Text(
-                            text = "★ $rate",
-                            color = Color(0xFFE91E63),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.W700,
-                        )
-                    }
+                info?.rate?.let { rate ->
+                    Text(
+                        text = "★ $rate",
+                        color = Color(0xFFE91E63),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.W700,
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            // sub 行
-            val subParts = buildList {
-                details?.releaseDate?.takeIf { it.isNotEmpty() }?.let { rd ->
-                    val country = details.countries.firstOrNull()?.takeIf { it.isNotEmpty() }
-                    if (country != null) add("$rd($country)") else add(rd)
-                }
-                details?.countries?.takeIf { it.isNotEmpty() }?.let { add(it.joinToString("/")) }
-                details?.duration?.takeIf { it.isNotEmpty() }?.let { add(it) }
-            }
-            if (subParts.isNotEmpty()) {
+            info?.subLine?.takeIf { it.isNotEmpty() }?.let { sub ->
                 Text(
-                    text = subParts.joinToString(" · "),
+                    text = sub,
                     color = Color.White.copy(alpha = 0.55f),
                     fontSize = 13.sp,
                 )
@@ -102,7 +87,7 @@ fun DetailHero(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            details?.summary?.takeIf { it.isNotEmpty() }?.let { summary ->
+            info?.summary?.takeIf { it.isNotEmpty() }?.let { summary ->
                 Text(
                     text = summary,
                     color = Color.White.copy(alpha = 0.75f),
@@ -113,13 +98,11 @@ fun DetailHero(
                 )
             }
 
-            // 弹性空白把动作按钮推到 hero 区域最底部
             Spacer(modifier = Modifier.weight(1f).height(24.dp))
 
             actionsRow()
         }
 
-        // 右列：海报
         Box(
             modifier = Modifier
                 .size(width = 200.dp, height = 300.dp)

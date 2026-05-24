@@ -91,8 +91,8 @@ fun TabSwitcher(
     // 是否正在切换标签页（500ms 延迟期间）
     var isSwitching by remember { mutableStateOf(false) }
     
-    // 记录是否曾经因按下键而失焦
-    var hadLostFocusByDown by remember { mutableStateOf(false) }
+    // 记录 TabSwitcher 上一次是否持有焦点，用于检测「从外部重新进入」
+    var wasFocused by remember { mutableStateOf(false) }
     
     // 自动切换逻辑：等待动画完成后再计时 500ms
     LaunchedEffect(focusedTabId) {
@@ -138,15 +138,17 @@ fun TabSwitcher(
                 .onFocusChanged { focusState ->
                     // 通知父组件焦点状态变化
                     onFocusChanged(focusState.hasFocus)
-                    
-                    // 当 focusGroup 获得焦点（hasFocus 但非 isFocused）且之前因按下键失焦过
-                    if (focusState.hasFocus && !focusState.isFocused && hadLostFocusByDown) {
-                        hadLostFocusByDown = false
+
+                    // 从外部重新进入 TabSwitcher（hasFocus: false→true）时，始终把焦点落到当前
+                    // 选中的 tab，而不是 focusRestorer/首个子项——修复返回键或向上进入时误聚焦
+                    // 到最左「搜索」。内部左右切换时 hasFocus 持续为 true，不会触发重定向。
+                    if (focusState.hasFocus && !wasFocused) {
                         val idx = tabs.indexOfFirst { it.id == selectedTabId }
                         if (idx >= 0) {
                             focusRequesters[idx].requestFocus()
                         }
                     }
+                    wasFocused = focusState.hasFocus
                 }
                 .focusGroup()
                 .focusRestorer(selectedTabFocusRequester),
@@ -167,7 +169,6 @@ fun TabSwitcher(
                     },
                     onTabClick = { onTabSelected(tab.id) },
                     onNavigateDown = {
-                        hadLostFocusByDown = true
                         onNavigateDown(selectedTabId)
                     },
                     onBackPressed = {

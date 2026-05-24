@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hasRoute
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import org.moontechlab.selenetv.model.AggregatedSearchResult
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.screen.tab.*
 import org.moontechlab.selenetv.ui.AnimatedTabContent
@@ -42,7 +43,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     var homeRefreshKey by remember { mutableIntStateOf(0) }
 
     // 详情页作为覆盖层渲染（而非导航目的地），首页组合保持存活 → 数据与焦点不丢失。
-    var detailRoute by remember { mutableStateOf<DetailRoute?>(null) }
+    var detailEntry by remember { mutableStateOf<DetailEntry?>(null) }
 
     // 详情关闭后把焦点确定性还原到来源卡片
     val detailReturn = remember { DetailReturnFocusState() }
@@ -61,18 +62,16 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
 
     val openDetail: (VideoInfo) -> Unit = remember {
         { video ->
-            val doubanId = video.doubanId
-            if (doubanId != null) {
-                detailReturn.setTarget("${video.source}+${video.id}")
-                detailRoute = DetailRoute(
-                    doubanId = doubanId,
-                    title = video.title,
-                    poster = video.cover,
-                    year = video.year,
-                )
-            } else {
-                android.util.Log.d("HomeScreen", "openDetail skipped: no doubanId for '${video.title}' (source=${video.source})")
-            }
+            detailReturn.setTarget("${video.source}+${video.id}")
+            detailEntry = detailEntryFor(video)
+        }
+    }
+
+    val openDetailFromSearch: (AggregatedSearchResult) -> Unit = remember {
+        { agg ->
+            val firstSource = agg.originalResults.firstOrNull()?.source ?: ""
+            detailReturn.setTarget("$firstSource+${agg.key}")
+            detailEntry = DetailEntry.SearchAggregate(agg)
         }
     }
 
@@ -104,7 +103,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     
     // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
     // （详情覆盖层打开时由 DetailScreen 自己的 BackHandler 处理，这里禁用）
-    BackHandler(enabled = detailRoute == null && !isTabSwitcherFocused) {
+    BackHandler(enabled = detailEntry == null && !isTabSwitcherFocused) {
         coroutineScope.launch {
             scrollState.animateScrollTo(0)
         }
@@ -112,7 +111,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     }
 
     // 当焦点在 TabSwitcher 且不在首页时，拦截返回键，切换到首页
-    BackHandler(enabled = detailRoute == null && isTabSwitcherFocused && selectedTabId != "home") {
+    BackHandler(enabled = detailEntry == null && isTabSwitcherFocused && selectedTabId != "home") {
         selectedTabId = "home"
     }
     
@@ -135,15 +134,15 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     }
 
     val closeDetail: () -> Unit = {
-        detailRoute = null
+        detailEntry = null
         homeRefreshKey++
     }
 
     // 覆盖层关闭后（仅在曾打开过详情时），待滑出动画推进再恢复首页焦点。
     // 避免在 App 启动时（detailRoute 初始即为 null）抢走 TabSwitcher 的初始焦点。
     var hadDetailOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(detailRoute) {
-        if (detailRoute != null) {
+    LaunchedEffect(detailEntry) {
+        if (detailEntry != null) {
             hadDetailOpen = true
         } else if (hadDetailOpen) {
             hadDetailOpen = false
@@ -202,7 +201,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             when (currentTabId) {
                 "search" -> SearchTab(
                     focusRequester = searchFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onOpenDetail = openDetailFromSearch,
                 )
                 "home" -> HomeTab(
                     focusRequester = homeTabFocusRequester,
@@ -252,10 +252,10 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
 
         // 详情覆盖层：从右侧滑入、滑出（#2）。首页内容保持在底层不被销毁（#3）。
         // 在动画退出期间保留最后一次的 route，避免内容提前消失。
-        val retainedDetailRoute = remember { mutableStateOf<DetailRoute?>(null) }
-        detailRoute?.let { retainedDetailRoute.value = it }
+        val retainedDetailEntry = remember { mutableStateOf<DetailEntry?>(null) }
+        detailEntry?.let { retainedDetailEntry.value = it }
         AnimatedVisibility(
-            visible = detailRoute != null,
+            visible = detailEntry != null,
             enter = slideInHorizontally(
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
                 initialOffsetX = { fullWidth -> fullWidth },
@@ -265,8 +265,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                 targetOffsetX = { fullWidth -> fullWidth },
             ),
         ) {
-            retainedDetailRoute.value?.let { route ->
-                DetailScreen(route = route, onBack = closeDetail)
+            retainedDetailEntry.value?.let { entry ->
+                DetailScreen(entry = entry, onBack = closeDetail)
             }
         }
     }

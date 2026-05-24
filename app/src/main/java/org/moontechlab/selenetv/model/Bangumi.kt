@@ -67,7 +67,8 @@ data class BangumiItem(
     val airWeekday: Int = 0,
     val rating: BangumiRating = BangumiRating(),
     val rank: Int = 0,
-    val images: BangumiImages,
+    // 个别条目接口会返回 images: null，须可空，否则整页日历解析失败
+    val images: BangumiImages? = null,
     val collection: BangumiCollection = BangumiCollection()
 )
 
@@ -136,7 +137,7 @@ fun BangumiItem.toVideoInfo(): VideoInfo {
         title = title,
         sourceName = "Bangumi",
         year = year,
-        cover = images.getBestImageUrl(),
+        cover = images?.getBestImageUrl() ?: "",
         index = 0,
         totalEpisodes = 1,
         playTime = 0,

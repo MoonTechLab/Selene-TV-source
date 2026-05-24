@@ -886,8 +886,10 @@ private fun TvGridRow(
     }
     
     Row(
-        horizontalArrangement = Arrangement.spacedBy(cardGap),
-        modifier = Modifier.height(TV_ROW_HEIGHT.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(TV_ROW_HEIGHT.dp)
     ) {
         // 渲染实际卡片
         tvShows.forEach { tvShow ->
