@@ -144,6 +144,8 @@ fun SearchTab(
     focusRequester: FocusRequester = remember { FocusRequester() },
     scrollState: ScrollState = rememberScrollState(),
     onOpenDetail: (AggregatedSearchResult) -> Unit = {},
+    initialQuery: String? = null,
+    onInitialQueryConsumed: () -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -408,6 +410,16 @@ fun SearchTab(
         }
     }
     
+    // 来自详情页「去搜索」的初始查询：填入搜索框并立即检索，随后清空避免重复触发
+    LaunchedEffect(initialQuery) {
+        val q = initialQuery
+        if (!q.isNullOrBlank()) {
+            searchQuery = q
+            performSearch(q)
+            onInitialQueryConsumed()
+        }
+    }
+
     // 点击历史标签
     val onHistoryTagClick: (String) -> Unit = { keyword ->
         searchQuery = keyword

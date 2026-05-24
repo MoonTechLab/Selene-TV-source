@@ -50,7 +50,7 @@ import org.moontechlab.selenetv.service.SearchService
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
+fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val doubanService = remember { DoubanService.getInstance(context) }
@@ -227,7 +227,17 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
 
     val primaryFocus = remember { FocusRequester() }
     val summaryFocus = remember { FocusRequester() }
+    val searchCtaFocus = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+
+    // 无可用播放源时，动作行为空，把焦点落到「去搜索」按钮，保证遥控器始终有落点
+    val noSources = state.sourcesComplete && state.sources.isEmpty()
+    LaunchedEffect(noSources, state.detailsLoading) {
+        if (noSources && !state.detailsLoading) {
+            kotlinx.coroutines.delay(280)
+            try { searchCtaFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
 
     // 简介全文弹窗
     var summaryDialogVisible by remember { mutableStateOf(false) }
@@ -417,6 +427,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
                             progress = state.sourcesProgress,
                             complete = state.sourcesComplete,
                             onSelect = { key -> state = state.copy(selectedSourceKey = key) },
+                            onSearch = { onGoToSearch(state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: state.entry.title) },
+                            searchFocusRequester = searchCtaFocus,
                         )
                     }
                 }

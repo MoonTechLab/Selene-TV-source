@@ -141,6 +141,16 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     // 覆盖层关闭后（仅在曾打开过详情时），待滑出动画推进再恢复首页焦点。
     // 避免在 App 启动时（detailRoute 初始即为 null）抢走 TabSwitcher 的初始焦点。
     var hadDetailOpen by remember { mutableStateOf(false) }
+
+    // 详情页「去搜索」：关闭详情覆盖层、切到搜索 Tab，并把片名作为初始查询交给 SearchTab。
+    var pendingSearchQuery by remember { mutableStateOf<String?>(null) }
+    val goToSearch: (String) -> Unit = { query ->
+        pendingSearchQuery = query
+        hadDetailOpen = false // 跳过详情关闭后的来源卡片焦点还原，焦点交给搜索流程
+        detailEntry = null
+        selectedTabId = "search"
+    }
+
     LaunchedEffect(detailEntry) {
         if (detailEntry != null) {
             hadDetailOpen = true
@@ -203,6 +213,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                     focusRequester = searchFocusRequester,
                     scrollState = scrollState,
                     onOpenDetail = openDetailFromSearch,
+                    initialQuery = pendingSearchQuery,
+                    onInitialQueryConsumed = { pendingSearchQuery = null },
                 )
                 "home" -> HomeTab(
                     focusRequester = homeTabFocusRequester,
@@ -266,7 +278,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             ),
         ) {
             retainedDetailEntry.value?.let { entry ->
-                DetailScreen(entry = entry, onBack = closeDetail)
+                DetailScreen(entry = entry, onBack = closeDetail, onGoToSearch = goToSearch)
             }
         }
     }

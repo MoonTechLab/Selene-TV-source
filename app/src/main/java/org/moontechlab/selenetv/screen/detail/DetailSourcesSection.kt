@@ -3,8 +3,10 @@ package org.moontechlab.selenetv.screen.detail
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -20,25 +22,35 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResult
@@ -57,6 +69,8 @@ fun DetailSourcesSection(
     complete: Boolean,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onSearch: () -> Unit = {},
+    searchFocusRequester: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
     val firstItemFocus = remember { FocusRequester() }
@@ -97,12 +111,26 @@ fun DetailSourcesSection(
 
         when {
             sources.isEmpty() && complete -> {
-                Text(
-                    text = "没有可用的播放源",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(start = 58.dp, top = 16.dp),
-                )
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        Text(
+                            text = "没有找到可用的播放源",
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 14.sp,
+                        )
+                        SearchCtaButton(
+                            onClick = onSearch,
+                            modifier = searchFocusRequester
+                                ?.let { Modifier.focusRequester(it) } ?: Modifier,
+                        )
+                    }
+                }
             }
             sources.isEmpty() -> {
                 LazyRow(
@@ -152,6 +180,47 @@ fun DetailSourcesSection(
                 }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchCtaButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "search_cta_scale",
+    )
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(22.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.08f),
+            focusedContainerColor = Color(0xFF4CAF50),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = "去搜索其他来源",
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.W600,
+            )
         }
     }
 }
