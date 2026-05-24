@@ -155,14 +155,17 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
     }
 
-    // 5A) History/SearchAggregate 的结算判定（不发起网络请求，故可安全地随 state.sources 变化重算）：
-    //    展示源中某 doubanId 出现 >= 2 次（tier2）→ 记下目标，交由 5B 拉取豆瓣详情（拉完前保持加载页）；
+    // 5A) History/SearchAggregate 的结算判定（不发起网络请求，故可安全地随结果变化重算）：
+    //    在「全部已命中结果」rawResults（而非收敛后的展示源 state.sources）上判定 tier2，
+    //    使详情 hero 能在「目标源被找到」之前就解析出来——只要任意 2 个源认同同一 doubanId 即可，
+    //    从而尽早撤掉加载页；源列表是否展示由 effect 2 独立控制（目标源未找到前持续骨架屏）。
+    //    某 doubanId 出现 >= 2 次（tier2）→ 记下目标，交由 5B 拉取豆瓣详情（拉完前保持加载页）；
     //    搜索结束仍无 tier2 → 撤下加载页展示选中源自身信息；否则保持加载页等待后续结果。
     //    结算后锁定（!detailsLoading 直接返回），不因后续源流入而改变 hero，避免跳变。
-    LaunchedEffect(state.sources, state.sourcesComplete, entry) {
+    LaunchedEffect(rawResults, state.sourcesComplete, entry) {
         if (entry !is DetailEntry.History && entry !is DetailEntry.SearchAggregate) return@LaunchedEffect
         if (!state.detailsLoading) return@LaunchedEffect // 已结算，锁定，避免后续跳变
-        val tier2 = DetailSourceResolver.tier2DoubanId(state.sources)
+        val tier2 = DetailSourceResolver.tier2DoubanId(rawResults)
         when {
             tier2 != null -> tier2Target = tier2 // 触发 5B 拉取（稳定 key，不会被 sources 变化取消）
             state.sourcesComplete -> state = state.copy(details = null, detailsLoading = false)
@@ -352,7 +355,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     Box(modifier = Modifier.fillMaxSize().background(brush = gradientBrush)) {
         androidx.compose.animation.AnimatedVisibility(
             visible = !state.detailsLoading,
-            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
+            // 撤掉加载屏：内容从 0.96 轻微放大并淡入「落定」，与月牙层的淡出+放大形成柔和过渡
+            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(420)) +
+                androidx.compose.animation.scaleIn(
+                    initialScale = 0.96f,
+                    animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                ),
             exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(0)),
         ) {
             val err = state.detailsError
@@ -446,7 +454,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         androidx.compose.animation.AnimatedVisibility(
             visible = showMoonOverlay,
             enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)),
-            exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(200)),
+            // 月牙层退场：淡出同时轻微放大「化开」，与内容淡入交叠
+            exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(360)) +
+                androidx.compose.animation.scaleOut(
+                    targetScale = 1.06f,
+                    animationSpec = androidx.compose.animation.core.tween(360, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                ),
         ) {
             org.moontechlab.selenetv.screen.detail.MoonLoadingOverlay(title = state.entry.title)
         }

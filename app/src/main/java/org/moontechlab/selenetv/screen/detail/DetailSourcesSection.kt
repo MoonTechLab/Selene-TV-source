@@ -138,7 +138,7 @@ fun DetailSourcesSection(
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(horizontal = 58.dp),
                 ) {
-                    itemsIndexed(List(6) { it }) { _, _ -> SourceCardSkeleton() }
+                    itemsIndexed(List(8) { it }) { _, _ -> SourceCardSkeleton() }
                 }
             }
             else -> {
