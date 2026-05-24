@@ -117,11 +117,14 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
         }
     }
 
-    // 2) 由 rawResults 派生展示源：History 收敛到包含 source+id 的聚合组
-    LaunchedEffect(rawResults, entry) {
+    // 2) 由 rawResults 派生展示源：History 收敛到包含 source+id 的聚合组。
+    //    组未识别到之前展示空（此时仍在加载页，不暴露会「广→窄」收缩的全集，避免跳变）；
+    //    搜索结束仍未识别到组，则回退展示全部命中结果。
+    LaunchedEffect(rawResults, state.sourcesComplete, entry) {
         val displayed = when (entry) {
             is DetailEntry.History ->
-                DetailSourceResolver.historyGroupSources(rawResults, entry.source, entry.id) ?: rawResults
+                DetailSourceResolver.historyGroupSources(rawResults, entry.source, entry.id)
+                    ?: if (state.sourcesComplete) rawResults else emptyList()
             else -> rawResults
         }
         state = state.copy(sources = displayed)
@@ -149,29 +152,21 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
         }
     }
 
-    // 5) tier2 豆瓣：History/SearchAggregate 下，展示源中某 doubanId 出现≥2 次则拉其豆瓣详情
-    LaunchedEffect(state.sources, entry) {
-        if (entry is DetailEntry.History || entry is DetailEntry.SearchAggregate) {
-            val id = DetailSourceResolver.tier2DoubanId(state.sources)
-            if (id != null) {
-                if (state.details?.id != id) {
-                    when (val resp = doubanService.getDoubanDetails(id)) {
-                        is ApiResponse.Success -> state = state.copy(details = resp.data)
-                        is ApiResponse.Error -> {} // 静默回退到源自身信息
-                    }
-                }
-            } else if (state.details != null) {
-                state = state.copy(details = null)
+    // 5) History/SearchAggregate 的信息优先级 + 加载态：
+    //    一旦展示源中出现某 doubanId >= 2 次（tier2），立即拉取其豆瓣详情并渲染，再撤下加载页；
+    //    搜索结束仍无 tier2 → 撤下加载页展示选中源自身信息；否则保持加载页等待后续结果。
+    //    结算后锁定（!detailsLoading 直接返回），不因后续源流入而改变 hero，避免跳变。
+    LaunchedEffect(state.sources, state.sourcesComplete, entry) {
+        if (entry !is DetailEntry.History && entry !is DetailEntry.SearchAggregate) return@LaunchedEffect
+        if (!state.detailsLoading) return@LaunchedEffect // 已结算，锁定，避免后续跳变
+        val tier2 = DetailSourceResolver.tier2DoubanId(state.sources)
+        when {
+            tier2 != null -> when (val resp = doubanService.getDoubanDetails(tier2)) {
+                is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+                is ApiResponse.Error -> state = state.copy(details = null, detailsLoading = false)
             }
-        }
-    }
-
-    // 6) History/SearchAggregate 的内容就绪 → 关闭加载态
-    LaunchedEffect(entry, state.sources, state.sourcesComplete) {
-        if (entry is DetailEntry.History || entry is DetailEntry.SearchAggregate) {
-            if ((state.sources.isNotEmpty() || state.sourcesComplete) && state.detailsLoading) {
-                state = state.copy(detailsLoading = false)
-            }
+            state.sourcesComplete -> state = state.copy(details = null, detailsLoading = false)
+            // else：仍在搜索且暂无 tier2 → 保持加载页
         }
     }
 
