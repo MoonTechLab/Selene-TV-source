@@ -254,8 +254,6 @@ fun HomeTab(
                 .verticalScroll(scrollState)
                 .focusRequester(focusRequester)
                 .focusGroup()
-                // 关闭详情覆盖层后还原焦点到上次聚焦的卡片（配合各 RecommendSection 的 focusRestorer）
-                .focusRestorer()
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.type == KeyEventType.KeyDown) {
                         when (keyEvent.key) {
