@@ -62,4 +62,28 @@ class SourceFilterTest {
         val r = result(doubanId = null, title = "长安的荔枝", year = "")
         assertTrue(SourceFilter.matchesContent(r, doubanId = "12345", title = "长安的荔枝", year = "2025"))
     }
+
+    @Test
+    fun `matchesByTitleYear matches same title and year`() {
+        val r = result(title = "长安的荔枝", year = "2025", doubanId = 999)
+        assertTrue(SourceFilter.matchesByTitleYear(r, title = "长安的荔枝", year = "2025"))
+    }
+
+    @Test
+    fun `matchesByTitleYear ignores douban id`() {
+        val r = result(title = "长安的荔枝", year = "2025", doubanId = 12345)
+        assertTrue(SourceFilter.matchesByTitleYear(r, title = "长安的荔枝", year = "2025"))
+    }
+
+    @Test
+    fun `matchesByTitleYear rejects different title`() {
+        val r = result(title = "其他作品", year = "2025")
+        assertFalse(SourceFilter.matchesByTitleYear(r, title = "长安的荔枝", year = "2025"))
+    }
+
+    @Test
+    fun `matchesByTitleYear accepts when route year empty`() {
+        val r = result(title = "长安的荔枝", year = "2024")
+        assertTrue(SourceFilter.matchesByTitleYear(r, title = "长安的荔枝", year = ""))
+    }
 }

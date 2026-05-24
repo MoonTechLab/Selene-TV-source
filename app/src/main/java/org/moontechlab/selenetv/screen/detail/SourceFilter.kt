@@ -26,4 +26,17 @@ object SourceFilter {
             else -> false
         }
     }
+
+    /**
+     * 仅按标题/年份匹配（忽略 doubanId）。用于 bangumi / 继续播放 / 收藏夹入口。
+     */
+    fun matchesByTitleYear(
+        result: SearchResult,
+        title: String,
+        year: String,
+    ): Boolean {
+        val titleOk = result.title == title
+        val yearOk = result.year == year || year.isEmpty() || result.year.isEmpty()
+        return titleOk && yearOk
+    }
 }
