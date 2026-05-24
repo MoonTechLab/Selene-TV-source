@@ -60,7 +60,30 @@ private val LoginButtonBgFocused = Color(0xFF4CAF50)
 
 @Composable
 fun LoginScreen(navController: androidx.navigation.NavController) {
-    BackHandler { navController.popBackStack() }
+    val context = LocalContext.current
+    // 登录页若是返回栈根（启动即未登录的强制登录场景）则视为门禁；从设置进入则非门禁
+    val isGate = remember { navController.previousBackStackEntry == null }
+
+    // 离开登录页：门禁场景登录成功后进首页（并弹出登录页使首页成为根），
+    // 非门禁场景返回上一页（保留存活的首页实例与其状态）
+    fun leave() {
+        if (isGate) {
+            navController.navigate(HomeRoute) {
+                popUpTo(LoginRoute) { inclusive = true }
+            }
+        } else {
+            navController.popBackStack()
+        }
+    }
+
+    // 门禁场景按返回键直接退出应用，否则返回上一页
+    BackHandler {
+        if (isGate) {
+            (context as? android.app.Activity)?.finish()
+        } else {
+            navController.popBackStack()
+        }
+    }
 
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
@@ -75,7 +98,7 @@ fun LoginScreen(navController: androidx.navigation.NavController) {
             .background(brush = gradientBrush),
         contentAlignment = Alignment.Center,
     ) {
-        LoginScreenContent(onDismiss = { navController.popBackStack() })
+        LoginScreenContent(onDismiss = { leave() })
     }
 }
 

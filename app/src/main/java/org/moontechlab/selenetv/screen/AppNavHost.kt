@@ -6,17 +6,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import org.moontechlab.selenetv.service.AppDataService
 
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
 
+    // 未登录时直接以登录页作为启动首屏（强制登录），已登录则进首页
+    val startDestination = remember {
+        if (AppDataService.isLoggedInSync()) HomeRoute else LoginRoute
+    }
+
     NavHost(
         navController = navController,
-        startDestination = HomeRoute,
+        startDestination = startDestination,
     ) {
         composable<HomeRoute>(
             enterTransition = {
