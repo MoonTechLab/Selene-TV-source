@@ -84,8 +84,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
             else -> {
                 SearchService.stopSearch()
                 val query = when (entry) {
-                    is DetailEntry.History -> entry.searchTitle
+                    is DetailEntry.History -> entry.searchTitle.ifBlank { entry.title }
                     else -> entry.title
+                }
+                if (query.isBlank()) {
+                    // 没有可用的搜索关键词：直接标记完成，不调用会抛异常的 startSearch
+                    state = state.copy(sourcesComplete = true)
+                    return@LaunchedEffect
                 }
                 SearchService.eventFlow
                     .onSubscription {

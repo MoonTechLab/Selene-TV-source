@@ -58,7 +58,8 @@ fun detailEntryFor(video: VideoInfo): DetailEntry {
         else -> DetailEntry.History(
             source = video.source,
             id = video.id,
-            searchTitle = video.searchTitle,
+            // 部分播放记录的 searchTitle 为空，回退到 title，避免空查询
+            searchTitle = video.searchTitle.ifBlank { video.title },
             title = video.title,
             poster = video.cover,
             year = video.year,

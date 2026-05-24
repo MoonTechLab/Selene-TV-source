@@ -44,4 +44,12 @@ class DetailEntryTest {
         assertEquals("42", e.id)
         assertEquals("搜索名", e.searchTitle)
     }
+
+    @Test
+    fun `blank searchTitle falls back to title for History entry`() {
+        // 部分播放记录的 searchTitle 为空，回退到 title，避免空查询导致搜索抛异常崩溃
+        val e = detailEntryFor(video(searchTitle = ""))
+        assertTrue(e is DetailEntry.History)
+        assertEquals("标题", (e as DetailEntry.History).searchTitle)
+    }
 }
