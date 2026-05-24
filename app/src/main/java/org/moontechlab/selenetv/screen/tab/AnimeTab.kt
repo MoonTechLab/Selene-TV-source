@@ -926,8 +926,10 @@ private fun AnimeGridRow(
     }
     
     Row(
-        horizontalArrangement = Arrangement.spacedBy(cardGap),
-        modifier = Modifier.height(ANIME_ROW_HEIGHT.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ANIME_ROW_HEIGHT.dp)
     ) {
         items.forEach { item ->
             val videoInfo = when (item) {

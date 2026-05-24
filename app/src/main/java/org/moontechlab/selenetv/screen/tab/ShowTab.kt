@@ -836,8 +836,10 @@ private fun ShowGridRow(
     }
     
     Row(
-        horizontalArrangement = Arrangement.spacedBy(cardGap),
-        modifier = Modifier.height(SHOW_ROW_HEIGHT.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(SHOW_ROW_HEIGHT.dp)
     ) {
         shows.forEach { show ->
             VideoCard(
