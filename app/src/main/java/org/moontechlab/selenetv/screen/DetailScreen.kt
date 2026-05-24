@@ -393,6 +393,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                         actionsRow = {
                             val hasRecord = state.selectedPlayRecord != null
                             val hasSource = state.selectedSource != null
+                            val record = state.selectedPlayRecord
+                            val epCount = state.selectedSource?.episodes?.size
+                                ?: record?.totalEpisodes ?: 1
                             Box(
                                 modifier = Modifier.onFocusChanged {
                                     if (it.hasFocus) scope.launch { scrollState.animateScrollTo(0) }
@@ -411,6 +414,10 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                 onToggleFavorite = onToggleFavorite,
                                 primaryFocusRequester = primaryFocus,
                                 upTarget = if (hasSummary) summaryFocus else null,
+                                // 续看：集数（总集>1 才显示）+ 进度，嵌进「继续播放」按钮
+                                continueEpisode = if (record != null && epCount > 1 && record.index > 0) record.index else null,
+                                continueProgress = if (record != null && record.totalTime > 0L)
+                                    (record.playTime.toFloat() / record.totalTime.toFloat()).coerceIn(0f, 1f) else 0f,
                             )
                             }
                         },
