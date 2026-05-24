@@ -2,7 +2,8 @@ package org.moontechlab.selenetv.screen.tab
 
 import android.graphics.BitmapFactory
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
@@ -112,7 +113,7 @@ fun SettingsTab(
     // 设置项状态
     var doubanDataSource by remember { mutableStateOf("") }
     var doubanImageSource by remember { mutableStateOf("") }
-    var tmdbApiKey by remember { mutableStateOf("") }
+    // [TMDB API Key 暂时移除] var tmdbApiKey by remember { mutableStateOf("") }
     var m3u8ProxyUrl by remember { mutableStateOf("") }
 
     // IP 选择相关状态
@@ -129,11 +130,11 @@ fun SettingsTab(
     val ipSettingFocusRequester = remember { FocusRequester() }
     val doubanDataSourceFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
-    val tmdbApiKeyFocusRequester = remember { FocusRequester() }
+    // [TMDB API Key 暂时移除] val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
 
     // 输入弹框状态
-    var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
+    // [TMDB API Key 暂时移除] var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
     var showM3u8ProxyDialog by remember { mutableStateOf(false) }
 
     // 缓存清理确认弹框状态
@@ -144,13 +145,8 @@ fun SettingsTab(
     val clearDoubanCacheFocusRequester = remember { FocusRequester() }
     val clearSearchCacheFocusRequester = remember { FocusRequester() }
 
-    // 重建后请求焦点
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(50)
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
+    // 不在组合时自动抢焦点：与其他 Tab 一致，切到设置后焦点应停留在顶部 TabSwitcher，
+    // 由 TabSwitcher.onNavigateDown → settingsFocusRequester 在按「下」键时再进入内容。
 
     // 加载数据
     LaunchedEffect(Unit) {
@@ -161,7 +157,7 @@ fun SettingsTab(
         userRole = AppDataService.parseRoleFromCookies(cookies)
         doubanDataSource = AppDataService.getDoubanDataSourceDisplayName()
         doubanImageSource = AppDataService.getDoubanImageSourceDisplayName()
-        tmdbApiKey = AppDataService.getTmdbApiKey()
+        // [TMDB API Key 暂时移除] tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
         // 加载可用 IP 列表（网络接口枚举可能阻塞，放到 IO 线程）
         val ips = withContext(Dispatchers.IO) { getAllIpAddresses() }
@@ -252,13 +248,13 @@ fun SettingsTab(
                         modifier = Modifier.focusRequester(doubanImageSourceFocusRequester)
                     )
 
-                    // TMDB API Key
-                    SettingItem(
-                        label = "TMDB API Key",
-                        value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
-                        onClick = { showTmdbApiKeyDialog = true },
-                        modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
-                    )
+                    // [TMDB API Key 暂时移除] 如需恢复，取消注释本区块及上方相关状态/弹框
+                    // SettingItem(
+                    //     label = "TMDB API Key",
+                    //     value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
+                    //     onClick = { showTmdbApiKeyDialog = true },
+                    //     modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
+                    // )
 
                     // M3U8 代理
                     SettingItem(
@@ -354,26 +350,26 @@ fun SettingsTab(
         )
     }
 
-    // TMDB API Key 输入弹框
-    AnimatedSelectDialog(
-        visible = showTmdbApiKeyDialog,
-        onDismiss = { showTmdbApiKeyDialog = false },
-        onClosed = { tmdbApiKeyFocusRequester.requestFocus() }
-    ) { onClose ->
-        TextInputDialogContent(
-            title = "TMDB API Key",
-            placeholder = "请输入 TMDB API Key",
-            initialValue = tmdbApiKey,
-            onConfirm = { value ->
-                coroutineScope.launch {
-                    AppDataService.saveTmdbApiKey(value)
-                    tmdbApiKey = value
-                }
-                onClose()
-            },
-            onDismiss = onClose
-        )
-    }
+    // [TMDB API Key 暂时移除] 如需恢复，取消注释本弹框区块
+    // AnimatedSelectDialog(
+    //     visible = showTmdbApiKeyDialog,
+    //     onDismiss = { showTmdbApiKeyDialog = false },
+    //     onClosed = { tmdbApiKeyFocusRequester.requestFocus() }
+    // ) { onClose ->
+    //     TextInputDialogContent(
+    //         title = "TMDB API Key",
+    //         placeholder = "请输入 TMDB API Key",
+    //         initialValue = tmdbApiKey,
+    //         onConfirm = { value ->
+    //             coroutineScope.launch {
+    //                 AppDataService.saveTmdbApiKey(value)
+    //                 tmdbApiKey = value
+    //             }
+    //             onClose()
+    //         },
+    //         onDismiss = onClose
+    //     )
+    // }
 
     // M3U8 代理输入弹框
     AnimatedSelectDialog(
@@ -470,11 +466,6 @@ private fun AnimatedSelectDialog(
     }
 
     if (showDialog) {
-        // 返回键处理
-        BackHandler(enabled = true) {
-            onDismiss()
-        }
-
         // 动画参数
         val showSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
         val hideSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 500f)
@@ -497,21 +488,31 @@ private fun AnimatedSelectDialog(
             label = "overlay_opacity"
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = overlayOpacity }
-                .background(Color.Black.copy(alpha = 0.7f)),
-            contentAlignment = Alignment.Center
+        // 用独立 Dialog 窗口承载：弹框拥有独立焦点域，D-pad 上下键不会逃逸回背景设置项；
+        // 也无需停用背景，避免打开瞬间焦点被甩到顶部 TabSwitcher 的闪烁。返回键由 onDismissRequest 处理。
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = false
+            )
         ) {
             Box(
-                modifier = Modifier.graphicsLayer {
-                    scaleX = dialogScale
-                    scaleY = dialogScale
-                    alpha = dialogOpacity
-                }
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = overlayOpacity }
+                    .background(Color.Black.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center
             ) {
-                content(onDismiss)
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = dialogScale
+                        scaleY = dialogScale
+                        alpha = dialogOpacity
+                    }
+                ) {
+                    content(onDismiss)
+                }
             }
         }
     }
