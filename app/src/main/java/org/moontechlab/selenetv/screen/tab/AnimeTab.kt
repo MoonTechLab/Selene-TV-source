@@ -995,6 +995,14 @@ private fun AnimeGridRow(
                 AnimeCardSkeleton()
             }
         }
+
+        // 非加载态的不满行：用透明占位符补齐到整行列数，避免 SpaceBetween 把少量卡片
+        // 拉开占满整行宽度；补齐后卡片按列对齐、尾部留空。
+        if (!isLoading && items.isNotEmpty() && items.size < ANIME_COLUMNS) {
+            repeat(ANIME_COLUMNS - items.size) {
+                Spacer(modifier = Modifier.width(ANIME_CARD_WIDTH.dp))
+            }
+        }
     }
 }
 
