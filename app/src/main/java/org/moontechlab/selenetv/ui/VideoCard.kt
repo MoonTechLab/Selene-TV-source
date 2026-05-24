@@ -123,7 +123,10 @@ fun VideoCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
-    style: VideoCardStyle = VideoCardStyle.LARGE
+    style: VideoCardStyle = VideoCardStyle.LARGE,
+    // 所属区块标识：同一内容可能同时出现在多行（如「继续观看」与「我的收藏」），
+    // 仅靠 source+id 无法区分，返回详情时焦点会落到错误那张卡片。带上区块标识即可唯一。
+    sectionKey: String = ""
 ) {
     val cardWidth = style.width
     val cardHeight = style.height
@@ -217,10 +220,17 @@ fun VideoCard(
 
     // 详情关闭后用于把焦点还原到来源卡片：匹配的卡片挂上还原 requester
     val returnFocus = org.moontechlab.selenetv.screen.LocalDetailReturnFocus.current
-    val returnKey = "${videoInfo.source}+${videoInfo.id}"
+    // 区块标识 + source+id 组成唯一 key（详情覆盖层内 returnFocus 为 null，播放源卡片不参与）
+    val returnKey = org.moontechlab.selenetv.screen.detailReturnKey(
+        sectionKey, videoInfo.source, videoInfo.id,
+    )
 
     Surface(
-        onClick = onClick,
+        onClick = {
+            // 由卡片自身记录返回目标，确保「记录的 key」与「匹配的 key」永远一致
+            returnFocus?.setTarget(returnKey)
+            onClick()
+        },
         modifier = modifier
             .then(
                 if (returnFocus != null && returnFocus.matches(returnKey))

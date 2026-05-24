@@ -69,6 +69,7 @@ fun RecommendSection(
     val coroutineScope = rememberCoroutineScope()
     val firstItemFocusRequester = remember { FocusRequester() }
     var isRowFocused by remember { mutableStateOf(false) }
+    val detailReturnFocus = org.moontechlab.selenetv.screen.LocalDetailReturnFocus.current
 
     Column(
         modifier = modifier
@@ -122,13 +123,17 @@ fun RecommendSection(
                     .focusGroup()
                     .focusRestorer(firstItemFocusRequester)
                     .onFocusChanged { focusState ->
-                        // 当 LazyRow 获得焦点但内部没有聚焦项时，自动聚焦第一个元素
+                        // 从其他行纵向进入本行时，自动聚焦第一张卡片。
+                        // 但详情返回还原期间要跳过，否则会把精确还原到的卡片弹回第一张
+                        // （返回总落到「继续观看」第一个的根因）。
                         if (focusState.hasFocus && !isRowFocused) {
                             isRowFocused = true
-                            try {
-                                firstItemFocusRequester.requestFocus()
-                            } catch (_: Exception) {
-                                // 忽略焦点请求失败
+                            if (detailReturnFocus?.restoreInProgress != true) {
+                                try {
+                                    firstItemFocusRequester.requestFocus()
+                                } catch (_: Exception) {
+                                    // 忽略焦点请求失败
+                                }
                             }
                         } else if (!focusState.hasFocus) {
                             isRowFocused = false
@@ -164,6 +169,7 @@ fun RecommendSection(
                         videoInfo = video,
                         from = from,
                         onClick = { onVideoClick(video) },
+                        sectionKey = title,
                         modifier = Modifier
                             .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
                             .onPreviewKeyEvent { keyEvent ->

@@ -192,6 +192,7 @@ private fun ContinueActionButton(
         ),
     ) {
         Box(modifier = Modifier.fillMaxHeight()) {
+            // Row 决定按钮宽度（贴合文案）
             Row(
                 modifier = Modifier.fillMaxHeight().padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -205,15 +206,17 @@ private fun ContinueActionButton(
                 )
                 Text(text = label, color = fg, fontSize = 15.sp, fontWeight = FontWeight.W600)
             }
-            // 进度细线：贴底边，宽度按进度。Surface 裁到胶囊形 → 两端随圆角收束
+            // 进度细线：用 matchParentSize 贴合按钮实际宽度（而非整行约束），
+            // 否则 fillMaxWidth(fraction) 会按整行宽度撑大按钮。两端由 Surface 裁到胶囊形。
             if (animatedProgress > 0f) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth(animatedProgress)
-                        .height(3.dp)
-                        .background(Accent),
-                )
+                Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.BottomStart) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(animatedProgress)
+                            .height(3.dp)
+                            .background(Accent),
+                    )
+                }
             }
         }
     }

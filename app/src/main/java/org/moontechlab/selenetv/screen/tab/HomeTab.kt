@@ -99,9 +99,11 @@ fun HomeTab(
             return
         }
         coroutineScope.launch {
-            isLoadingPlayRecords = true
+            // 刷新时若已有数据，保持现有卡片、静默原地刷新；不要切到骨架屏。
+            // 否则会销毁正在聚焦的卡片，导致从详情返回时焦点被 focusRestorer 重置到第一个。
+            if (playRecords.isEmpty()) isLoadingPlayRecords = true
             errorPlayRecords = null
-            isLoadingFavorites = true
+            if (favorites.isEmpty()) isLoadingFavorites = true
             errorFavorites = null
 
             try {
@@ -109,9 +111,12 @@ fun HomeTab(
                     ApiService.getPlayRecords()
                 }
                 playRecordsMap = records
-                playRecords = records.values
+                val newRecords = records.values
                     .sortedByDescending { it.saveTime }
                     .map { it.toVideoInfo() }
+                // 数据未变则不重新赋值，避免触发 LazyRow 的 focusRestorer 把焦点重置到第一个
+                // （从详情返回时若 homeRefreshKey 刷新恰好在焦点恢复后完成，会抢走焦点）
+                if (newRecords != playRecords) playRecords = newRecords
                 errorPlayRecords = null
             } catch (e: Exception) {
                 errorPlayRecords = e.message ?: "加载失败"
@@ -123,7 +128,7 @@ fun HomeTab(
                 val favList = withContext(Dispatchers.IO) {
                     ApiService.getFavorites()
                 }
-                favorites = favList.map { fav ->
+                val newFavs = favList.map { fav ->
                     val key = "${fav.source}+${fav.id}"
                     val matchedRecord = playRecordsMap[key]
                     val videoInfo = fav.toVideoInfo()
@@ -133,6 +138,8 @@ fun HomeTab(
                         videoInfo
                     }
                 }
+                // 同上：数据未变则不重新赋值，避免焦点被 focusRestorer 重置
+                if (newFavs != favorites) favorites = newFavs
                 errorFavorites = null
             } catch (e: Exception) {
                 errorFavorites = e.message ?: "加载失败"

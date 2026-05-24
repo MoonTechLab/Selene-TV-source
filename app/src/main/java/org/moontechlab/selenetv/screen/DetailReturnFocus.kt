@@ -19,11 +19,25 @@ class DetailReturnFocusState {
 
     val requester = FocusRequester()
 
+    /**
+     * 详情返回焦点还原进行中。期间各行（RecommendSection）的「获得焦点即跳到第一张卡片」
+     * 行为需暂停，否则会把我们精确还原到的卡片弹回第一张。还原窗口结束后置回 false，
+     * 不影响后续从其他行纵向进入时「自动落到第一张」的正常行为。
+     */
+    var restoreInProgress: Boolean = false
+
     fun setTarget(key: String?) {
         targetKey = key
     }
 
     fun matches(key: String): Boolean = targetKey != null && targetKey == key
 }
+
+/**
+ * 返回焦点的唯一 key。带上区块标识，避免同一内容（同 source+id）出现在多行时
+ * （如「继续观看」与「我的收藏」）相互冲突、返回后焦点落到错误那张卡片。
+ */
+fun detailReturnKey(sectionKey: String, source: String, id: String): String =
+    if (sectionKey.isNotEmpty()) "$sectionKey|$source+$id" else "$source+$id"
 
 val LocalDetailReturnFocus = staticCompositionLocalOf<DetailReturnFocusState?> { null }

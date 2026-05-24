@@ -60,17 +60,15 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             }
     }
 
+    // 返回目标由被点击的 VideoCard 自行记录（setTarget），保证 key 唯一且与匹配一致
     val openDetail: (VideoInfo) -> Unit = remember {
         { video ->
-            detailReturn.setTarget("${video.source}+${video.id}")
             detailEntry = detailEntryFor(video)
         }
     }
 
     val openDetailFromSearch: (AggregatedSearchResult) -> Unit = remember {
         { agg ->
-            val firstSource = agg.originalResults.firstOrNull()?.source ?: ""
-            detailReturn.setTarget("$firstSource+${agg.key}")
             detailEntry = DetailEntry.SearchAggregate(agg)
         }
     }
@@ -157,7 +155,11 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         } else if (hadDetailOpen) {
             hadDetailOpen = false
             delay(300) // 等覆盖层滑出动画(280ms)结束、DetailScreen 释放焦点后再恢复
+            // 还原窗口内暂停各行的「获得焦点即跳第一张」，避免把精确还原弹回第一张
+            detailReturn.restoreInProgress = true
             restoreActiveTabFocus()
+            delay(250)
+            detailReturn.restoreInProgress = false
         }
     }
 
