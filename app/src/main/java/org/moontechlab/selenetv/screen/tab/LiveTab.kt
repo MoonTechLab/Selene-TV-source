@@ -381,15 +381,12 @@ private fun LiveFilterSection(
                     options = groupOptions,
                     selectedKey = selectedGroup,
                     onSelect = onGroupSelect,
-                    focusRequester = if (!showSourceFilter) {
-                        // 只有分组行时，用外部 focusRequester
-                        focusRequester
-                    } else {
-                        groupFocusRequester
-                    },
+                    // 始终绑定 groupFocusRequester，使 onNavigateUp 在单/多直播源下都能聚焦到分组行
+                    focusRequester = groupFocusRequester,
                     modifier = Modifier
                         .then(
-                            if (!showSourceFilter) Modifier else Modifier.focusRequester(groupFocusRequester)
+                            // 单一直播源时分组是首行，额外绑定外部 focusRequester 作为 TabSwitcher 下发入口
+                            if (!showSourceFilter) Modifier.focusRequester(focusRequester) else Modifier
                         )
                         .onPreviewKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {
