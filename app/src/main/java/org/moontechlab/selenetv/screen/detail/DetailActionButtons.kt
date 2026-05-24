@@ -62,12 +62,13 @@ fun DetailActionButtons(
     onToggleFavorite: () -> Unit,
     primaryFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
+    upTarget: FocusRequester? = null,
 ) {
     Row(
-        // 取消向上的焦点搜索：播放按钮上方无可聚焦元素，按上键不应让焦点逃逸到覆盖层下的首页（#4）
+        // 向上焦点：有简介块时上键聚焦到它，否则取消搜索，避免焦点逃逸到覆盖层下的首页（#4）
         modifier = modifier
             .fillMaxWidth()
-            .focusProperties { up = FocusRequester.Cancel },
+            .focusProperties { up = upTarget ?: FocusRequester.Cancel },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

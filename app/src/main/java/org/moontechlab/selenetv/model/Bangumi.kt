@@ -2,6 +2,7 @@ package org.moontechlab.selenetv.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Bangumi 评分数据模型
@@ -82,6 +83,27 @@ data class BangumiCalendarResponse(
 )
 
 /**
+ * Bangumi 标签数据模型（详情接口 tags 为对象数组，而非字符串数组）
+ */
+@Serializable
+data class BangumiTag(
+    val name: String,
+    val count: Int = 0,
+    @SerialName("total_cont")
+    val totalCont: Int = 0
+)
+
+/**
+ * Bangumi infobox 条目：value 可能是字符串，也可能是 [{v:...}] 对象数组，
+ * 故用 JsonElement 容纳，避免解析失败。
+ */
+@Serializable
+data class BangumiInfoboxItem(
+    val key: String,
+    val value: JsonElement
+)
+
+/**
  * Bangumi 详情数据模型
  */
 @Serializable
@@ -97,14 +119,14 @@ data class BangumiDetails(
     val date: String? = null,
     val platform: String? = null,
     val images: BangumiImages,
-    val infobox: List<String>,
+    val infobox: List<BangumiInfoboxItem> = emptyList(),
     val volumes: Int,
     val eps: Int,
     @SerialName("total_episodes")
     val totalEpisodes: Int,
     val rating: BangumiRating,
     val collection: BangumiCollection,
-    val tags: List<String>,
+    val tags: List<BangumiTag> = emptyList(),
     @SerialName("meta_tags")
     val metaTags: List<String>,
     val series: Boolean

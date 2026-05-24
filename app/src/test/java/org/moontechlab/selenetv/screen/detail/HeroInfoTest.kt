@@ -52,7 +52,8 @@ class HeroInfoTest {
             infobox = emptyList(), volumes = 0, eps = 12, totalEpisodes = 12,
             rating = BangumiRating(total = 100, count = emptyMap(), score = 7.8),
             collection = org.moontechlab.selenetv.model.BangumiCollection(),
-            tags = listOf("奇幻"), metaTags = listOf("TV", "原创"), series = false,
+            tags = listOf(org.moontechlab.selenetv.model.BangumiTag("奇幻")),
+            metaTags = listOf("TV", "原创"), series = false,
         )
         val h = b.toHeroInfo()
         assertEquals("中文名", h.title)

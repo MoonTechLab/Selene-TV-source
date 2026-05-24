@@ -40,7 +40,7 @@ fun BangumiDetails.toHeroInfo(): HeroInfo = HeroInfo(
     title = nameCn?.takeIf { it.isNotEmpty() } ?: name,
     poster = images.getBestImageUrl(),
     rate = rating.score.takeIf { it > 0 }?.let { String.format("%.1f", it) },
-    genres = metaTags.ifEmpty { tags }.take(4),
+    genres = metaTags.ifEmpty { tags.map { it.name } }.take(4),
     subLine = date?.takeIf { it.isNotEmpty() },
     summary = summary.takeIf { it.isNotEmpty() },
 )

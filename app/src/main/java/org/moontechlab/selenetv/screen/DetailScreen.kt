@@ -226,7 +226,20 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
     }
 
     val primaryFocus = remember { FocusRequester() }
+    val summaryFocus = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+
+    // 简介全文弹窗
+    var summaryDialogVisible by remember { mutableStateOf(false) }
+    var summaryEverOpened by remember { mutableStateOf(false) }
+    val hasSummary = !state.heroInfo?.summary.isNullOrEmpty()
+    // 关闭弹窗后把焦点交回简介块（首次进入不抢占播放按钮的初始焦点）
+    LaunchedEffect(summaryDialogVisible) {
+        if (!summaryDialogVisible && summaryEverOpened) {
+            kotlinx.coroutines.delay(50)
+            try { summaryFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
 
     val noVerticalAutoScroll = remember {
         object : BringIntoViewSpec {
@@ -365,6 +378,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
                     org.moontechlab.selenetv.screen.detail.DetailHero(
                         entry = state.entry,
                         info = state.heroInfo,
+                        summaryFocusRequester = if (hasSummary) summaryFocus else null,
+                        onSummaryClick = { summaryEverOpened = true; summaryDialogVisible = true },
                         actionsRow = {
                             val hasRecord = state.selectedPlayRecord != null
                             val hasSource = state.selectedSource != null
@@ -385,6 +400,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
                                 onDelete = onDeleteRecord,
                                 onToggleFavorite = onToggleFavorite,
                                 primaryFocusRequester = primaryFocus,
+                                upTarget = if (hasSummary) summaryFocus else null,
                             )
                             }
                         },
@@ -429,6 +445,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
                 onDismiss = { state = state.copy(episodePickerVisible = false) },
             )
         }
+
+        org.moontechlab.selenetv.screen.detail.SummaryDialog(
+            visible = summaryDialogVisible,
+            title = state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: state.entry.title,
+            summary = state.heroInfo?.summary.orEmpty(),
+            onDismiss = { summaryDialogVisible = false },
+        )
     }
 }
 
