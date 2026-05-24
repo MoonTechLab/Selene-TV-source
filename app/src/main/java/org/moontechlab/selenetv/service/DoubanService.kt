@@ -3,6 +3,8 @@ package org.moontechlab.selenetv.service
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -46,20 +48,24 @@ class DoubanService private constructor(private val context: Context) {
     }
     
     private val cacheService by lazy { DoubanCacheService.getInstance(context) }
-    private var cacheInitialized = false
-    
+    @Volatile private var cacheInitialized = false
+    private val cacheInitMutex = Mutex()
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
-    
+
     /**
-     * 初始化缓存服务
+     * 初始化缓存服务（加锁保证并发请求下只初始化一次）
      */
     private suspend fun initCache() {
-        if (!cacheInitialized) {
-            cacheService.init()
-            cacheInitialized = true
+        if (cacheInitialized) return
+        cacheInitMutex.withLock {
+            if (!cacheInitialized) {
+                cacheService.init()
+                cacheInitialized = true
+            }
         }
     }
     

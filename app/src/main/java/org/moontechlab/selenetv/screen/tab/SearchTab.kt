@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -171,9 +172,6 @@ fun SearchTab(
     // 聚合后的搜索结果（未筛选）
     var allSearchResults by remember { mutableStateOf<List<AggregatedSearchResult>>(emptyList()) }
     
-    // 筛选后的搜索结果
-    var searchResults by remember { mutableStateOf<List<AggregatedSearchResult>>(emptyList()) }
-    
     // 搜索进度
     var searchProgress by remember { mutableStateOf<SearchProgress?>(null) }
     
@@ -263,12 +261,16 @@ fun SearchTab(
         return filtered
     }
     
-    // 当筛选状态或原始结果变化时，重新应用筛选
+    // 筛选后的搜索结果：随原始结果/筛选状态自动派生，避免 LaunchedEffect 往返与一帧旧数据
+    val searchResults by remember {
+        derivedStateOf { applyFilterAndSort(allSearchResults, filterState) }
+    }
+
+    // 结果或筛选变化时，焦点回到首行（保持原有行为）
     LaunchedEffect(allSearchResults, filterState) {
-        searchResults = applyFilterAndSort(allSearchResults, filterState)
         focusedRowIndex = 0
     }
-    
+
     // 将搜索结果分成行
     val rows = remember(searchResults) {
         searchResults.chunked(SEARCH_COLUMNS)
@@ -400,7 +402,6 @@ fun SearchTab(
                 delay(300) // 等待动画完成
                 rawSearchResults = emptyList()
                 allSearchResults = emptyList()
-                searchResults = emptyList()
                 searchProgress = null
                 isSearching = true
                 focusedRowIndex = 0
@@ -439,7 +440,6 @@ fun SearchTab(
             delay(300) // 等待动画完成
             rawSearchResults = emptyList()
             allSearchResults = emptyList()
-            searchResults = emptyList()
             searchProgress = null
             isSearching = true
             focusedRowIndex = 0
@@ -498,7 +498,6 @@ fun SearchTab(
                     SearchService.stopSearch()
                     rawSearchResults = emptyList()
                     allSearchResults = emptyList()
-                    searchResults = emptyList()
                     searchProgress = null
                     isSearching = false
                     focusedRowIndex = 0

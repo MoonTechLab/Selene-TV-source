@@ -118,7 +118,8 @@ fun SettingsTab(
     // IP 选择相关状态
     var showIpSelectDialog by remember { mutableStateOf(false) }
     var availableIps by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedIp by remember { mutableStateOf(getPreferredIpAddress() ?: "") }
+    // 初值留空，IP 在下方 LaunchedEffect 中于 IO 线程异步枚举，避免组合期阻塞
+    var selectedIp by remember { mutableStateOf("") }
 
     // 豆瓣源选择弹框状态
     var showDoubanDataSourceDialog by remember { mutableStateOf(false) }
@@ -162,8 +163,12 @@ fun SettingsTab(
         doubanImageSource = AppDataService.getDoubanImageSourceDisplayName()
         tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
-        // 加载可用 IP 列表
-        availableIps = getAllIpAddresses()
+        // 加载可用 IP 列表（网络接口枚举可能阻塞，放到 IO 线程）
+        val ips = withContext(Dispatchers.IO) { getAllIpAddresses() }
+        availableIps = ips
+        if (selectedIp.isEmpty()) {
+            selectedIp = ips.find { it.startsWith("192.168.") } ?: ips.firstOrNull() ?: ""
+        }
     }
 
     Column(

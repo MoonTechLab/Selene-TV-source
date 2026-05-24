@@ -4,8 +4,11 @@ import android.util.Log
 import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.model.LiveChannelGroup
 import org.moontechlab.selenetv.model.LiveSource
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 直播服务
@@ -15,6 +18,8 @@ object LiveService {
     private const val TAG = "LiveService"
     private const val TIMEOUT = 30000
     private const val CACHE_DURATION_MS = 2 * 60 * 60 * 1000L // 2小时
+    private const val MAX_M3U_BYTES = 10 * 1024 * 1024 // 10MB 上限，防止超大响应 OOM
+    private const val MAX_REDIRECTS = 5
 
     // 预编译正则
     private val TVG_URL_REGEX = Regex("""(?:x-tvg-url|url-tvg)="([^"]*)"""")
@@ -23,9 +28,9 @@ object LiveService {
     private val TVG_LOGO_REGEX = Regex("""tvg-logo="([^"]*)"""")
     private val GROUP_TITLE_REGEX = Regex("""group-title="([^"]*)"""")
 
-    // 缓存
-    private var sourcesCache: CacheItem<List<LiveSource>>? = null
-    private val channelsCache = mutableMapOf<String, CacheItem<List<LiveChannel>>>()
+    // 缓存（线程安全：可能被多个协程并发读写不同源）
+    @Volatile private var sourcesCache: CacheItem<List<LiveSource>>? = null
+    private val channelsCache = ConcurrentHashMap<String, CacheItem<List<LiveChannel>>>()
 
     private data class CacheItem<T>(
         val data: T,
@@ -94,26 +99,61 @@ object LiveService {
      * 获取 HTTP 请求 M3U 内容
      */
     private fun fetchM3uContent(source: LiveSource): String {
-        val connection = URL(source.url).openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = TIMEOUT
-        connection.readTimeout = TIMEOUT
-        connection.setRequestProperty(
-            "User-Agent",
-            source.ua.ifEmpty { "AptvPlayer/1.4.10" }
-        )
+        var url = source.url
+        var redirects = 0
+        while (true) {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = TIMEOUT
+            connection.readTimeout = TIMEOUT
+            connection.setRequestProperty(
+                "User-Agent",
+                source.ua.ifEmpty { "AptvPlayer/1.4.10" }
+            )
 
-        try {
-            val statusCode = connection.responseCode
-            if (statusCode != 200) {
-                throw Exception("请求失败: $statusCode")
+            try {
+                val statusCode = connection.responseCode
+                // 手动处理跨协议重定向：HttpURLConnection 默认不跟随 http<->https 跳转，
+                // 而很多 M3U 源会从 http 301 到 https，否则直接失败
+                if (statusCode == 301 || statusCode == 302 || statusCode == 303 ||
+                    statusCode == 307 || statusCode == 308
+                ) {
+                    val location = connection.getHeaderField("Location")
+                    if (location != null && redirects < MAX_REDIRECTS) {
+                        url = URL(URL(url), location).toString()
+                        redirects++
+                        continue
+                    }
+                }
+                if (statusCode != 200) {
+                    throw Exception("请求失败: $statusCode")
+                }
+
+                val bytes = connection.inputStream.readBytesCapped(MAX_M3U_BYTES)
+                return decodeResponse(bytes)
+            } finally {
+                connection.disconnect()
             }
-
-            val bytes = connection.inputStream.readBytes()
-            return decodeResponse(bytes)
-        } finally {
-            connection.disconnect()
         }
+    }
+
+    /**
+     * 读取输入流，超过上限即抛错，避免超大/恶意响应导致 OOM
+     */
+    private fun InputStream.readBytesCapped(max: Int): ByteArray {
+        val buffer = ByteArrayOutputStream()
+        val chunk = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val n = read(chunk)
+            if (n < 0) break
+            total += n
+            if (total > max) {
+                throw Exception("M3U 内容过大（超过 ${max / (1024 * 1024)}MB）")
+            }
+            buffer.write(chunk, 0, n)
+        }
+        return buffer.toByteArray()
     }
 
     /**

@@ -5,6 +5,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.moontechlab.selenetv.model.SearchResource
 import org.moontechlab.selenetv.model.SearchResult
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 搜索进度信息
@@ -36,12 +38,15 @@ object SearchService {
     private const val SEARCH_TIMEOUT_MS = 15000L
     private const val SINGLE_SOURCE_TIMEOUT_MS = 13000L
 
-    private var _isSearching = false
-    private var _currentQuery: String? = null
-    private var _completedSources = 0
-    private var _totalSources = 0
-    private val _sourceErrors = mutableMapOf<String, String>()
-    private var _searchJob: Job? = null
+    // 搜索运行在服务自有的 scope 上，stopSearch 才能真正持有并取消 Job
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile private var _isSearching = false
+    @Volatile private var _currentQuery: String? = null
+    private val _completedSources = AtomicInteger(0)
+    @Volatile private var _totalSources = 0
+    private val _sourceErrors = ConcurrentHashMap<String, String>()
+    @Volatile private var _searchJob: Job? = null
 
     // 事件流
     private val _eventFlow = MutableSharedFlow<SearchEvent>(extraBufferCapacity = 64)
@@ -60,26 +65,24 @@ object SearchService {
             throw IllegalArgumentException("搜索查询不能为空")
         }
 
-        // 如果已有搜索，先停止
-        if (_isSearching) {
-            stopSearch()
-        }
+        // 取消上一次仍在进行的搜索并等待其结束，避免新旧结果交叉污染
+        _searchJob?.cancelAndJoin()
 
         _currentQuery = trimmedQuery
         _isSearching = true
-        _completedSources = 0
+        _completedSources.set(0)
         _totalSources = 0
         _sourceErrors.clear()
 
-        try {
-            withContext(Dispatchers.IO) {
+        _searchJob = serviceScope.launch {
+            try {
                 localSearch(trimmedQuery)
+            } catch (e: CancellationException) {
+                Log.d(TAG, "搜索被取消")
+            } catch (e: Exception) {
+                _eventFlow.emit(SearchEvent.Error("搜索失败: ${e.message}"))
+                _isSearching = false
             }
-        } catch (e: CancellationException) {
-            Log.d(TAG, "搜索被取消")
-        } catch (e: Exception) {
-            _eventFlow.emit(SearchEvent.Error("搜索失败: ${e.message}"))
-            _isSearching = false
         }
     }
 
@@ -99,7 +102,7 @@ object SearchService {
             }
 
             _totalSources = resources.size
-            _completedSources = 0
+            _completedSources.set(0)
 
             // 发送初始进度
             _eventFlow.emit(
@@ -159,12 +162,12 @@ object SearchService {
      */
     private suspend fun searchSingleResource(resource: SearchResource, query: String) {
         try {
-            // 单个资源 20 秒超时
+            // 单个资源 13 秒超时
             val results = withTimeout(SINGLE_SOURCE_TIMEOUT_MS) {
                 DownstreamService.searchFromApi(resource, query)
             }
 
-            _completedSources++
+            val completed = _completedSources.incrementAndGet()
 
             // 发送结果事件（只发送增量结果）
             if (results.isNotEmpty()) {
@@ -176,7 +179,7 @@ object SearchService {
                 SearchEvent.Progress(
                     SearchProgress(
                         totalSources = _totalSources,
-                        completedSources = _completedSources,
+                        completedSources = completed,
                         currentSource = resource.name,
                         isComplete = false
                     )
@@ -195,14 +198,14 @@ object SearchService {
      * 处理单个资源搜索错误
      */
     private suspend fun handleSourceError(resource: SearchResource, errorMessage: String) {
-        _completedSources++
+        val completed = _completedSources.incrementAndGet()
         _sourceErrors[resource.key] = errorMessage
 
         _eventFlow.emit(
             SearchEvent.Progress(
                 SearchProgress(
                     totalSources = _totalSources,
-                    completedSources = _completedSources,
+                    completedSources = completed,
                     currentSource = resource.name,
                     isComplete = false,
                     error = errorMessage
@@ -215,15 +218,15 @@ object SearchService {
      * 处理超时
      */
     private suspend fun handleTimeout() {
-        if (_completedSources < _totalSources) {
-            _completedSources = _totalSources
+        if (_completedSources.get() < _totalSources) {
+            _completedSources.set(_totalSources)
         }
 
         _eventFlow.emit(
             SearchEvent.Progress(
                 SearchProgress(
                     totalSources = _totalSources,
-                    completedSources = _completedSources,
+                    completedSources = _completedSources.get(),
                     currentSource = null,
                     isComplete = true
                 )

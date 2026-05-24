@@ -193,10 +193,16 @@ class DoubanCacheService private constructor(private val context: Context) {
                 // 保存到内存缓存
                 memoryCache[key] = cacheItem
                 
-                // 保存到磁盘缓存
+                // 保存到磁盘缓存：先写临时文件再原子 rename，避免并发读到半截内容
                 getCacheFile(key)?.let { file ->
                     val jsonData = json.encodeToString(cacheItem)
-                    file.writeText(jsonData)
+                    val tmpFile = File(file.parentFile, "${file.name}.tmp")
+                    tmpFile.writeText(jsonData)
+                    if (!tmpFile.renameTo(file)) {
+                        // 极少数文件系统 rename 失败时回退为直接覆写
+                        file.writeText(jsonData)
+                        tmpFile.delete()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -320,9 +326,19 @@ class DoubanCacheService private constructor(private val context: Context) {
     
     /**
      * 获取缓存文件
+     *
+     * 文件名用缓存键的 SHA-256 摘要，避免键中的中文/空格/`&`/`/` 等字符
+     * 造成非法路径、子目录或键碰撞。内存缓存仍以原始键索引。
      */
     private fun getCacheFile(key: String): File? {
-        return cacheDir?.let { File(it, "$key.json") }
+        return cacheDir?.let { File(it, "${safeFileName(key)}.json") }
+    }
+
+    /** 将任意缓存键转换为文件系统安全的文件名（SHA-256 十六进制） */
+    private fun safeFileName(key: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        return digest.digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
     
     // ==================== 豆瓣服务专用缓存方法 ====================
