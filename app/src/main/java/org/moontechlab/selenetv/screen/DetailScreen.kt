@@ -253,7 +253,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
                         val favData = mapOf<String, Any?>(
                             "title" to (state.heroInfo?.title ?: state.entry.title),
                             "source_name" to source.sourceName,
-                            "year" to (state.heroInfo?.subLine ?: state.entry.year),
+                            "year" to state.entry.year,
                             "cover" to source.poster,
                             "total_episodes" to source.episodes.size,
                             "save_time" to System.currentTimeMillis(),
