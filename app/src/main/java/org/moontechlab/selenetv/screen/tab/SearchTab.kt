@@ -142,7 +142,8 @@ fun calculateSearchGridLayout(screenWidthDp: Float): SearchGridLayout {
 @Composable
 fun SearchTab(
     focusRequester: FocusRequester = remember { FocusRequester() },
-    scrollState: ScrollState = rememberScrollState()
+    scrollState: ScrollState = rememberScrollState(),
+    onOpenDetail: (AggregatedSearchResult) -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -561,7 +562,7 @@ fun SearchTab(
                         cardGap = gridLayout.cardGap,
                         onVerticalNavigate = ::handleVerticalScroll,
                         onCardFocus = ::onCardFocus,
-                        onResultClick = { /* TODO: 处理点击 */ },
+                        onResultClick = onOpenDetail,
                         focusRequester = resultsFocusRequester,
                         onNavigateUp = { filterFocusRequester.requestFocus() }
                     )
