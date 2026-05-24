@@ -59,6 +59,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
     var state by remember(entry) { mutableStateOf(DetailUiState(entry = entry)) }
     // 搜索流累积的原始结果（Douban/Bangumi/History 用）
     var rawResults by remember(entry) { mutableStateOf<List<SearchResult>>(emptyList()) }
+    // tier2 命中的 doubanId（>=2 相同）；一旦确定即稳定，供独立 effect 拉取豆瓣详情，
+    // 避免把网络请求放在随 state.sources 变化而被取消的 effect 里（LeftCompositionCancellation）。
+    var tier2Target by remember(entry) { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         onDispose { SearchService.stopSearch() }
@@ -152,8 +155,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
         }
     }
 
-    // 5) History/SearchAggregate 的信息优先级 + 加载态：
-    //    一旦展示源中出现某 doubanId >= 2 次（tier2），立即拉取其豆瓣详情并渲染，再撤下加载页；
+    // 5A) History/SearchAggregate 的结算判定（不发起网络请求，故可安全地随 state.sources 变化重算）：
+    //    展示源中某 doubanId 出现 >= 2 次（tier2）→ 记下目标，交由 5B 拉取豆瓣详情（拉完前保持加载页）；
     //    搜索结束仍无 tier2 → 撤下加载页展示选中源自身信息；否则保持加载页等待后续结果。
     //    结算后锁定（!detailsLoading 直接返回），不因后续源流入而改变 hero，避免跳变。
     LaunchedEffect(state.sources, state.sourcesComplete, entry) {
@@ -161,12 +164,19 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit) {
         if (!state.detailsLoading) return@LaunchedEffect // 已结算，锁定，避免后续跳变
         val tier2 = DetailSourceResolver.tier2DoubanId(state.sources)
         when {
-            tier2 != null -> when (val resp = doubanService.getDoubanDetails(tier2)) {
-                is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
-                is ApiResponse.Error -> state = state.copy(details = null, detailsLoading = false)
-            }
+            tier2 != null -> tier2Target = tier2 // 触发 5B 拉取（稳定 key，不会被 sources 变化取消）
             state.sourcesComplete -> state = state.copy(details = null, detailsLoading = false)
             // else：仍在搜索且暂无 tier2 → 保持加载页
+        }
+    }
+
+    // 5B) 拉取 tier2 豆瓣详情：仅依赖稳定的 tier2Target，避免在 state.sources 变化时被取消
+    //    （否则慢速的豆瓣请求会抛 LeftCompositionCancellation → 误判为失败 → 兜底源信息）。
+    LaunchedEffect(tier2Target) {
+        val id = tier2Target ?: return@LaunchedEffect
+        when (val resp = doubanService.getDoubanDetails(id)) {
+            is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+            is ApiResponse.Error -> state = state.copy(details = null, detailsLoading = false) // 失败兜底源信息
         }
     }
 
