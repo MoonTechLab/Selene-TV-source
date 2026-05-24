@@ -1,37 +1,21 @@
 package org.moontechlab.selenetv.screen.tab
 
 import android.util.Log
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Text
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -48,11 +32,12 @@ import org.moontechlab.selenetv.ui.FilterSelector
 import org.moontechlab.selenetv.ui.SelectorOption
 import org.moontechlab.selenetv.ui.TransparentFilterOption
 import org.moontechlab.selenetv.ui.TransparentFilterSelector
-import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
-import org.moontechlab.selenetv.ui.VideoCardStyle
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Surface
+import org.moontechlab.selenetv.ui.grid.GRID_CARD_WIDTH
+import org.moontechlab.selenetv.ui.grid.GRID_COLUMNS
+import org.moontechlab.selenetv.ui.grid.GRID_PAGE_LIMIT
+import org.moontechlab.selenetv.ui.grid.GridFilterRow
+import org.moontechlab.selenetv.ui.grid.MediaGridScaffold
 
 private const val TAG = "TvTab"
 
@@ -171,13 +156,8 @@ val TV_FILTER_SORT_OPTIONS = listOf(
 
 // ==================== 布局常量 ====================
 
-private const val TV_COLUMNS = 6              // 每行6列
-private const val TV_CARD_WIDTH = 120         // 卡片宽度 120dp
-private const val TV_CARD_HEIGHT = 180        // 卡片封面高度 180dp (2:3 比例)
-private const val TV_ROW_GAP = 28             // 行间距 28dp
-private const val TV_ROW_HEIGHT = 202         // 行高 = 180 + 22 (标题区域)
-private const val TV_PAGE_LIMIT = 25          // 每页数据量
-private const val TV_RENDER_BUFFER = 3        // 缓冲行数
+private const val TV_COLUMNS = GRID_COLUMNS          // 每行6列
+private const val TV_PAGE_LIMIT = GRID_PAGE_LIMIT    // 每页数据量
 
 // ==================== 布局计算 ====================
 
@@ -190,15 +170,15 @@ data class TvGridLayout(
  * 动态计算网格布局参数
  */
 fun calculateTvGridLayout(screenWidthDp: Float): TvGridLayout {
-    val totalCardWidth = TV_CARD_WIDTH * TV_COLUMNS  // 720dp
+    val totalCardWidth = GRID_CARD_WIDTH * TV_COLUMNS  // 720dp
     val availableSpace = screenWidthDp - totalCardWidth
-    
+
     // 左右边距: 剩余空间的 15%, 最小 20dp
     val horizontalPadding = maxOf(20f, availableSpace * 0.15f)
-    
+
     // 卡片间距: 剩余空间的 70% 分给 5 个间隙, 最小 28dp
     val cardGap = maxOf(28f, (availableSpace * 0.7f) / (TV_COLUMNS - 1))
-    
+
     return TvGridLayout(
         horizontalPadding = horizontalPadding.dp,
         cardGap = cardGap.dp
@@ -241,86 +221,29 @@ fun TvTab(
     val context = LocalContext.current
     val doubanService = remember { DoubanService.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    
+
     // 筛选状态
     var filterState by remember { mutableStateOf(TvFilterState()) }
-    
+
     // 数据状态
     var dataState by remember { mutableStateOf(TvTabState()) }
-    
-    // 聚焦行索引
-    var focusedRowIndex by remember { mutableIntStateOf(0) }
-    
+
     // 透明筛选器聚焦状态
     var transparentFocusedKey by remember { mutableStateOf<String?>(null) }
-    
+
     // FilterDialog 状态
     var dialogVisible by remember { mutableStateOf(false) }
     var dialogKey by remember { mutableStateOf<String?>(null) }
-    
+
     // 焦点管理器
     val typeFocusRequester = remember { FocusRequester() }
     val contentFocusRequester = remember { FocusRequester() }
-    
+
     // 计算布局参数
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp.toFloat()
-    val screenHeightDp = configuration.screenHeightDp
-    val screenHeight = screenHeightDp.dp
-    val screenHeightPx = with(density) { screenHeight.toPx() }
     val gridLayout = remember(screenWidthDp) { calculateTvGridLayout(screenWidthDp) }
-    
-    // 底部 padding: (屏幕高度/2 - 67.5dp) 让最后一行能居中
-    val bottomPadding = (screenHeight / 2) - 67.5.dp
-    
-    // 将电视剧列表分成行
-    val rows = remember(dataState.tvShows) {
-        dataState.tvShows.chunked(TV_COLUMNS)
-    }
-    
-    // 判断行是否可见 (前3行始终渲染 + 聚焦点附近的行)
-    fun isRowVisible(rowIndex: Int): Boolean {
-        return rowIndex < 3 || rowIndex in (focusedRowIndex - TV_RENDER_BUFFER)..(focusedRowIndex + TV_RENDER_BUFFER)
-    }
-    
-    // 筛选区域高度 (用于计算滚动位置)
-    var filterSectionHeight by remember { mutableIntStateOf(0) }
-    
-    // 行高 (px)
-    val rowHeightPx = with(density) { TV_ROW_HEIGHT.dp.toPx() }
-    val rowGapPx = with(density) { TV_ROW_GAP.dp.toPx() }
-    val topSpacerPx = with(density) { 64.dp.toPx() } // TabSwitcher 空间
-    
-    // 计算滚动到指定行使其居中的目标位置
-    fun calculateScrollTarget(rowIndex: Int): Int {
-        // 行的顶部位置 = 顶部间距 + 筛选区高度 + (行索引 * (行高 + 行间距))
-        val rowTopPosition = topSpacerPx + filterSectionHeight + (rowIndex * (rowHeightPx + rowGapPx))
-        // 行的中心位置
-        val rowCenterPosition = rowTopPosition + (rowHeightPx / 2)
-        // 目标滚动位置 = 行中心 - 屏幕高度的一半
-        val targetScroll = rowCenterPosition - (screenHeightPx / 2)
-        return targetScroll.toInt().coerceAtLeast(0)
-    }
-    
-    // 处理垂直导航的滚动
-    fun handleVerticalScroll(targetRowIndex: Int) {
-        if (targetRowIndex < 0 || targetRowIndex >= rows.size) return
-        val targetScroll = calculateScrollTarget(targetRowIndex)
-        coroutineScope.launch {
-            scrollState.animateScrollTo(targetScroll)
-        }
-    }
-    
-    // 禁用自动滚动的 BringIntoViewSpec
-    val disabledBringIntoViewSpec = remember {
-        object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-                return 0f // 禁用自动滚动
-            }
-        }
-    }
-    
+
     // 加载数据函数
     fun loadData(isInitial: Boolean = false) {
         if (dataState.isLoading) return
@@ -385,20 +308,7 @@ fun TvTab(
     // 筛选条件变化时重新加载
     LaunchedEffect(filterState) {
         dataState = TvTabState() // 重置数据状态
-        focusedRowIndex = 0
         loadData(isInitial = true)
-    }
-    
-    // 卡片聚焦回调
-    fun onCardFocus(rowIndex: Int) {
-        focusedRowIndex = rowIndex
-        
-        // 当聚焦到最后一行时触发加载更多
-        val isLastRow = rowIndex == rows.lastIndex
-        val shouldLoadMore = isLastRow && dataState.hasMore && !dataState.isLoading
-        if (shouldLoadMore) {
-            loadData()
-        }
     }
 
     // 根据 dialogKey 获取对应的选项列表、标题和当前选中值
@@ -430,70 +340,43 @@ fun TvTab(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 使用 CompositionLocalProvider 禁用自动滚动
-        CompositionLocalProvider(
-            LocalBringIntoViewSpec provides disabledBringIntoViewSpec
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .focusGroup()
-                    .padding(horizontal = gridLayout.horizontalPadding)
-                    .padding(bottom = bottomPadding)
-            ) {
-                // 顶部留出 TabSwitcher 的空间
-                Spacer(modifier = Modifier.height(64.dp))
-                
-                // 筛选区域
-                Box(
-                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                        filterSectionHeight = coordinates.size.height
-                    }
-                ) {
-                    TvFilterSection(
-                        filterState = filterState,
-                        onFilterStateChange = { newState ->
-                            filterState = newState
-                        },
-                        transparentFocusedKey = transparentFocusedKey,
-                        onTransparentFocus = { transparentFocusedKey = it },
-                        onTransparentBlur = { transparentFocusedKey = null },
-                        onTransparentSelect = { key ->
-                            dialogKey = key
-                            dialogVisible = true
-                        },
-                        categoryFocusRequester = categoryFocusRequester,
-                        typeFocusRequester = typeFocusRequester,
-                        onNavigateDown = {
-                            contentFocusRequester.requestFocus()
-                        }
-                    )
-                }
-                
-                // 筛选区域和内容区域之间的间距
-                Spacer(modifier = Modifier.height(14.dp))
-                
-                // 内容区域 (8列网格)
-                TvContentSection(
-                    rows = rows,
-                    isRowVisible = ::isRowVisible,
-                    isLoading = dataState.isLoading,
-                    errorMessage = dataState.errorMessage,
-                    onRetry = { loadData(isInitial = true) },
-                    cardGap = gridLayout.cardGap,
-                    totalRows = rows.size,
-                    onVerticalNavigate = ::handleVerticalScroll,
-                    onCardFocus = ::onCardFocus,
-                    onTvShowClick = { tvShow -> onVideoSelected(tvShow.toVideoInfo()) },
-                    focusRequester = contentFocusRequester,
-                    onNavigateUp = {
-                        typeFocusRequester.requestFocus()
+        MediaGridScaffold(
+            items = dataState.tvShows,
+            isLoading = dataState.isLoading,
+            errorMessage = dataState.errorMessage,
+            scrollState = scrollState,
+            horizontalPadding = gridLayout.horizontalPadding,
+            cardGap = gridLayout.cardGap,
+            contentFocusRequester = contentFocusRequester,
+            resetKey = filterState,
+            itemToVideoInfo = { it.toVideoInfo() },
+            itemToSource = { VideoCardSource.DOUBAN },
+            onItemClick = { tvShow -> onVideoSelected(tvShow.toVideoInfo()) },
+            onRetry = { loadData(isInitial = true) },
+            onLoadMore = { loadData() },
+            onContentNavigateUp = { typeFocusRequester.requestFocus() },
+            filterSection = {
+                TvFilterSection(
+                    filterState = filterState,
+                    onFilterStateChange = { newState ->
+                        filterState = newState
+                    },
+                    transparentFocusedKey = transparentFocusedKey,
+                    onTransparentFocus = { transparentFocusedKey = it },
+                    onTransparentBlur = { transparentFocusedKey = null },
+                    onTransparentSelect = { key ->
+                        dialogKey = key
+                        dialogVisible = true
+                    },
+                    categoryFocusRequester = categoryFocusRequester,
+                    typeFocusRequester = typeFocusRequester,
+                    onNavigateDown = {
+                        contentFocusRequester.requestFocus()
                     }
                 )
             }
-        }
-        
+        )
+
         // 筛选对话框
         FilterDialog(
             visible = dialogVisible,
@@ -622,7 +505,7 @@ private fun TvFilterSection(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 分类行
-        TvFilterRow(
+        GridFilterRow(
             label = "分类",
             content = {
                 FilterSelector(
@@ -657,7 +540,7 @@ private fun TvFilterSection(
         
         // 第二行 (根据分类选择动态切换)
         if (isAllCategory) {
-            TvFilterRow(
+            GridFilterRow(
                 label = "筛选",
                 content = {
                     val transparentOptions = listOf(
@@ -715,7 +598,7 @@ private fun TvFilterSection(
                 }
             )
         } else {
-            TvFilterRow(
+            GridFilterRow(
                 label = "类型",
                 content = {
                     FilterSelector(
@@ -743,302 +626,6 @@ private fun TvFilterSection(
                     )
                 }
             )
-        }
-    }
-}
-
-/**
- * 筛选行 (标签 + 内容)
- */
-@Composable
-private fun TvFilterRow(
-    label: String,
-    content: @Composable () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        // 标签 (固定宽度 36dp)
-        Box(
-            modifier = Modifier.width(36.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text = label,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        
-        // 内容
-        content()
-    }
-}
-
-/**
- * 内容区域 (8列网格)
- */
-@Composable
-private fun TvContentSection(
-    rows: List<List<DoubanMovie>>,
-    isRowVisible: (Int) -> Boolean,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    cardGap: Dp,
-    totalRows: Int,
-    onVerticalNavigate: (Int) -> Unit,
-    onCardFocus: (Int) -> Unit,
-    onTvShowClick: (DoubanMovie) -> Unit,
-    focusRequester: FocusRequester,
-    onNavigateUp: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(TV_ROW_GAP.dp)
-    ) {
-        if (!isLoading && errorMessage != null && rows.isEmpty()) {
-            TvGridErrorState(
-                message = errorMessage,
-                onRetry = onRetry
-            )
-        } else if (isLoading && rows.isEmpty()) {
-            // 初始加载: 显示 3 行骨架屏
-            repeat(3) {
-                TvGridRow(
-                    tvShows = emptyList(),
-                    rowIndex = it,
-                    cardGap = cardGap,
-                    isVisible = true,
-                    isLoading = true,
-                    totalRows = 0,
-                    onVerticalNavigate = {},
-                    onCardFocus = {},
-                    onTvShowClick = {}
-                )
-            }
-        } else {
-            // 正常内容
-            rows.forEachIndexed { rowIndex, rowTvShows ->
-                val isVisible = isRowVisible(rowIndex)
-                val isLastRow = rowIndex == rows.lastIndex
-                
-                TvGridRow(
-                    tvShows = rowTvShows,
-                    rowIndex = rowIndex,
-                    cardGap = cardGap,
-                    isVisible = isVisible,
-                    isLoading = isLastRow && isLoading,
-                    totalRows = totalRows,
-                    onVerticalNavigate = onVerticalNavigate,
-                    onCardFocus = onCardFocus,
-                    onTvShowClick = onTvShowClick,
-                    onNavigateUp = onNavigateUp
-                )
-            }
-            
-            // 正在加载时，显示额外骨架行
-            if (isLoading && rows.isNotEmpty()) {
-                // 最后一行是满行时显示2行骨架，不满时显示1行骨架
-                val skeletonRows = if (rows.lastOrNull()?.size == TV_COLUMNS) 2 else 1
-                repeat(skeletonRows) {
-                    TvGridRow(
-                        tvShows = emptyList(),
-                        rowIndex = rows.size + it,
-                        cardGap = cardGap,
-                        isVisible = true,
-                        isLoading = true,
-                        totalRows = totalRows,
-                        onVerticalNavigate = {},
-                        onCardFocus = {},
-                        onTvShowClick = {}
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 电视剧网格行
- */
-@Composable
-private fun TvGridRow(
-    tvShows: List<DoubanMovie>,
-    rowIndex: Int,
-    cardGap: Dp,
-    isVisible: Boolean,
-    isLoading: Boolean,
-    totalRows: Int,
-    onVerticalNavigate: (Int) -> Unit,
-    onCardFocus: (Int) -> Unit,
-    onTvShowClick: (DoubanMovie) -> Unit,
-    onNavigateUp: () -> Unit = {}
-) {
-    if (!isVisible && tvShows.isNotEmpty()) {
-        // 不可见行使用占位符保持高度
-        Spacer(modifier = Modifier.height(TV_ROW_HEIGHT.dp))
-        return
-    }
-    
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(TV_ROW_HEIGHT.dp)
-    ) {
-        // 渲染实际卡片
-        tvShows.forEach { tvShow ->
-            VideoCard(
-                videoInfo = tvShow.toVideoInfo(),
-                from = VideoCardSource.DOUBAN,
-                onClick = { onTvShowClick(tvShow) },
-                style = VideoCardStyle.LARGE,
-                modifier = Modifier
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            onCardFocus(rowIndex)
-                        }
-                    }
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyDown) {
-                            when (keyEvent.key) {
-                                Key.DirectionUp -> {
-                                    if (rowIndex == 0) {
-                                        // 第一行按上键，导航到类型筛选器
-                                        onNavigateUp()
-                                        true
-                                    } else {
-                                        onVerticalNavigate(rowIndex - 1)
-                                        false
-                                    }
-                                }
-                                Key.DirectionDown -> {
-                                    if (rowIndex < totalRows - 1) {
-                                        onVerticalNavigate(rowIndex + 1)
-                                    }
-                                    false
-                                }
-                                else -> false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-            )
-        }
-        
-        // 最后一行且正在加载时，补充骨架卡片
-        if (isLoading && tvShows.isNotEmpty() && tvShows.size < TV_COLUMNS) {
-            repeat(TV_COLUMNS - tvShows.size) {
-                TvCardSkeleton()
-            }
-        }
-        
-        // 纯骨架行
-        if (tvShows.isEmpty() && isLoading) {
-            repeat(TV_COLUMNS) {
-                TvCardSkeleton()
-            }
-        }
-
-        // 非加载态的不满行：用透明占位符补齐到整行列数，避免 SpaceBetween 把少量卡片
-        // 拉开占满整行宽度；补齐后卡片按列对齐、尾部留空。
-        if (!isLoading && tvShows.isNotEmpty() && tvShows.size < TV_COLUMNS) {
-            repeat(TV_COLUMNS - tvShows.size) {
-                Spacer(modifier = Modifier.width(TV_CARD_WIDTH.dp))
-            }
-        }
-    }
-}
-
-/**
- * 视频卡片骨架屏
- */
-@Composable
-private fun TvCardSkeleton() {
-    // 骨架屏闪烁动画
-    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "skeleton_alpha"
-    )
-    
-    Column(
-        modifier = Modifier.width(TV_CARD_WIDTH.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // 封面骨架
-        Box(
-            modifier = Modifier
-                .width(TV_CARD_WIDTH.dp)
-                .height(TV_CARD_HEIGHT.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = alpha))
-        )
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        // 标题骨架
-        Box(
-            modifier = Modifier
-                .width(60.dp)
-                .height(14.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.White.copy(alpha = alpha * 0.7f))
-        )
-    }
-}
-
-@Composable
-private fun TvGridErrorState(
-    message: String,
-    onRetry: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "加载失败",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 14.sp
-            )
-
-            Surface(
-                onClick = onRetry,
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color(0x14FFFFFF),
-                    focusedContainerColor = Color(0xFF4CAF50)
-                ),
-                modifier = Modifier.onFocusChanged { isFocused = it.isFocused }
-            ) {
-                Text(
-                    text = "重试",
-                    color = if (isFocused) Color.White else Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp)
-                )
-            }
         }
     }
 }

@@ -1,37 +1,21 @@
 package org.moontechlab.selenetv.screen.tab
 
 import android.util.Log
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Text
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -49,11 +33,12 @@ import org.moontechlab.selenetv.ui.FilterSelector
 import org.moontechlab.selenetv.ui.SelectorOption
 import org.moontechlab.selenetv.ui.TransparentFilterOption
 import org.moontechlab.selenetv.ui.TransparentFilterSelector
-import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
-import org.moontechlab.selenetv.ui.VideoCardStyle
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Surface
+import org.moontechlab.selenetv.ui.grid.GRID_CARD_WIDTH
+import org.moontechlab.selenetv.ui.grid.GRID_COLUMNS
+import org.moontechlab.selenetv.ui.grid.GRID_PAGE_LIMIT
+import org.moontechlab.selenetv.ui.grid.GridFilterRow
+import org.moontechlab.selenetv.ui.grid.MediaGridScaffold
 import java.util.Calendar
 
 private const val TAG = "AnimeTab"
@@ -243,13 +228,8 @@ val ANIME_SORT_OPTIONS = listOf(
 
 // ==================== 布局常量 ====================
 
-private const val ANIME_COLUMNS = 6              // 每行6列
-private const val ANIME_CARD_WIDTH = 120         // 卡片宽度 120dp
-private const val ANIME_CARD_HEIGHT = 180        // 卡片封面高度 180dp (2:3 比例)
-private const val ANIME_ROW_GAP = 28             // 行间距 28dp
-private const val ANIME_ROW_HEIGHT = 202         // 行高 = 180 + 22 (标题区域)
-private const val ANIME_PAGE_LIMIT = 25          // 每页数据量
-private const val ANIME_RENDER_BUFFER = 3        // 缓冲行数
+private const val ANIME_COLUMNS = GRID_COLUMNS          // 每行6列
+private const val ANIME_PAGE_LIMIT = GRID_PAGE_LIMIT    // 每页数据量
 
 // ==================== 布局计算 ====================
 
@@ -259,7 +239,7 @@ data class AnimeGridLayout(
 )
 
 fun calculateAnimeGridLayout(screenWidthDp: Float): AnimeGridLayout {
-    val totalCardWidth = ANIME_CARD_WIDTH * ANIME_COLUMNS  // 720dp
+    val totalCardWidth = GRID_CARD_WIDTH * ANIME_COLUMNS  // 720dp
     val availableSpace = screenWidthDp - totalCardWidth
     
     // 左右边距: 剩余空间的 15%, 最小 20dp
@@ -320,60 +300,20 @@ fun AnimeTab(
     val bangumiService = remember { BangumiService.getInstance(context) }
     val doubanService = remember { DoubanService.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    
+
     var filterState by remember { mutableStateOf(AnimeFilterState()) }
     var dataState by remember { mutableStateOf(AnimeTabState()) }
-    var focusedRowIndex by remember { mutableIntStateOf(0) }
     var transparentFocusedKey by remember { mutableStateOf<String?>(null) }
     var dialogVisible by remember { mutableStateOf(false) }
     var dialogKey by remember { mutableStateOf<String?>(null) }
-    
+
     val typeFocusRequester = remember { FocusRequester() }
     val contentFocusRequester = remember { FocusRequester() }
-    
+
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp.toFloat()
-    val screenHeightDp = configuration.screenHeightDp
-    val screenHeight = screenHeightDp.dp
-    val screenHeightPx = with(density) { screenHeight.toPx() }
     val gridLayout = remember(screenWidthDp) { calculateAnimeGridLayout(screenWidthDp) }
-    val bottomPadding = (screenHeight / 2) - 67.5.dp
-    
-    val rows = remember(dataState.items) {
-        dataState.items.chunked(ANIME_COLUMNS)
-    }
-    
-    fun isRowVisible(rowIndex: Int): Boolean {
-        return rowIndex < 3 || rowIndex in (focusedRowIndex - ANIME_RENDER_BUFFER)..(focusedRowIndex + ANIME_RENDER_BUFFER)
-    }
-    
-    var filterSectionHeight by remember { mutableIntStateOf(0) }
-    val rowHeightPx = with(density) { ANIME_ROW_HEIGHT.dp.toPx() }
-    val rowGapPx = with(density) { ANIME_ROW_GAP.dp.toPx() }
-    val topSpacerPx = with(density) { 64.dp.toPx() }
-    
-    fun calculateScrollTarget(rowIndex: Int): Int {
-        val rowTopPosition = topSpacerPx + filterSectionHeight + (rowIndex * (rowHeightPx + rowGapPx))
-        val rowCenterPosition = rowTopPosition + (rowHeightPx / 2)
-        val targetScroll = rowCenterPosition - (screenHeightPx / 2)
-        return targetScroll.toInt().coerceAtLeast(0)
-    }
-    
-    fun handleVerticalScroll(targetRowIndex: Int) {
-        if (targetRowIndex < 0 || targetRowIndex >= rows.size) return
-        val targetScroll = calculateScrollTarget(targetRowIndex)
-        coroutineScope.launch {
-            scrollState.animateScrollTo(targetScroll)
-        }
-    }
-    
-    val disabledBringIntoViewSpec = remember {
-        object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = 0f
-        }
-    }
-    
+
     fun loadData(isInitial: Boolean = false) {
         if (dataState.isLoading) return
         if (!isInitial && !dataState.hasMore) return
@@ -454,17 +394,7 @@ fun AnimeTab(
     
     LaunchedEffect(filterState) {
         dataState = AnimeTabState()
-        focusedRowIndex = 0
         loadData(isInitial = true)
-    }
-    
-    fun onCardFocus(rowIndex: Int) {
-        focusedRowIndex = rowIndex
-        val isLastRow = rowIndex == rows.lastIndex
-        val shouldLoadMore = isLastRow && dataState.hasMore && !dataState.isLoading
-        if (shouldLoadMore) {
-            loadData()
-        }
     }
 
     // 根据分类和 dialogKey 获取对应的选项列表
@@ -499,60 +429,54 @@ fun AnimeTab(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        CompositionLocalProvider(
-            LocalBringIntoViewSpec provides disabledBringIntoViewSpec
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .focusGroup()
-                    .padding(horizontal = gridLayout.horizontalPadding)
-                    .padding(bottom = bottomPadding)
-            ) {
-                Spacer(modifier = Modifier.height(64.dp))
-                
-                Box(
-                    modifier = Modifier.onGloballyPositioned { coordinates ->
-                        filterSectionHeight = coordinates.size.height
-                    }
-                ) {
-                    AnimeFilterSection(
-                        filterState = filterState,
-                        onFilterStateChange = { newState -> filterState = newState },
-                        transparentFocusedKey = transparentFocusedKey,
-                        onTransparentFocus = { transparentFocusedKey = it },
-                        onTransparentBlur = { transparentFocusedKey = null },
-                        onTransparentSelect = { key ->
-                            dialogKey = key
-                            dialogVisible = true
-                        },
-                        categoryFocusRequester = categoryFocusRequester,
-                        typeFocusRequester = typeFocusRequester,
-                        onNavigateDown = { contentFocusRequester.requestFocus() }
-                    )
+        MediaGridScaffold(
+            items = dataState.items,
+            isLoading = dataState.isLoading,
+            errorMessage = dataState.errorMessage,
+            scrollState = scrollState,
+            horizontalPadding = gridLayout.horizontalPadding,
+            cardGap = gridLayout.cardGap,
+            contentFocusRequester = contentFocusRequester,
+            resetKey = filterState,
+            itemToVideoInfo = { item ->
+                when (item) {
+                    is AnimeContentItem.Bangumi -> item.item.toVideoInfo()
+                    is AnimeContentItem.Douban -> item.item.toVideoInfo()
                 }
-                
-                Spacer(modifier = Modifier.height(14.dp))
-                
-                AnimeContentSection(
-                    rows = rows,
-                    isRowVisible = ::isRowVisible,
-                    isLoading = dataState.isLoading,
-                    errorMessage = dataState.errorMessage,
-                    onRetry = { loadData(isInitial = true) },
-                    cardGap = gridLayout.cardGap,
-                    totalRows = rows.size,
-                    onVerticalNavigate = ::handleVerticalScroll,
-                    onCardFocus = ::onCardFocus,
-                    onBangumiClick = { item -> onVideoSelected(item.toVideoInfo()) },
-                    onDoubanClick = { movie -> onVideoSelected(movie.toVideoInfo()) },
-                    focusRequester = contentFocusRequester,
-                    onNavigateUp = { typeFocusRequester.requestFocus() }
+            },
+            itemToSource = { item ->
+                when (item) {
+                    is AnimeContentItem.Bangumi -> VideoCardSource.BANGUMI
+                    is AnimeContentItem.Douban -> VideoCardSource.DOUBAN
+                }
+            },
+            onItemClick = { item ->
+                when (item) {
+                    is AnimeContentItem.Bangumi -> onVideoSelected(item.item.toVideoInfo())
+                    is AnimeContentItem.Douban -> onVideoSelected(item.item.toVideoInfo())
+                }
+            },
+            onRetry = { loadData(isInitial = true) },
+            onLoadMore = { loadData() },
+            onContentNavigateUp = { typeFocusRequester.requestFocus() },
+            filterSection = {
+                AnimeFilterSection(
+                    filterState = filterState,
+                    onFilterStateChange = { newState -> filterState = newState },
+                    transparentFocusedKey = transparentFocusedKey,
+                    onTransparentFocus = { transparentFocusedKey = it },
+                    onTransparentBlur = { transparentFocusedKey = null },
+                    onTransparentSelect = { key ->
+                        dialogKey = key
+                        dialogVisible = true
+                    },
+                    categoryFocusRequester = categoryFocusRequester,
+                    typeFocusRequester = typeFocusRequester,
+                    onNavigateDown = { contentFocusRequester.requestFocus() }
                 )
             }
-        }
-        
+        )
+
         FilterDialog(
             visible = dialogVisible,
             title = dialogTitle,
@@ -669,7 +593,7 @@ private fun AnimeFilterSection(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 分类行
-        AnimeFilterRow(
+        GridFilterRow(
             label = "分类",
             content = {
                 FilterSelector(
@@ -709,7 +633,7 @@ private fun AnimeFilterSection(
         // 第二行 (根据分类动态切换)
         if (isNewCategory) {
             // 每日放送 - 星期选择
-            AnimeFilterRow(
+            GridFilterRow(
                 label = "星期",
                 content = {
                     FilterSelector(
@@ -756,7 +680,7 @@ private fun AnimeFilterSection(
                 )
             }
             
-            AnimeFilterRow(
+            GridFilterRow(
                 label = "筛选",
                 content = {
                     TransparentFilterSelector(
@@ -785,307 +709,6 @@ private fun AnimeFilterSection(
                     )
                 }
             )
-        }
-    }
-}
-
-/**
- * 筛选行 (标签 + 内容)
- */
-@Composable
-private fun AnimeFilterRow(
-    label: String,
-    content: @Composable () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
-    ) {
-        Box(
-            modifier = Modifier.width(36.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text = label,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        content()
-    }
-}
-
-
-/**
- * 内容区域 (8列网格)
- */
-@Composable
-private fun AnimeContentSection(
-    rows: List<List<AnimeContentItem>>,
-    isRowVisible: (Int) -> Boolean,
-    isLoading: Boolean,
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    cardGap: Dp,
-    totalRows: Int,
-    onVerticalNavigate: (Int) -> Unit,
-    onCardFocus: (Int) -> Unit,
-    onBangumiClick: (BangumiItem) -> Unit,
-    onDoubanClick: (DoubanMovie) -> Unit,
-    focusRequester: FocusRequester,
-    onNavigateUp: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .focusGroup(),
-        verticalArrangement = Arrangement.spacedBy(ANIME_ROW_GAP.dp)
-    ) {
-        if (!isLoading && errorMessage != null && rows.isEmpty()) {
-            AnimeGridErrorState(
-                message = errorMessage,
-                onRetry = onRetry
-            )
-        } else if (isLoading && rows.isEmpty()) {
-            repeat(3) {
-                AnimeGridRow(
-                    items = emptyList(),
-                    rowIndex = it,
-                    cardGap = cardGap,
-                    isVisible = true,
-                    isLoading = true,
-                    totalRows = 0,
-                    onVerticalNavigate = {},
-                    onCardFocus = {},
-                    onBangumiClick = {},
-                    onDoubanClick = {}
-                )
-            }
-        } else {
-            rows.forEachIndexed { rowIndex, rowItems ->
-                val isVisible = isRowVisible(rowIndex)
-                val isLastRow = rowIndex == rows.lastIndex
-                
-                AnimeGridRow(
-                    items = rowItems,
-                    rowIndex = rowIndex,
-                    cardGap = cardGap,
-                    isVisible = isVisible,
-                    isLoading = isLastRow && isLoading,
-                    totalRows = totalRows,
-                    onVerticalNavigate = onVerticalNavigate,
-                    onCardFocus = onCardFocus,
-                    onBangumiClick = onBangumiClick,
-                    onDoubanClick = onDoubanClick,
-                    onNavigateUp = onNavigateUp
-                )
-            }
-            
-            if (isLoading && rows.isNotEmpty()) {
-                val skeletonRows = if (rows.lastOrNull()?.size == ANIME_COLUMNS) 2 else 1
-                repeat(skeletonRows) {
-                    AnimeGridRow(
-                        items = emptyList(),
-                        rowIndex = rows.size + it,
-                        cardGap = cardGap,
-                        isVisible = true,
-                        isLoading = true,
-                        totalRows = totalRows,
-                        onVerticalNavigate = {},
-                        onCardFocus = {},
-                        onBangumiClick = {},
-                        onDoubanClick = {}
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 动漫网格行
- */
-@Composable
-private fun AnimeGridRow(
-    items: List<AnimeContentItem>,
-    rowIndex: Int,
-    cardGap: Dp,
-    isVisible: Boolean,
-    isLoading: Boolean,
-    totalRows: Int,
-    onVerticalNavigate: (Int) -> Unit,
-    onCardFocus: (Int) -> Unit,
-    onBangumiClick: (BangumiItem) -> Unit,
-    onDoubanClick: (DoubanMovie) -> Unit,
-    onNavigateUp: () -> Unit = {}
-) {
-    if (!isVisible && items.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(ANIME_ROW_HEIGHT.dp))
-        return
-    }
-    
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(ANIME_ROW_HEIGHT.dp)
-    ) {
-        items.forEach { item ->
-            val videoInfo = when (item) {
-                is AnimeContentItem.Bangumi -> item.item.toVideoInfo()
-                is AnimeContentItem.Douban -> item.item.toVideoInfo()
-            }
-            val cardSource = when (item) {
-                is AnimeContentItem.Bangumi -> VideoCardSource.BANGUMI
-                is AnimeContentItem.Douban -> VideoCardSource.DOUBAN
-            }
-            
-            VideoCard(
-                videoInfo = videoInfo,
-                from = cardSource,
-                onClick = {
-                    when (item) {
-                        is AnimeContentItem.Bangumi -> onBangumiClick(item.item)
-                        is AnimeContentItem.Douban -> onDoubanClick(item.item)
-                    }
-                },
-                style = VideoCardStyle.LARGE,
-                modifier = Modifier
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            onCardFocus(rowIndex)
-                        }
-                    }
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyDown) {
-                            when (keyEvent.key) {
-                                Key.DirectionUp -> {
-                                    if (rowIndex == 0) {
-                                        onNavigateUp()
-                                        true
-                                    } else {
-                                        onVerticalNavigate(rowIndex - 1)
-                                        false
-                                    }
-                                }
-                                Key.DirectionDown -> {
-                                    if (rowIndex < totalRows - 1) {
-                                        onVerticalNavigate(rowIndex + 1)
-                                    }
-                                    false
-                                }
-                                else -> false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-            )
-        }
-        
-        if (isLoading && items.isNotEmpty() && items.size < ANIME_COLUMNS) {
-            repeat(ANIME_COLUMNS - items.size) {
-                AnimeCardSkeleton()
-            }
-        }
-        
-        if (items.isEmpty() && isLoading) {
-            repeat(ANIME_COLUMNS) {
-                AnimeCardSkeleton()
-            }
-        }
-
-        // 非加载态的不满行：用透明占位符补齐到整行列数，避免 SpaceBetween 把少量卡片
-        // 拉开占满整行宽度；补齐后卡片按列对齐、尾部留空。
-        if (!isLoading && items.isNotEmpty() && items.size < ANIME_COLUMNS) {
-            repeat(ANIME_COLUMNS - items.size) {
-                Spacer(modifier = Modifier.width(ANIME_CARD_WIDTH.dp))
-            }
-        }
-    }
-}
-
-/**
- * 视频卡片骨架屏
- */
-@Composable
-private fun AnimeCardSkeleton() {
-    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "skeleton_alpha"
-    )
-    
-    Column(
-        modifier = Modifier.width(ANIME_CARD_WIDTH.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .width(ANIME_CARD_WIDTH.dp)
-                .height(ANIME_CARD_HEIGHT.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = alpha))
-        )
-        
-        Spacer(modifier = Modifier.height(4.dp))
-        
-        Box(
-            modifier = Modifier
-                .width(60.dp)
-                .height(14.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.White.copy(alpha = alpha * 0.7f))
-        )
-    }
-}
-
-@Composable
-private fun AnimeGridErrorState(
-    message: String,
-    onRetry: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(300.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "加载失败",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 14.sp
-            )
-
-            Surface(
-                onClick = onRetry,
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
-                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-                colors = ClickableSurfaceDefaults.colors(
-                    containerColor = Color(0x14FFFFFF),
-                    focusedContainerColor = Color(0xFF4CAF50)
-                ),
-                modifier = Modifier.onFocusChanged { isFocused = it.isFocused }
-            ) {
-                Text(
-                    text = "重试",
-                    color = if (isFocused) Color.White else Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 10.dp)
-                )
-            }
         }
     }
 }
