@@ -63,6 +63,8 @@ fun RecommendSection(
     errorMessage: String? = null,
     onRetry: (() -> Unit)? = null,
     onVideoClick: (VideoInfo) -> Unit,
+    // 长按某张卡片的回调，为 null 时该区块卡片不响应长按
+    onVideoLongClick: ((VideoInfo) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -169,6 +171,7 @@ fun RecommendSection(
                         videoInfo = video,
                         from = from,
                         onClick = { onVideoClick(video) },
+                        onLongClick = onVideoLongClick?.let { handler -> { handler(video) } },
                         sectionKey = title,
                         modifier = Modifier
                             .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)

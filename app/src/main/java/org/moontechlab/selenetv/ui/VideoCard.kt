@@ -124,6 +124,8 @@ fun VideoCard(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     style: VideoCardStyle = VideoCardStyle.LARGE,
+    // 长按（遥控 OK 键长按）回调，为 null 时不响应长按
+    onLongClick: (() -> Unit)? = null,
     // 所属区块标识：同一内容可能同时出现在多行（如「继续观看」与「我的收藏」），
     // 仅靠 source+id 无法区分，返回详情时焦点会落到错误那张卡片。带上区块标识即可唯一。
     sectionKey: String = ""
@@ -231,6 +233,7 @@ fun VideoCard(
             returnFocus?.setTarget(returnKey)
             onClick()
         },
+        onLongClick = onLongClick?.let { { it() } },
         modifier = modifier
             .then(
                 if (returnFocus != null && returnFocus.matches(returnKey))

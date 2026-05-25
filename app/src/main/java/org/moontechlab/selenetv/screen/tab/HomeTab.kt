@@ -32,6 +32,9 @@ import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.DoubanService
+import org.moontechlab.selenetv.ui.CardContextMenu
+import org.moontechlab.selenetv.ui.CardMenuItem
+import org.moontechlab.selenetv.ui.ConfirmDialog
 import org.moontechlab.selenetv.ui.RecommendSection
 import org.moontechlab.selenetv.ui.VideoCardSource
 
@@ -85,6 +88,88 @@ fun HomeTab(
 
     // 用于匹配的播放记录 Map（收藏夹需要）
     var playRecordsMap by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.PlayRecord>>(emptyMap()) }
+
+    // ===== 长按菜单 / 二次确认 状态 =====
+    // 当前被长按的卡片及其来源；menuVisible 单独控制显隐，
+    // 关闭动画期间需保持 target 不变（与 FilterDialog 一样常驻组合树）
+    var menuVisible by remember { mutableStateOf(false) }
+    var menuTarget by remember { mutableStateOf<VideoInfo?>(null) }
+    var menuFrom by remember { mutableStateOf<VideoCardSource?>(null) }
+    // 二次确认弹窗
+    var confirmVisible by remember { mutableStateOf(false) }
+    var confirmTitle by remember { mutableStateOf("") }
+    var confirmMessage by remember { mutableStateOf("") }
+    var confirmAction by remember { mutableStateOf<() -> Unit>({}) }
+
+    // 当前收藏的 key 集合，用于判断「继续观看」卡片是否已收藏
+    val favoriteKeys = remember(favorites) {
+        favorites.map { "${it.source}+${it.id}" }.toSet()
+    }
+
+    // 删除播放记录：乐观移除 + 失败回滚
+    fun deletePlayRecordAction(video: VideoInfo) {
+        val prev = playRecords
+        playRecords = playRecords.filterNot { it.source == video.source && it.id == video.id }
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(video.source, video.id) }
+            } catch (e: Exception) {
+                playRecords = prev
+                android.util.Log.e("HomeTab", "删除播放记录失败: ${e.message}")
+            }
+        }
+    }
+
+    // 添加收藏：乐观插入到收藏列表头部 + 失败回滚
+    fun addFavoriteAction(video: VideoInfo) {
+        val key = "${video.source}+${video.id}"
+        if (favoriteKeys.contains(key)) return
+        val prev = favorites
+        favorites = listOf(video.copy(saveTime = System.currentTimeMillis())) + favorites
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    ApiService.addFavorite(
+                        video.source,
+                        video.id,
+                        mapOf(
+                            "title" to video.title,
+                            "source_name" to video.sourceName,
+                            "year" to video.year,
+                            "cover" to video.cover,
+                            "total_episodes" to video.totalEpisodes,
+                            "save_time" to System.currentTimeMillis(),
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                favorites = prev
+                android.util.Log.e("HomeTab", "添加收藏失败: ${e.message}")
+            }
+        }
+    }
+
+    // 取消收藏：乐观移除 + 失败回滚（favoriteKeys 随之更新，继续观看的收藏态自动同步）
+    fun unfavoriteAction(video: VideoInfo) {
+        val prev = favorites
+        favorites = favorites.filterNot { it.source == video.source && it.id == video.id }
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiService.unfavorite(video.source, video.id) }
+            } catch (e: Exception) {
+                favorites = prev
+                android.util.Log.e("HomeTab", "取消收藏失败: ${e.message}")
+            }
+        }
+    }
+
+    // 弹出二次确认弹窗
+    fun requestConfirm(title: String, message: String, action: () -> Unit) {
+        confirmTitle = title
+        confirmMessage = message
+        confirmAction = action
+        confirmVisible = true
+    }
 
     // 加载播放历史 + 收藏夹（收藏夹依赖播放历史的 index）
     fun loadPlayRecordsAndFavorites() {
@@ -287,7 +372,12 @@ fun HomeTab(
                     isLoading = isLoadingPlayRecords,
                     errorMessage = errorPlayRecords,
                     onRetry = { loadPlayRecordsAndFavorites() },
-                    onVideoClick = onVideoSelected
+                    onVideoClick = onVideoSelected,
+                    onVideoLongClick = { video ->
+                        menuTarget = video
+                        menuFrom = VideoCardSource.PLAYRECORD
+                        menuVisible = true
+                    }
                 )
             }
 
@@ -300,7 +390,12 @@ fun HomeTab(
                     isLoading = isLoadingFavorites,
                     errorMessage = errorFavorites,
                     onRetry = { loadPlayRecordsAndFavorites() },
-                    onVideoClick = onVideoSelected
+                    onVideoClick = onVideoSelected,
+                    onVideoLongClick = { video ->
+                        menuTarget = video
+                        menuFrom = VideoCardSource.FAVORITE
+                        menuVisible = true
+                    }
                 )
             }
 
@@ -344,6 +439,57 @@ fun HomeTab(
                 onVideoClick = onVideoSelected
             )
         }
+
+        // ===== 长按上下文菜单（常驻组合树，由 menuVisible 控制显隐）=====
+        val target = menuTarget
+        val from = menuFrom
+        val menuItems: List<CardMenuItem> = if (target != null && from != null) {
+            val isFav = favoriteKeys.contains("${target.source}+${target.id}")
+            buildList {
+                when (from) {
+                    VideoCardSource.PLAYRECORD -> {
+                        if (isFav) {
+                            add(CardMenuItem("取消收藏", isDestructive = true) {
+                                requestConfirm("取消收藏", "确定取消收藏「${target.title}」吗？") {
+                                    unfavoriteAction(target)
+                                }
+                            })
+                        } else {
+                            add(CardMenuItem("收藏") { addFavoriteAction(target) })
+                        }
+                        add(CardMenuItem("删除记录", isDestructive = true) {
+                            requestConfirm("删除播放记录", "确定从「继续观看」中删除「${target.title}」吗？") {
+                                deletePlayRecordAction(target)
+                            }
+                        })
+                    }
+                    VideoCardSource.FAVORITE -> {
+                        add(CardMenuItem("取消收藏", isDestructive = true) {
+                            requestConfirm("取消收藏", "确定取消收藏「${target.title}」吗？") {
+                                unfavoriteAction(target)
+                            }
+                        })
+                    }
+                    else -> {}
+                }
+            }
+        } else emptyList()
+
+        CardContextMenu(
+            visible = menuVisible,
+            title = target?.title ?: "",
+            items = menuItems,
+            onClose = { menuVisible = false }
+        )
+
+        // ===== 二次确认弹窗 =====
+        ConfirmDialog(
+            visible = confirmVisible,
+            title = confirmTitle,
+            message = confirmMessage,
+            onConfirm = confirmAction,
+            onCancel = { confirmVisible = false }
+        )
     }
 }
 
