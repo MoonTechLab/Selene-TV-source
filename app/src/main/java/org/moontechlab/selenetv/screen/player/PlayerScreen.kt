@@ -116,7 +116,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         // 即将从「播放」切到「暂停」时强制保存一次（spec：暂停为保存时机）
         if (controller.isPlaying) {
             val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, controller.durationMs, force = true) }
+            val pauseDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
+            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, pauseDuration, force = true) }
         }
         controller.togglePlay(); flashTick++; wake()
     }
