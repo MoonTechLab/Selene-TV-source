@@ -62,7 +62,8 @@ import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.service.MediaHttp
 
 private const val LIVE_AUTO_HIDE_MS = 4_000L
-private const val LIVE_STALL_TIMEOUT_MS = 12_000L
+// 实测可用源（如 CCTV-1 慢源）首帧可能要 ~12s，阈值留足余量避免对慢源误报无响应
+private const val LIVE_STALL_TIMEOUT_MS = 18_000L
 
 @Composable
 fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
