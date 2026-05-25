@@ -209,7 +209,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-                src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, controller.durationMs, force = true) }
+                val liveDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
+                src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, liveDuration, force = true) }
                 controller.exo.playWhenReady = false
             }
         }
