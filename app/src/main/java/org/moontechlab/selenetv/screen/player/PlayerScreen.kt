@@ -38,7 +38,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -185,6 +188,35 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
     }
 
+    // 播放自然结束 → 自动下一集（最后一集则停止）
+    DisposableEffect(currentEpisode, currentSourceKey, hasNext) {
+        controller.onEnded = { if (hasNext) goNext() }
+        onDispose { controller.onEnded = {} }
+    }
+
+    // 播放出错：唤出换源面板让用户改选其他源
+    LaunchedEffect(controller.error) {
+        if (controller.error != null) {
+            controlsVisible = true
+            panelTab = PanelTab.Sources
+            panelOpen = true
+        }
+    }
+
+    // App 退到后台：强制保存 + 暂停播放
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+                src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, controller.durationMs, force = true) }
+                controller.exo.playWhenReady = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // 退出 / 离开时释放播放器
     DisposableEffect(Unit) {
         onDispose { controller.release() }
@@ -242,6 +274,24 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         if (dim > 0f) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
 
         PlayPauseFlash(visible = flashVisible, isPlaying = isPlaying)
+
+        if (controller.isBuffering) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+            }
+        }
+        if (controller.error != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xCC000000))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                Text(text = "此源播放失败，请尝试换源", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.W600)
+            }
+        }
 
         // ── 底部：控制条 + 上拉面板。面板出现时整列变高、底部对齐 → 把控制条上顶。 ──
         val ctrlAlpha by animateFloatAsState(
