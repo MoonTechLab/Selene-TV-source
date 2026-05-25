@@ -78,7 +78,7 @@ private const val AUTO_HIDE_MS = 4_000L
  * 选集 / 换源 / 详情统一收进「进度条按下键唤出」的上拉标签面板（默认详情，详情含「下一集」快捷入口）。
  * 面板上滑时把进度条整体上顶；焦点向上回到进度条时面板自动收起。
  *
- * 舞台为占位实现，进度为模拟推进；接入 Media3 时只替换舞台与 position/duration 来源即可，
+ * 舞台为 Media3 ExoPlayer（PlayerView），position/duration/播放态由 [PlayerController] 驱动；
  * 控制层 / 面板 / 焦点模型保持不变。
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
@@ -161,7 +161,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         while (true) {
             kotlinx.coroutines.delay(10_000)
             val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-            src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = false) }
+            val liveDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
+            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, liveDuration, force = false) }
         }
     }
 
@@ -343,12 +344,6 @@ private fun StagePlaceholder(poster: String?) {
             )
         }
         Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
-        Text(
-            text = "示意画面 · 接入 Media3 后替换为实际视频",
-            color = Color.White.copy(alpha = 0.16f),
-            fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.Center),
-        )
     }
 }
 
