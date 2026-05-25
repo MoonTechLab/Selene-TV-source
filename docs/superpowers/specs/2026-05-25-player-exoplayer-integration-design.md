@@ -93,7 +93,7 @@
 
 - **定时**：播放中每 10s 保存。
 - **强制保存**：暂停、切集、切源、`STATE_ENDED`/自动下一集、退出播放页（`DisposableEffect` 清理）、App 退到后台（`Lifecycle.Event.ON_PAUSE` 观察者）。
-- **切源记录清洁**：切源后用新源 key 保存；旧记录保留不删（详情页「继续观看」按最近 `saveTime` 取，旧记录自然排后，比 mobile 的删除更简单且无害）。
+- **切源记录清洁**：与 mobile 一致，切源时删除旧源记录（`ApiService.deletePlayRecord(oldSource, oldId)`），进度带到新源继续，新源进度随后由定时/退出保存写入。避免同一内容在「继续观看」残留多条。
 
 ## 错误处理
 

@@ -400,7 +400,16 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     onPickSource = { key ->
                         if (key != currentSourceKey) {
                             val oldSrc = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-                            oldSrc?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, durationMs, force = true) }
+                            // 与 mobile 一致：切源删除旧源记录，避免同一内容残留多条续看（进度带到新源继续）
+                            oldSrc?.let { old ->
+                                scope.launch {
+                                    try {
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            org.moontechlab.selenetv.service.ApiService.deletePlayRecord(old.source, old.id)
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                            }
                             reporter.resetThrottle()
                             val carriedMs = controller.positionMs
                             val newSrc = launch.sources.firstOrNull { sourceKey(it) == key }
