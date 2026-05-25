@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -946,6 +947,69 @@ private fun RemoteControlQrCode(
                 text = "若 IP 非本机 IP，可在右侧选项调整",
                 fontSize = 13.sp,
                 color = TextGray.copy(alpha = 0.7f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        VersionColophon()
+    }
+}
+
+/**
+ * 版本落款
+ * 安静的品牌落款：细分隔线 + 绿色品牌点 + 字距拉开的字标 + 绿色版本号。
+ * 不可聚焦、不参与 D-pad，仅作品牌与版本展示。版本号取自 PackageManager（不依赖 BuildConfig）。
+ */
+@Composable
+private fun VersionColophon(
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val versionName = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
+    if (versionName.isEmpty()) return
+
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 细分隔线（与玻璃拟态层同一 0.08 透明度白）
+        Box(
+            modifier = Modifier
+                .width(40.dp)
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.08f))
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // 绿色品牌点（唯一点缀色）
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF4CAF50))
+            )
+            Text(
+                text = "SELENE TV",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 2.sp,
+                color = TextGray
+            )
+            Text(
+                text = "v$versionName",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF4CAF50).copy(alpha = 0.9f)
             )
         }
     }
