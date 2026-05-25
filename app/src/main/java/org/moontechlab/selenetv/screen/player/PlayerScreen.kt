@@ -276,7 +276,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
         PlayPauseFlash(visible = flashVisible, isPlaying = isPlaying)
 
-        if (controller.isBuffering) {
+        // 仅「载入新内容」（首播/切集/切源，hasStarted=false）时盖全屏月牙；
+        // 拖进度/同片重缓冲（hasStarted=true）不遮挡画面，让用户看着原画面 seek。
+        if (controller.isBuffering && !controller.hasStarted) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
