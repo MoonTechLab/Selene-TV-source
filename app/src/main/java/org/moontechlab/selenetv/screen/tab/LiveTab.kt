@@ -50,6 +50,7 @@ import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.model.LiveChannelGroup
 import org.moontechlab.selenetv.model.LiveSource
+import org.moontechlab.selenetv.screen.player.LiveLaunch
 import org.moontechlab.selenetv.service.LiveService
 import org.moontechlab.selenetv.ui.FilterOption
 import org.moontechlab.selenetv.ui.FilterSelector
@@ -72,7 +73,7 @@ private const val HORIZONTAL_PADDING = 58 // 固定左右边距 58dp
 fun LiveTab(
     focusRequester: FocusRequester = remember { FocusRequester() },
     scrollState: ScrollState = rememberScrollState(),
-    onChannelClick: (LiveChannel) -> Unit = {}
+    onChannelClick: (LiveLaunch) -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -314,7 +315,11 @@ fun LiveTab(
                     totalRows = rows.size,
                     onVerticalNavigate = ::handleVerticalScroll,
                     onCardFocus = ::onCardFocus,
-                    onChannelClick = onChannelClick,
+                    onChannelClick = { channel ->
+                        currentSource?.let { source ->
+                            onChannelClick(LiveLaunch(channel, source, channelGroups))
+                        }
+                    },
                     focusRequester = contentFocusRequester,
                     onNavigateUp = {
                         if (channelGroups.isNotEmpty()) {

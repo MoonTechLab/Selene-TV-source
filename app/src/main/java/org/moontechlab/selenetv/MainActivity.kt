@@ -1,5 +1,6 @@
 package org.moontechlab.selenetv
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val activityScope = CoroutineScope(Dispatchers.Main)
 
+    @SuppressLint("GestureBackNavigation", "RestrictedApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         // 在 super.onCreate 之前调整 density
         adjustDensity()

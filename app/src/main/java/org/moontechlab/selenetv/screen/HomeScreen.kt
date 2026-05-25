@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.moontechlab.selenetv.model.AggregatedSearchResult
 import org.moontechlab.selenetv.model.VideoInfo
+import org.moontechlab.selenetv.screen.player.LivePlayerScreen
 import org.moontechlab.selenetv.screen.tab.*
 import org.moontechlab.selenetv.ui.AnimatedTabContent
 import org.moontechlab.selenetv.ui.TabSwitcher
@@ -44,6 +45,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
 
     // 详情页作为覆盖层渲染（而非导航目的地），首页组合保持存活 → 数据与焦点不丢失。
     var detailEntry by remember { mutableStateOf<DetailEntry?>(null) }
+
+    var liveLaunch by remember { mutableStateOf<org.moontechlab.selenetv.screen.player.LiveLaunch?>(null) }
 
     // 详情关闭后把焦点确定性还原到来源卡片
     val detailReturn = remember { DetailReturnFocusState() }
@@ -101,7 +104,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     
     // 当焦点不在 TabSwitcher 时，拦截返回键，滚动到顶部并聚焦 TabSwitcher
     // （详情覆盖层打开时由 DetailScreen 自己的 BackHandler 处理，这里禁用）
-    BackHandler(enabled = detailEntry == null && !isTabSwitcherFocused) {
+    BackHandler(enabled = detailEntry == null && liveLaunch == null && !isTabSwitcherFocused) {
         coroutineScope.launch {
             scrollState.animateScrollTo(0)
         }
@@ -109,7 +112,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     }
 
     // 当焦点在 TabSwitcher 且不在首页时，拦截返回键，切换到首页
-    BackHandler(enabled = detailEntry == null && isTabSwitcherFocused && selectedTabId != "home") {
+    BackHandler(enabled = detailEntry == null && liveLaunch == null && isTabSwitcherFocused && selectedTabId != "home") {
         selectedTabId = "home"
     }
     
@@ -139,6 +142,7 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
     // 覆盖层关闭后（仅在曾打开过详情时），待滑出动画推进再恢复首页焦点。
     // 避免在 App 启动时（detailRoute 初始即为 null）抢走 TabSwitcher 的初始焦点。
     var hadDetailOpen by remember { mutableStateOf(false) }
+    var hadLiveOpen by remember { mutableStateOf(false) }
 
     // 详情页「去搜索」：关闭详情覆盖层、切到搜索 Tab，并把片名作为初始查询交给 SearchTab。
     var pendingSearchQuery by remember { mutableStateOf<String?>(null) }
@@ -160,6 +164,16 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             restoreActiveTabFocus()
             delay(250)
             detailReturn.restoreInProgress = false
+        }
+    }
+
+    LaunchedEffect(liveLaunch) {
+        if (liveLaunch != null) {
+            hadLiveOpen = true
+        } else if (hadLiveOpen) {
+            hadLiveOpen = false
+            delay(300)
+            try { liveFocusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -246,7 +260,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
                 )
                 "live" -> LiveTab(
                     focusRequester = liveFocusRequester,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    onChannelClick = { liveLaunch = it },
                 )
                 "settings" -> key(homeRefreshKey) {
                     SettingsTab(
@@ -281,6 +296,24 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         ) {
             retainedDetailEntry.value?.let { entry ->
                 DetailScreen(entry = entry, onBack = closeDetail, onGoToSearch = goToSearch)
+            }
+        }
+
+        val retainedLiveLaunch = remember { mutableStateOf<org.moontechlab.selenetv.screen.player.LiveLaunch?>(null) }
+        liveLaunch?.let { retainedLiveLaunch.value = it }
+        AnimatedVisibility(
+            visible = liveLaunch != null,
+            enter = slideInHorizontally(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                initialOffsetX = { fullWidth -> fullWidth },
+            ),
+            exit = slideOutHorizontally(
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                targetOffsetX = { fullWidth -> fullWidth },
+            ),
+        ) {
+            retainedLiveLaunch.value?.let { launch ->
+                LivePlayerScreen(launch = launch, onExit = { liveLaunch = null })
             }
         }
     }

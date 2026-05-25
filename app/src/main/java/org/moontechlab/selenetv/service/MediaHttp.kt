@@ -16,12 +16,22 @@ import javax.net.ssl.X509TrustManager
  */
 object MediaHttp {
 
+    private const val DEFAULT_LIVE_UA = "AptvPlayer/1.4.10"
+
     private val client: OkHttpClient by lazy { createUnsafeOkHttpClient() }
 
     /** ExoPlayer DefaultMediaSourceFactory 使用的 DataSource 工厂。 */
     val dataSourceFactory: DataSource.Factory by lazy {
         OkHttpDataSource.Factory(client)
     }
+
+    /** 直播 UA 回退：源未配置 UA 时用 AptvPlayer 默认（与 LiveService 一致）。 */
+    fun resolveLiveUa(userAgent: String): String = userAgent.ifBlank { DEFAULT_LIVE_UA }
+
+    /** 带指定 UA 的 DataSource 工厂（直播源常需 UA，如 AptvPlayer）。 */
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun dataSourceFactory(userAgent: String): DataSource.Factory =
+        OkHttpDataSource.Factory(client).setUserAgent(resolveLiveUa(userAgent))
 
     private fun createUnsafeOkHttpClient(): OkHttpClient {
         return try {
