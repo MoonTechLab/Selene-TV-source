@@ -62,6 +62,7 @@ import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.service.MediaHttp
 
 private const val LIVE_AUTO_HIDE_MS = 4_000L
+private const val LIVE_STALL_TIMEOUT_MS = 12_000L
 
 @Composable
 fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
@@ -71,6 +72,7 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
     var currentChannel by remember { mutableStateOf(launch.channel) }
     var controlsVisible by remember { mutableStateOf(true) }
     var panelOpen by remember { mutableStateOf(false) }
+    var stalled by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
 
     val osdFocus = remember { FocusRequester() }
@@ -97,6 +99,7 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
 
     fun pickChannel(channel: LiveChannel) {
         currentChannel = channel
+        stalled = false
         controller.load(channel.url, 0)
         panelOpen = false
         wake()
@@ -117,6 +120,18 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
         if (controller.error != null) {
             controlsVisible = true
             panelOpen = true
+        }
+    }
+
+    LaunchedEffect(controller.isBuffering, controller.isPlaying, currentChannel) {
+        stalled = false
+        if (controller.isBuffering && !controller.isPlaying) {
+            delay(LIVE_STALL_TIMEOUT_MS)
+            if (controller.isBuffering && !controller.isPlaying && controller.error == null) {
+                stalled = true
+                controlsVisible = true
+                panelOpen = true
+            }
         }
     }
 
@@ -175,6 +190,24 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
             ) {
                 Text(
                     text = "频道播放失败，请选择其他频道",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.W600,
+                )
+            }
+        }
+
+        if (stalled && controller.error == null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xCC000000))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = "频道无响应，请尝试其他频道",
                     color = Color.White,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.W600,
