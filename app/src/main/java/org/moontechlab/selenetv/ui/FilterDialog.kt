@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -336,8 +335,7 @@ private fun FilterDialogOptionItem(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .focusable(),
+            },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f), // 禁用默认缩放
         shape = ClickableSurfaceDefaults.shape(
             shape = RoundedCornerShape(8.dp)

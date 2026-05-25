@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -170,8 +169,7 @@ private fun MenuRow(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .focusable(),
+            },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -340,8 +338,7 @@ private fun ConfirmButton(
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            }
-            .focusable(),
+            },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(
@@ -379,6 +376,14 @@ private fun OverlayScaffold(
 ) {
     BackHandler(enabled = true) { onClose() }
 
+    // 长按卡片（OK 键 repeatCount==1）触发 onLongClick 打开本弹窗时，OK 键往往仍按住；
+    // 待手指松开时那次 ACTION_UP 会落到弹窗内刚获得焦点的菜单项/按钮上。tv Surface 的
+    // tvClickable 在 ACTION_UP 且自身 isLongClick==false 时即判定为点击，且不校验是否收到过
+    // 对应的 ACTION_DOWN，于是这次「孤儿 key-up」被当成点击，导致一次长按连锁触发下一级弹窗/确定。
+    // 这里在弹窗根部用 preview 阶段拦截：只有在弹窗内见过一次全新按下（repeatCount==0）后，
+    // 才放行随后的 ACTION_UP；否则吞掉孤儿 up。
+    val okKeyGate = remember { OkKeyClickGate() }
+
     val showSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
     val hideSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 500f)
 
@@ -403,6 +408,10 @@ private fun OverlayScaffold(
             .fillMaxSize()
             .graphicsLayer { alpha = overlayOpacity }
             .background(Color.Black.copy(alpha = 0.7f))
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                okKeyGate.shouldConsume(native.action, native.keyCode, native.repeatCount)
+            }
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.Back) {
                     onClose()
