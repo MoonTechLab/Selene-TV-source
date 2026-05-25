@@ -18,11 +18,14 @@ import org.moontechlab.selenetv.service.MediaHttp
  * 位置/时长用毫秒，与外壳进度条约定一致。位置由调用方周期 [syncProgress] 拉取。
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class PlayerController(context: Context) {
+class PlayerController(
+    context: Context,
+    dataSourceFactory: androidx.media3.datasource.DataSource.Factory = MediaHttp.dataSourceFactory,
+) {
 
     /** 仅用于绑定 PlayerView（playerView.player = exo）；其余操作请走本类方法。 */
     val exo: ExoPlayer = ExoPlayer.Builder(context)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(MediaHttp.dataSourceFactory))
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
         .build()
 
     var positionMs by mutableLongStateOf(0L); private set
