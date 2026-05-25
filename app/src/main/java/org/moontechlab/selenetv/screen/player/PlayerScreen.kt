@@ -276,9 +276,41 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
         PlayPauseFlash(visible = flashVisible, isPlaying = isPlaying)
 
-        if (controller.isBuffering) {
+        // 仅「载入新内容」（首播/切集/切源，hasStarted=false）时盖全屏月牙；
+        // 拖进度/同片重缓冲（hasStarted=true）不遮挡画面，让用户看着原画面 seek。
+        if (controller.isBuffering && !controller.hasStarted) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 比详情页全屏加载更轻的径向压暗：播放画面在后，短暂缓冲不喧宾夺主
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.50f),
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    org.moontechlab.selenetv.ui.MoonSpinner(size = 104.dp)
+                    Text(
+                        text = "正在缓冲",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 12.sp,
+                        letterSpacing = 6.sp,
+                    )
+                }
+            }
+        } else if (controller.isBuffering) {
+            // 拖进度 / 同片重缓冲（已起播）：仅居中一个轻量小月牙，不压暗、不遮挡画面，
+            // 让用户看着原画面 seek，同时有「正在加载」的明确反馈。
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+                org.moontechlab.selenetv.ui.MoonSpinner(size = 52.dp)
             }
         }
         if (controller.error != null) {
