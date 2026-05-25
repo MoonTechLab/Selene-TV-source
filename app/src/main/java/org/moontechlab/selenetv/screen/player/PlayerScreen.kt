@@ -306,6 +306,12 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     )
                 }
             }
+        } else if (controller.isBuffering) {
+            // 拖进度 / 同片重缓冲（已起播）：仅居中一个轻量小月牙，不压暗、不遮挡画面，
+            // 让用户看着原画面 seek，同时有「正在加载」的明确反馈。
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                org.moontechlab.selenetv.ui.MoonSpinner(size = 52.dp)
+            }
         }
         if (controller.error != null) {
             Box(
