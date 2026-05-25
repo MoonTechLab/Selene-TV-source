@@ -112,13 +112,18 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val hasNext = currentEpisode < epCount - 1
 
     fun wake() { controlsVisible = true; interactionTick++ }
+
+    // 统一保存入口：仅在本源成功起播过（hasStarted）时才落记录——死链/未起播不存。
+    fun saveProgress(force: Boolean) {
+        if (!controller.hasStarted) return
+        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+        val dur = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
+        src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, dur, force = force) }
+    }
+
     fun togglePlay() {
         // 即将从「播放」切到「暂停」时强制保存一次（spec：暂停为保存时机）
-        if (controller.isPlaying) {
-            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-            val pauseDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
-            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, pauseDuration, force = true) }
-        }
+        if (controller.isPlaying) saveProgress(force = true)
         controller.togglePlay(); flashTick++; wake()
     }
     fun openPanel() { controlsVisible = true; panelTab = PanelTab.Detail; panelOpen = true }
@@ -154,8 +159,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     fun goNext() {
         if (hasNext) {
-            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-            src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = true) }
+            saveProgress(force = true)
             reporter.resetThrottle()
             currentEpisode++
             panelOpen = false
@@ -183,9 +187,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     LaunchedEffect(currentEpisode, currentSourceKey) {
         while (true) {
             kotlinx.coroutines.delay(10_000)
-            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-            val liveDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
-            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, liveDuration, force = false) }
+            saveProgress(force = false)
         }
     }
 
@@ -209,9 +211,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-                val liveDuration = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
-                src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, liveDuration, force = true) }
+                saveProgress(force = true)
                 controller.exo.playWhenReady = false
             }
         }
@@ -251,8 +251,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     // BACK：先关面板，再退出播放页
     BackHandler(enabled = panelOpen) { panelOpen = false }
     BackHandler(enabled = !panelOpen) {
-        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-        src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = true) }
+        saveProgress(force = true)
         onExit()
     }
 
@@ -389,8 +388,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     onTabChange = { panelTab = it },
                     onNextEpisode = { goNext() },
                     onPickEpisode = { idx ->
-                        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
-                        src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, durationMs, force = true) }
+                        saveProgress(force = true)
                         reporter.resetThrottle()
                         currentEpisode = idx
                         panelOpen = false

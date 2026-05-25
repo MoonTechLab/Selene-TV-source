@@ -32,6 +32,12 @@ class PlayerController(context: Context) {
     var isBuffering by mutableStateOf(false); private set
     var error by mutableStateOf<PlaybackException?>(null); private set
 
+    /**
+     * 本次媒体是否成功起播过（到达过 STATE_READY）。每次 [load] 重置为 false。
+     * 死链只会 BUFFERING→error、从不 READY，故据此判定是否落播放记录：未成功起播不存。
+     */
+    var hasStarted by mutableStateOf(false); private set
+
     /** 播放自然结束（STATE_ENDED）回调，宿主用于自动下一集。 */
     var onEnded: () -> Unit = {}
 
@@ -40,7 +46,7 @@ class PlayerController(context: Context) {
 
         override fun onPlaybackStateChanged(state: Int) {
             isBuffering = state == Player.STATE_BUFFERING
-            if (state == Player.STATE_READY) { val d = exo.duration; if (d > 0) durationMs = d }
+            if (state == Player.STATE_READY) { hasStarted = true; val d = exo.duration; if (d > 0) durationMs = d }
             if (state == Player.STATE_ENDED) onEnded()
         }
 
@@ -57,6 +63,7 @@ class PlayerController(context: Context) {
     @MainThread
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true) {
         error = null
+        hasStarted = false
         exo.setMediaItem(MediaItem.fromUri(url))
         exo.prepare()
         if (startMs > 0) exo.seekTo(startMs)
