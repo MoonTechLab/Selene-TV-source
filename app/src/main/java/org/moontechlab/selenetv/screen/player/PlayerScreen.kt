@@ -29,13 +29,18 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -79,9 +84,12 @@ private const val AUTO_HIDE_MS = 4_000L
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val controller = remember { PlayerController(context) }
+    val reporter = remember { PlayProgressReporter() }
+
     var controlsVisible by remember { mutableStateOf(true) }
-    var isPlaying by remember { mutableStateOf(true) }
-    var positionMs by remember { mutableLongStateOf(launch.startPositionMs.coerceIn(0, launch.durationMs)) }
     var currentEpisode by remember { mutableIntStateOf(launch.episodeIndex) }
     var currentSourceKey by remember { mutableStateOf(launch.selectedSourceKey) }
     var panelOpen by remember { mutableStateOf(false) }
@@ -90,7 +98,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var flashTick by remember { mutableIntStateOf(0) }
     var flashVisible by remember { mutableStateOf(false) }
 
-    val durationMs = launch.durationMs
+    // 播放状态全部来自 ExoPlayer
+    val isPlaying = controller.isPlaying
+    val positionMs = controller.positionMs
+    val durationMs = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
     val currentSource = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
     val episodes = currentSource?.episodes ?: emptyList()
     val episodesTitles = currentSource?.episodesTitles
@@ -98,19 +109,65 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val hasNext = currentEpisode < epCount - 1
 
     fun wake() { controlsVisible = true; interactionTick++ }
-    fun togglePlay() { isPlaying = !isPlaying; flashTick++; wake() }
+    fun togglePlay() {
+        // 即将从「播放」切到「暂停」时强制保存一次（spec：暂停为保存时机）
+        if (controller.isPlaying) {
+            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+            src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, controller.durationMs, force = true) }
+        }
+        controller.togglePlay(); flashTick++; wake()
+    }
     fun openPanel() { controlsVisible = true; panelTab = PanelTab.Detail; panelOpen = true }
-    fun goNext() { if (hasNext) { currentEpisode++; positionMs = 0; isPlaying = true; panelOpen = false; wake() } }
+
+    // 载入指定集；startMs 为续播位置（切集默认 0，进入时用 launch.startPositionMs）
+    fun playEpisode(index: Int, startMs: Long) {
+        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+        val raw = src?.episodes?.getOrNull(index) ?: return
+        scope.launch {
+            val proxy = org.moontechlab.selenetv.service.AppDataService.getM3u8ProxyUrl()
+            controller.load(PlayProgress.buildPlayUrl(raw, proxy), startMs)
+        }
+    }
+
+    fun goNext() {
+        if (hasNext) {
+            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+            src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = true) }
+            reporter.resetThrottle()
+            currentEpisode++
+            panelOpen = false
+            playEpisode(currentEpisode, 0)
+            wake()
+        }
+    }
 
     val scrubberFocus = remember { FocusRequester() }
     val panelTabFocus = remember { FocusRequester() }
 
-    // 模拟播放推进
-    LaunchedEffect(isPlaying, currentEpisode, currentSourceKey) {
-        while (isPlaying && positionMs < durationMs) {
-            kotlinx.coroutines.delay(1000)
-            positionMs = (positionMs + 1000).coerceAtMost(durationMs)
+    // 首帧载入起播集（带进入时的续看位置）
+    LaunchedEffect(Unit) {
+        playEpisode(currentEpisode, launch.startPositionMs.coerceAtLeast(0))
+    }
+
+    // 周期把 ExoPlayer 位置同步到 State
+    LaunchedEffect(Unit) {
+        while (true) {
+            controller.syncProgress()
+            kotlinx.coroutines.delay(500)
         }
+    }
+    // 10s 定时保存
+    LaunchedEffect(currentEpisode, currentSourceKey) {
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+            src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = false) }
+        }
+    }
+
+    // 退出 / 离开时释放播放器
+    DisposableEffect(Unit) {
+        onDispose { controller.release() }
     }
 
     // OSD 自动隐藏：播放中、面板未开、静止满 4s 即隐去
@@ -139,11 +196,26 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     // BACK：先关面板，再退出播放页
     BackHandler(enabled = panelOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen) { onExit() }
+    BackHandler(enabled = !panelOpen) {
+        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+        src?.let { reporter.save(it, launch.title, currentEpisode, positionMs, durationMs, force = true) }
+        onExit()
+    }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black).focusGroup()) {
 
+        // 真实视频画面：海报背景垫底，PlayerView 叠在上层
         StagePlaceholder(poster = launch.heroInfo?.poster?.takeIf { it.isNotEmpty() } ?: launch.sources.firstOrNull()?.poster)
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    useController = false
+                    player = controller.exo
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
 
         // 面板打开时压暗画面
         val dim by animateFloatAsState(if (panelOpen) 0.5f else 0f, tween(280), label = "dim")
@@ -192,7 +264,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         positionMs = positionMs,
                         durationMs = durationMs,
                         controlsVisible = controlsVisible,
-                        onSeek = { positionMs = it; wake() },
+                        onSeek = { controller.seekTo(it); wake() },
                         onToggle = { togglePlay() },
                         onWake = { wake() },
                         onOpenPanel = { openPanel() },
@@ -244,9 +316,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     tab = panelTab,
                     onTabChange = { panelTab = it },
                     onNextEpisode = { goNext() },
-                    onPickEpisode = { idx -> currentEpisode = idx; positionMs = 0; isPlaying = true; panelOpen = false; wake() },
+                    onPickEpisode = { idx -> currentEpisode = idx; panelOpen = false; wake() },
                     onPickSource = { key ->
-                        if (key != currentSourceKey) { currentSourceKey = key; currentEpisode = 0; positionMs = 0; isPlaying = true }
+                        if (key != currentSourceKey) { currentSourceKey = key; currentEpisode = 0 }
                         panelOpen = false; wake()
                     },
                     scrubberFocus = scrubberFocus,
