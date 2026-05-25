@@ -1,6 +1,7 @@
 package org.moontechlab.selenetv.screen.player
 
 import android.content.Context
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import org.moontechlab.selenetv.service.MediaHttp
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerController(context: Context) {
 
+    /** 仅用于绑定 PlayerView（playerView.player = exo）；其余操作请走本类方法。 */
     val exo: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(MediaHttp.dataSourceFactory))
         .build()
@@ -38,7 +40,7 @@ class PlayerController(context: Context) {
 
         override fun onPlaybackStateChanged(state: Int) {
             isBuffering = state == Player.STATE_BUFFERING
-            if (state == Player.STATE_READY) durationMs = exo.duration.coerceAtLeast(0)
+            if (state == Player.STATE_READY) { val d = exo.duration; if (d > 0) durationMs = d }
             if (state == Player.STATE_ENDED) onEnded()
         }
 
@@ -52,6 +54,7 @@ class PlayerController(context: Context) {
     }
 
     /** 载入并播放一个 URL；startMs>0 时从该处续播。error 清零。 */
+    @MainThread
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true) {
         error = null
         exo.setMediaItem(MediaItem.fromUri(url))
@@ -61,16 +64,19 @@ class PlayerController(context: Context) {
         syncProgress()
     }
 
+    @MainThread
     fun seekTo(ms: Long) {
         exo.seekTo(ms.coerceAtLeast(0))
         syncProgress()
     }
 
+    @MainThread
     fun togglePlay() {
         exo.playWhenReady = !exo.playWhenReady
     }
 
     /** 把 ExoPlayer 的当前位置/缓冲/时长同步到 State；由宿主轮询调用。 */
+    @MainThread
     fun syncProgress() {
         positionMs = exo.currentPosition.coerceAtLeast(0)
         bufferedMs = exo.bufferedPosition.coerceAtLeast(0)
@@ -78,6 +84,7 @@ class PlayerController(context: Context) {
         if (d > 0) durationMs = d
     }
 
+    @MainThread
     fun release() {
         exo.removeListener(listener)
         exo.release()
