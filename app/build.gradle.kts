@@ -84,6 +84,10 @@ dependencies {
     implementation(libs.androidx.compose.animation.core)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.datasource.okhttp)
 
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")
