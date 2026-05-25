@@ -58,11 +58,14 @@ import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.service.MediaHttp
 
-private const val LIVE_AUTO_HIDE_MS = 4_000L
+private const val LIVE_AUTO_HIDE_MS = 5_000L
+// 二次返回退出的确认窗口：首按弹 toast，窗口内再按才退出
+private const val LIVE_BACK_EXIT_WINDOW_MS = 2_000L
 // 实测可用源（如 CCTV-1 慢源）首帧可能要 ~12s，阈值留足余量避免对慢源误报无响应
 private const val LIVE_STALL_TIMEOUT_MS = 18_000L
 private val LiveGreen = Color(0xFF4CAF50)
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -152,10 +155,40 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
         }
     }
 
-    BackHandler(enabled = panelOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen) { onExit() }
+    // 面板每次收起（BACK / 选台 / 上滑等任意路径）后，确定性把焦点交回 OSD。
+    // 单次同步 requestFocus 会被「面板焦点项被移除→焦点孤立→下层 LiveTab 的 focusRestorer 抢焦」
+    // 盖过，故连续重试数帧，确保焦点留在覆盖层而非穿透到下层直播 Tab。
+    LaunchedEffect(panelOpen) {
+        if (panelOpen) return@LaunchedEffect
+        repeat(6) {
+            try { osdFocus.requestFocus() } catch (_: Exception) {}
+            delay(40)
+        }
+    }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black).focusGroup()) {
+    // BACK 优先级（互斥）：① 面板开 → 收面板；② 控制条可见 → 仅隐藏控制条；
+    // ③ 控制条已隐藏 → 二次确认退出（首按弹 toast，窗口内再按才退出）。
+    var backExitArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(backExitArmed) {
+        if (backExitArmed) {
+            delay(LIVE_BACK_EXIT_WINDOW_MS)
+            backExitArmed = false
+        }
+    }
+    BackHandler(enabled = panelOpen) { panelOpen = false }
+    BackHandler(enabled = !panelOpen && controlsVisible) { controlsVisible = false }
+    BackHandler(enabled = !panelOpen && !controlsVisible) {
+        if (backExitArmed) onExit() else backExitArmed = true
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusGroup()
+            // 焦点陷阱：禁止任何方向把焦点带出播放页覆盖层、穿透到下层直播 Tab
+            .focusProperties { exit = { FocusRequester.Cancel } },
+    ) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -303,6 +336,12 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
                 )
             }
         }
+
+        // 二次返回退出提示（自绘，不用系统 Toast）
+        BackExitHint(
+            visible = backExitArmed,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 130.dp),
+        )
     }
 }
 
@@ -325,6 +364,8 @@ private fun LiveOsd(
             .focusProperties { up = FocusRequester.Cancel }
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // 返回键一律交给 BackHandler 处理：不在此唤醒控制条，否则会与「隐藏/退出」逻辑打架
+                if (e.key == Key.Back) return@onKeyEvent false
                 if (!controlsVisible) {
                     if (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) {
                         onToggle()

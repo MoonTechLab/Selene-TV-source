@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.screen.AppNavHost
@@ -68,7 +69,18 @@ class MainActivity : ComponentActivity() {
             AppNavHost()
         }
     }
-    
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 解除单例 RemoteControlServer 对本 Activity 的持有（回调 lambda 捕获了 this），避免泄漏。
+        // 配置变更重建时不清：新实例的 onCreate 会重新注册，避免清掉新回调。
+        if (!isChangingConfigurations) {
+            RemoteControlServer.clearCallbacks()
+        }
+        // 取消未随生命周期取消的协程作用域（在飞的登录刷新会持有 Activity 直到完成）
+        activityScope.cancel()
+    }
+
     /**
      * 如果已登录，自动刷新 cookie
      */

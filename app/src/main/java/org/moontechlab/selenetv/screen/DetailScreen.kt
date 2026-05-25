@@ -53,8 +53,16 @@ import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchService
 import org.moontechlab.selenetv.service.TmdbService
 
-/** TMDB 剧照解析的触发参数：仅用 original_title（不回退中文标题）+ 年份消歧。 */
+/** TMDB 剧照解析的触发参数：标题（原名或中文回退）+ 年份消歧。 */
 private data class TmdbArtQuery(val originalTitle: String, val year: String)
+
+/**
+ * TMDB 查询用标题：优先 original_title；为空时回退中文标题。
+ * 国产内容豆瓣不返回 original_title，但 TMDB 以中文 original_name 收录，回退中文名可命中
+ * （如「凡人修仙传」→ tv 106449）；外语片有 original_title 时仍优先原名，不受影响。两者皆空返回 null。
+ */
+private fun tmdbQueryTitle(originalTitle: String?, title: String?): String? =
+    originalTitle?.takeIf { it.isNotBlank() } ?: title?.takeIf { it.isNotBlank() }
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -155,11 +163,11 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             state = state.copy(detailsLoading = true, detailsError = null)
             when (val resp = doubanService.getDoubanDetails(entry.doubanId)) {
                 is ApiResponse.Success -> {
-                    val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
-                    if (ot != null) {
-                        // 有原名 → 保持加载页，交由 TMDB effect 结算 detailsLoading
+                    val q = tmdbQueryTitle(resp.data.originalTitle, resp.data.title)
+                    if (q != null) {
+                        // 有可用标题 → 保持加载页，交由 TMDB effect 结算 detailsLoading
                         state = state.copy(details = resp.data)
-                        tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                        tmdbTrigger = TmdbArtQuery(q, resp.data.year)
                     } else {
                         state = state.copy(details = resp.data, detailsLoading = false)
                     }
@@ -204,10 +212,10 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         val id = tier2Target ?: return@LaunchedEffect
         when (val resp = doubanService.getDoubanDetails(id)) {
             is ApiResponse.Success -> {
-                val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
-                if (ot != null) {
+                val q = tmdbQueryTitle(resp.data.originalTitle, resp.data.title)
+                if (q != null) {
                     state = state.copy(details = resp.data) // 保持加载页，等 TMDB 结算
-                    tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                    tmdbTrigger = TmdbArtQuery(q, resp.data.year)
                 } else {
                     state = state.copy(details = resp.data, detailsLoading = false)
                 }
@@ -444,10 +452,10 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             when (val e = state.entry) {
                                 is DetailEntry.Douban -> when (val resp = doubanService.getDoubanDetails(e.doubanId)) {
                                     is ApiResponse.Success -> {
-                                        val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
-                                        if (ot != null) {
+                                        val q = tmdbQueryTitle(resp.data.originalTitle, resp.data.title)
+                                        if (q != null) {
                                             state = state.copy(details = resp.data)
-                                            tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                                            tmdbTrigger = TmdbArtQuery(q, resp.data.year)
                                         } else {
                                             state = state.copy(details = resp.data, detailsLoading = false)
                                         }

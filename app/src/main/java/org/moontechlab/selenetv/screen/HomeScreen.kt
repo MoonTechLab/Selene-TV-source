@@ -173,7 +173,13 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         } else if (hadLiveOpen) {
             hadLiveOpen = false
             delay(300)
-            try { liveFocusRequester.requestFocus() } catch (_: Exception) {}
+            // 还原到进入直播播放页的那张频道卡片（卡片已挂 detailReturn.requester）；
+            // 卡片不在组合中时回退到内容包裹层 focusRestorer，再退到筛选行。
+            try {
+                restoreActiveTabFocus()
+            } catch (_: Exception) {
+                try { liveFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
         }
     }
 

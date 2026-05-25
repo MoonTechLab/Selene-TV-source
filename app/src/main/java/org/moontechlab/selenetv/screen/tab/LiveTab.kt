@@ -274,6 +274,8 @@ fun LiveTab(
                             selectedGroup = selectedGroup,
                             showSourceFilter = liveSources.size > 1,
                             showGroupFilter = channelGroups.isNotEmpty() && !isLoading,
+                            // 加载中先占位「分组」骨架行，避免数据落地后分组行突然插入把卡片整体下推、与骨架对不上
+                            showGroupSkeleton = isLoading,
                             onSourceSelect = { key ->
                                 val source = liveSources.find { it.key == key }
                                 if (source != null && source.key != currentSource?.key) {
@@ -344,6 +346,7 @@ private fun LiveFilterSection(
     selectedGroup: String,
     showSourceFilter: Boolean,
     showGroupFilter: Boolean,
+    showGroupSkeleton: Boolean,
     onSourceSelect: (String) -> Unit,
     onGroupSelect: (String) -> Unit,
     sourceFocusRequester: FocusRequester,
@@ -412,6 +415,46 @@ private fun LiveFilterSection(
                         }
                 )
             }
+        } else if (showGroupSkeleton) {
+            // 真实分组未就绪时用骨架占位，保持与加载完成后一致的高度，卡片网格不再下移
+            LiveFilterRow(label = "分组") {
+                GroupFilterSkeleton()
+            }
+        }
+    }
+}
+
+/** 「分组」筛选行的骨架占位：尺寸与 FilterSelector 一致，避免数据落地后布局抖动。 */
+@Composable
+private fun GroupFilterSkeleton() {
+    val infiniteTransition = rememberInfiniteTransition(label = "group_skeleton")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "group_skeleton_alpha"
+    )
+    Row(
+        modifier = Modifier
+            .background(
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(19.dp)
+            )
+            .padding(horizontal = 4.2.dp, vertical = 2.2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(40.dp, 56.dp, 48.dp).forEach { w ->
+            Box(
+                modifier = Modifier
+                    .width(w)
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = alpha))
+            )
         }
     }
 }
@@ -624,9 +667,21 @@ private fun ChannelCard(
         label = "channel_card_scale"
     )
 
+    // 进入直播播放页后返回时把焦点还原到这张卡片：点击时登记目标，匹配的卡片挂上还原 requester
+    val returnFocus = org.moontechlab.selenetv.screen.LocalDetailReturnFocus.current
+    val returnKey = "live|${channel.id}"
+
     Surface(
-        onClick = onClick,
+        onClick = {
+            returnFocus?.setTarget(returnKey)
+            onClick()
+        },
         modifier = modifier
+            .then(
+                if (returnFocus != null && returnFocus.matches(returnKey))
+                    Modifier.focusRequester(returnFocus.requester)
+                else Modifier
+            )
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
             }

@@ -72,7 +72,9 @@ import org.moontechlab.selenetv.screen.detail.sourceKey
 import org.moontechlab.selenetv.util.getImageUrlSync
 
 private const val SEEK_STEP_MS = 10_000L
-private const val AUTO_HIDE_MS = 4_000L
+private const val AUTO_HIDE_MS = 5_000L
+// 二次返回退出的确认窗口：首按弹 toast，窗口内再按才退出
+private const val BACK_EXIT_WINDOW_MS = 2_000L
 
 /**
  * 全屏播放页（UI 外壳），布局参照 Apple TV 播放器：
@@ -248,14 +250,44 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
     }
 
-    // BACK：先关面板，再退出播放页
-    BackHandler(enabled = panelOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen) {
-        saveProgress(force = true)
-        onExit()
+    // 面板每次收起（BACK / 选集 / 换源 等任意路径）后，确定性把焦点交回进度条。
+    // 防止「面板焦点项被移除→焦点孤立→下层详情内容抢焦」导致焦点穿透到覆盖层下方。
+    LaunchedEffect(panelOpen) {
+        if (panelOpen) return@LaunchedEffect
+        repeat(6) {
+            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
+            kotlinx.coroutines.delay(40)
+        }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black).focusGroup()) {
+    // BACK 优先级（互斥）：① 面板开 → 收面板；② 控制条可见 → 仅隐藏控制条；
+    // ③ 控制条已隐藏 → 二次确认退出（首按弹自绘提示，窗口内再按才退出）。
+    var backExitArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(backExitArmed) {
+        if (backExitArmed) {
+            kotlinx.coroutines.delay(BACK_EXIT_WINDOW_MS)
+            backExitArmed = false
+        }
+    }
+    BackHandler(enabled = panelOpen) { panelOpen = false }
+    BackHandler(enabled = !panelOpen && controlsVisible) { controlsVisible = false }
+    BackHandler(enabled = !panelOpen && !controlsVisible) {
+        if (backExitArmed) {
+            saveProgress(force = true)
+            onExit()
+        } else {
+            backExitArmed = true
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusGroup()
+            // 焦点陷阱：禁止任何方向把焦点带出播放页覆盖层、穿透到下层详情内容
+            .focusProperties { exit = { FocusRequester.Cancel } },
+    ) {
 
         // 真实视频画面：海报背景垫底，PlayerView 叠在上层
         StagePlaceholder(poster = launch.heroInfo?.poster?.takeIf { it.isNotEmpty() } ?: launch.sources.firstOrNull()?.poster)
@@ -457,6 +489,31 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 )
             }
         }
+
+        // 二次返回退出提示（自绘，不用系统 Toast）
+        BackExitHint(
+            visible = backExitArmed,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 130.dp),
+        )
+    }
+}
+
+// ───────────────────────────── 二次返回退出提示 ─────────────────────────────
+
+/** 播放页通用的「再按一次返回退出」自绘提示（替代系统 Toast，风格与播放器一致）。 */
+@Composable
+internal fun BackExitHint(visible: Boolean, modifier: Modifier = Modifier) {
+    val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(180), label = "back_exit_hint")
+    if (alpha <= 0f) return
+    Box(modifier = modifier.graphicsLayer { this.alpha = alpha }) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xE6000000))
+                .padding(horizontal = 22.dp, vertical = 12.dp),
+        ) {
+            Text(text = "再按一次返回键退出", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.W600)
+        }
     }
 }
 
@@ -538,6 +595,8 @@ private fun PlayerScrubber(
             .focusProperties { up = FocusRequester.Cancel }
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // 返回键一律交给 BackHandler 处理：不在此唤醒控制条，否则会与「隐藏/退出」逻辑打架
+                if (e.key == Key.Back) return@onKeyEvent false
                 if (!controlsVisible) {
                     if (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) onToggle() else onWake()
                     return@onKeyEvent true

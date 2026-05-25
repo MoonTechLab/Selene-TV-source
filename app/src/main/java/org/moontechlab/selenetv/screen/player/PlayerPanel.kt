@@ -152,7 +152,7 @@ fun PlayerPanel(
             .padding(start = 56.dp, end = 56.dp, top = 12.dp, bottom = 14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            tabs.forEach { t ->
+            tabs.forEachIndexed { index, t ->
                 PanelTabItem(
                     label = when (t) {
                         PanelTab.Detail -> "详情"
@@ -161,6 +161,8 @@ fun PlayerPanel(
                     },
                     selected = t == tab,
                     upTarget = scrubberFocus,
+                    isFirst = index == 0,
+                    isLast = index == tabs.lastIndex,
                     onEnterContent = enterContent,
                     onFocused = { onTabChange(t) },
                     modifier = if (t == tab) Modifier.focusRequester(activeTabFocus) else Modifier,
@@ -207,6 +209,8 @@ private fun PanelTabItem(
     label: String,
     selected: Boolean,
     upTarget: FocusRequester,
+    isFirst: Boolean,
+    isLast: Boolean,
     onEnterContent: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
@@ -216,7 +220,12 @@ private fun PanelTabItem(
         Box(
             modifier = modifier
                 .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
-                .focusProperties { up = upTarget }
+                // 边缘标签锁住左右，避免方向焦点搜索从首/尾标签溢出到下方内容网格丢焦
+                .focusProperties {
+                    up = upTarget
+                    if (isFirst) left = FocusRequester.Cancel
+                    if (isLast) right = FocusRequester.Cancel
+                }
                 .onKeyEvent { e ->
                     if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) { onEnterContent(); true } else false
                 }
@@ -410,7 +419,11 @@ private fun EpisodesTabContent(
         modifier = Modifier.fillMaxWidth().height(contentHeight),
     ) {
         gridItemsIndexed(episodes) { index, _ ->
-            val label = episodesTitles?.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "第 ${index + 1} 集"
+            // 仅在有真实剧集标题时展示标题；纯集号（"1141"/"第1141集"/"第 1141 集"/"1141话"）一律按无标题处理，
+            // 只居中显示集号，避免与集号重复且在窄芯片里被截断成「第\n114…」。
+            val label = episodesTitles?.getOrNull(index)
+                ?.takeIf { it.isNotEmpty() }
+                ?.takeIf { t -> t.replace(Regex("[第集话話期\\s]"), "").any { !it.isDigit() } }
             EpisodeChip(
                 number = index + 1,
                 label = label,
@@ -457,11 +470,11 @@ private fun SourcesTabContent(
     }
 }
 
-/** 选集芯片（2 行网格内的紧凑项）：集号 + 集标题；当前集绿框绿字 + 「● 在看」。 */
+/** 选集芯片（2 行网格内的紧凑项）：有自定义标题时「集号 + 标题」，否则仅居中集号；当前集绿框绿字 + 「● 在看」。 */
 @Composable
 private fun EpisodeChip(
     number: Int,
-    label: String,
+    label: String?,
     current: Boolean,
     topRow: Boolean,
     heightDp: Dp,
@@ -497,17 +510,32 @@ private fun EpisodeChip(
             border = Border(androidx.compose.foundation.BorderStroke(1.5.dp, if (current) Accent else Color.Transparent), shape = shape),
         ),
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(text = "$number", color = numColor, fontSize = 25.sp, fontWeight = FontWeight.W700)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = label, color = titleColor, fontSize = 12.sp, fontWeight = FontWeight.W500, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp)
+        if (label == null) {
+            // 无自定义标题：集号居中，不再塞「第 N 集」造成重复与截断
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(text = "$number", color = numColor, fontSize = 24.sp, fontWeight = FontWeight.W700, maxLines = 1)
                 if (current) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(text = "● 在看", color = if (focused) Color(0xFF0A0A0A) else Accent, fontSize = 10.sp, fontWeight = FontWeight.W600)
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(text = "$number", color = numColor, fontSize = 25.sp, fontWeight = FontWeight.W700)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = label, color = titleColor, fontSize = 12.sp, fontWeight = FontWeight.W500, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp)
+                    if (current) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(text = "● 在看", color = if (focused) Color(0xFF0A0A0A) else Accent, fontSize = 10.sp, fontWeight = FontWeight.W600)
+                    }
                 }
             }
         }

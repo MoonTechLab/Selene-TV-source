@@ -57,6 +57,9 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,11 +122,13 @@ fun LiveChannelPanel(
             .padding(start = 56.dp, end = 56.dp, top = 12.dp, bottom = 14.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            tabs.forEach { tab ->
+            tabs.forEachIndexed { index, tab ->
                 LivePanelTabItem(
                     label = tab,
                     selected = tab == selectedTab,
                     upTarget = osdFocus,
+                    isFirst = index == 0,
+                    isLast = index == tabs.lastIndex,
                     onEnterContent = ::enterContent,
                     onFocused = { selectedTab = tab },
                     modifier = if (tab == selectedTab) Modifier.focusRequester(activeTabFocus) else Modifier,
@@ -163,6 +168,8 @@ private fun LivePanelTabItem(
     label: String,
     selected: Boolean,
     upTarget: FocusRequester,
+    isFirst: Boolean,
+    isLast: Boolean,
     onEnterContent: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
@@ -175,7 +182,12 @@ private fun LivePanelTabItem(
                     focused = it.isFocused
                     if (it.isFocused) onFocused()
                 }
-                .focusProperties { up = upTarget }
+                // 边缘标签锁住左右，避免方向焦点搜索从首/尾标签溢出到下方频道网格丢焦
+                .focusProperties {
+                    up = upTarget
+                    if (isFirst) left = FocusRequester.Cancel
+                    if (isLast) right = FocusRequester.Cancel
+                }
                 .onKeyEvent { e ->
                     if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) {
                         onEnterContent()
@@ -276,10 +288,24 @@ private fun LiveChannelTile(
     val nameHeight = 20.dp
     val logoBoxHeight = heightDp - nameHeight - 4.dp
     val logoBoxWidth = logoBoxHeight * 2f
-    val cardBorderColor = when {
+
+    // 频道名是否超出卡片宽度（按聚焦时的加粗字重测量）。仅超宽时才跑马灯；
+    // 否则文本居中显示——避免短名在聚焦时因 basicMarquee 取固有宽度而靠左。
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val nameOverflows = remember(channel.name, logoBoxWidth) {
+        val w = textMeasurer.measure(
+            text = channel.name,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.W700),
+            softWrap = false,
+        ).size.width
+        with(density) { w.toDp() } > logoBoxWidth
+    }
+    // 选中/聚焦只在 logo 外圈描边（在看=绿、聚焦=白），不再给整张卡片（logo+文本）套一圈边
+    val logoBorderColor = when {
         current -> LiveAccent
         focused -> Color.White
-        else -> Color.Transparent
+        else -> null
     }
 
     Surface(
@@ -299,9 +325,10 @@ private fun LiveChannelTile(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.Transparent,
         ),
+        // 整卡不描边，避免「logo+文本」外面整体一圈绿/白
         border = ClickableSurfaceDefaults.border(
-            border = Border(BorderStroke(if (current) 2.dp else 1.dp, cardBorderColor), shape = shape),
-            focusedBorder = Border(BorderStroke(2.5.dp, cardBorderColor), shape = shape),
+            border = Border(BorderStroke(0.dp, Color.Transparent), shape = shape),
+            focusedBorder = Border(BorderStroke(0.dp, Color.Transparent), shape = shape),
         ),
     ) {
         Column(
@@ -315,8 +342,9 @@ private fun LiveChannelTile(
                     .clip(shape)
                     .background(Color(0xFF1E1E1E))
                     .then(
-                        if (focused) {
-                            Modifier.border(3.dp, if (current) LiveAccent else Color.White, shape)
+                        // 在看(绿)/聚焦(白) 描在 logo 外圈；在看即使未聚焦也保持绿圈
+                        if (logoBorderColor != null) {
+                            Modifier.border(if (focused) 3.dp else 2.dp, logoBorderColor, shape)
                         } else {
                             Modifier
                         },
@@ -351,30 +379,22 @@ private fun LiveChannelTile(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
             ) {
-                if (focused) {
-                    Text(
-                        text = channel.name,
-                        color = if (current || focused) LiveAccent else Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
-                        maxLines = 1,
-                        softWrap = false,
-                        lineHeight = 14.sp,
-                        modifier = Modifier.fillMaxWidth().basicMarquee(),
-                    )
-                } else {
-                    Text(
-                        text = channel.name,
-                        color = if (current || focused) LiveAccent else Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 14.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                // 聚焦且名字超宽 → 跑马灯（靠左滚动展示全名）；否则一律居中
+                val marquee = focused && nameOverflows
+                Text(
+                    text = channel.name,
+                    color = if (current || focused) LiveAccent else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
+                    maxLines = 1,
+                    softWrap = false,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center,
+                    overflow = if (marquee) TextOverflow.Visible else TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (marquee) Modifier.basicMarquee() else Modifier),
+                )
                 if (current) {
                     Spacer(modifier = Modifier.height(1.dp))
                     Text(

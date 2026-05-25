@@ -34,6 +34,15 @@ object RemoteControlServer {
         textInputCallback = callback
     }
 
+    /**
+     * 清空遥控回调。MainActivity 在 onDestroy（非配置变更）时调用，
+     * 否则本单例会一直持有已销毁的 Activity（回调 lambda 捕获了 Activity）造成泄漏。
+     */
+    fun clearCallbacks() {
+        keyEventCallback = null
+        textInputCallback = null
+    }
+
     fun start(): Boolean {
         if (server != null) {
             Log.d(TAG, "Server already running on port $currentPort")

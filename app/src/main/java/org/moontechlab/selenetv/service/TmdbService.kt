@@ -89,8 +89,42 @@ object TmdbService {
         art
     }
 
-    /** /search/multi?query=original_title → 过滤 movie/tv，年份命中优先、再按热度取最佳。 */
+    /**
+     * 先用原名搜索；命中不到再去掉「季」后缀重试一次。
+     *
+     * 豆瓣对续作返回的 original_title 形如 "ぐらんぶる Season 2"/"某剧 第二季"，而 TMDB 以基础剧名
+     * （"ぐらんぶる"）整体收录、按季归在同一条目下，带季后缀直接搜不到 → 旧布局。
+     */
     private fun search(originalTitle: String, year: String, apiKey: String): Pair<String, Long>? {
+        searchOnce(originalTitle, year, apiKey)?.let { return it }
+        val stripped = stripSeasonSuffix(originalTitle)
+        if (stripped.isNotBlank() && stripped != originalTitle) {
+            return searchOnce(stripped, year, apiKey)
+        }
+        return null
+    }
+
+    /**
+     * 去掉续作的「季」后缀，便于用基础剧名命中 TMDB。仅识别明确的季标记，避免误删正片名里的数字/词。
+     * 例：「ぐらんぶる Season 2」→「ぐらんぶる」、「某剧 第二季」→「某剧」、「Foo 2nd Season」→「Foo」。
+     */
+    internal fun stripSeasonSuffix(title: String): String {
+        val t = title.trim()
+        val patterns = listOf(
+            Regex("""\s+season\s+\d+$""", RegexOption.IGNORE_CASE),
+            Regex("""\s+season\s+[ivxlcdm]+$""", RegexOption.IGNORE_CASE),
+            Regex("""\s+\d+(st|nd|rd|th)\s+season$""", RegexOption.IGNORE_CASE),
+            Regex("""\s*第\s*[0-9一二三四五六七八九十百]+\s*[季期]$"""),
+        )
+        for (p in patterns) {
+            val r = p.replace(t, "")
+            if (r != t) return r.trim()
+        }
+        return t
+    }
+
+    /** /search/multi?query=original_title → 过滤 movie/tv，年份命中优先、再按热度取最佳。 */
+    private fun searchOnce(originalTitle: String, year: String, apiKey: String): Pair<String, Long>? {
         val q = URLEncoder.encode(originalTitle, "UTF-8")
         val url = "$API_BASE/search/multi?api_key=$apiKey&include_adult=false&query=$q"
         val (code, body) = httpGet(url)
