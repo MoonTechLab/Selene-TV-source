@@ -26,11 +26,25 @@ class DetailReturnFocusState {
      */
     var restoreInProgress: Boolean = false
 
+    /**
+     * 还原是否已生效：来源卡片真正拿到焦点时由 [markFocused] 置 true。
+     * HomeScreen 的还原协程据此在覆盖层滑出的时间窗口内重试 requestFocus，直到成功为止
+     * （详情仍占用焦点时 requestFocus 会被拒，单次固定延时会偶发失败、焦点掉到筛选行）。
+     * 在协程里轮询读取（非组合内读取），故用普通 var 即可，与 [restoreInProgress] 一致。
+     */
+    var targetFocused: Boolean = false
+
     fun setTarget(key: String?) {
         targetKey = key
+        targetFocused = false
     }
 
     fun matches(key: String): Boolean = targetKey != null && targetKey == key
+
+    /** 卡片获得焦点时上报；仅当其 key 与还原目标一致才视为还原成功，停止重试。 */
+    fun markFocused(key: String) {
+        if (matches(key)) targetFocused = true
+    }
 }
 
 /**
