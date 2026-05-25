@@ -276,7 +276,17 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
 
     // 播放页覆盖层入口（内存覆盖层，不销毁详情）。launchPlayer 由选集/继续/播放触发。
     var playerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
+    var playerEverOpened by remember { mutableStateOf(false) }
+    // 退出播放页后把焦点交回主动作按钮（播放页持有焦点，移除后详情页无落点会丢焦）。
+    // 等淡出动画(240ms)结束、PlayerScreen 释放焦点后再请求。
+    LaunchedEffect(playerLaunch == null) {
+        if (playerLaunch == null && playerEverOpened) {
+            kotlinx.coroutines.delay(300)
+            try { primaryFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
     fun launchPlayer(source: SearchResult, episode: Int, startMs: Long, totalMs: Long) {
+        playerEverOpened = true
         val epIndex = episode.coerceIn(0, source.episodes.lastIndex.coerceAtLeast(0))
         playerLaunch = PlayerLaunch(
             title = state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: state.entry.title,
