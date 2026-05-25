@@ -13,7 +13,7 @@ object PlayProgress {
     /** m3u8 代理拼接：代理为空返回原 URL，否则 URL-encode 后加前缀。 */
     fun buildPlayUrl(rawUrl: String, proxyUrl: String): String {
         if (proxyUrl.isBlank()) return rawUrl
-        return proxyUrl + URLEncoder.encode(rawUrl, "UTF-8")
+        return proxyUrl + URLEncoder.encode(rawUrl, Charsets.UTF_8)
     }
 
     /** 由当前源 + 进度构造播放记录。play_time/total_time 单位为秒（MoonTV 约定）。 */
@@ -39,7 +39,7 @@ object PlayProgress {
         searchTitle = title,
     )
 
-    /** 是否应保存：<1s 一律不存；强制则存；否则需距上次≥10s 且位置有变化。 */
+    /** 是否应保存：<1s 一律不存（含强制）；满 1s 后强制必存；否则需距上次≥10s 且位置有变化。 */
     fun shouldSave(
         force: Boolean,
         positionMs: Long,

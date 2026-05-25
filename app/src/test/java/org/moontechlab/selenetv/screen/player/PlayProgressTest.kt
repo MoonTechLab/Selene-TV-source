@@ -72,4 +72,9 @@ class PlayProgressTest {
     fun shouldSave_trueAfterWindowWithMovement() {
         assertTrue(PlayProgress.shouldSave(force = false, positionMs = 30_000, lastSavedPositionMs = 20_000, elapsedSinceLastSaveMs = 11_000))
     }
+
+    @Test
+    fun shouldSave_trueAtExactlyOneSecondWhenForced() {
+        assertTrue(PlayProgress.shouldSave(force = true, positionMs = 1000, lastSavedPositionMs = -1, elapsedSinceLastSaveMs = 0))
+    }
 }
