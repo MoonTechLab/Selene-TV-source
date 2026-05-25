@@ -1,0 +1,595 @@
+package org.moontechlab.selenetv.screen.player
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.screen.detail.HeroInfo
+import org.moontechlab.selenetv.screen.detail.sourceKey
+import org.moontechlab.selenetv.util.getImageUrlSync
+
+enum class PanelTab { Detail, Episodes, Sources }
+
+private val Accent = Color(0xFF4CAF50)
+// 面板高度：约屏高 47%（密度下 1dp≈1.77px）。越矮其顶边越靠下，进度条贴在上方也随之到屏幕中线附近。
+private val PanelHeight = 256.dp
+
+/**
+ * 进度条下方上拉的标签面板（详情 / 选集 / 换源）。由进度条按「下」唤出、默认进入「详情」；
+ * 详情页含「下一集」快捷入口。标签栏左右键切换标签（焦点即选中，切换带横向滑入动画），
+ * 按「下」进入内容区，按「上」回到进度条（进度条获焦后面板自动收起，见 PlayerScreen）。
+ *
+ * 背景用从上到下逐渐加深的渐变（承接控制条的暗化），避免硬边块；内容区高度按可用空间精确填充。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun PlayerPanel(
+    title: String,
+    heroInfo: HeroInfo?,
+    epCount: Int,
+    episodes: List<String>,
+    episodesTitles: List<String>?,
+    currentEpisode: Int,
+    sources: List<SearchResult>,
+    currentSourceKey: String,
+    hasNext: Boolean,
+    tab: PanelTab,
+    onTabChange: (PanelTab) -> Unit,
+    onNextEpisode: () -> Unit,
+    onPickEpisode: (Int) -> Unit,
+    onPickSource: (String) -> Unit,
+    scrubberFocus: FocusRequester,
+    activeTabFocus: FocusRequester,
+    modifier: Modifier = Modifier,
+) {
+    val tabs = remember(epCount, sources.size) {
+        buildList {
+            add(PanelTab.Detail)
+            if (epCount > 1) add(PanelTab.Episodes)
+            add(PanelTab.Sources)
+        }
+    }
+
+    // 每个标签的内容区各持有独立 FocusRequester：切换时 AnimatedContent 短暂同时持有新旧内容，
+    // 共用一个 requester 会触发「attached to multiple components」。标签按「下」请求当前标签对应的那个。
+    val detailFocus = remember { FocusRequester() }
+    val epFocus = remember { FocusRequester() }
+    val srcFocus = remember { FocusRequester() }
+    val enterContent: () -> Unit = {
+        val fr = when (tab) {
+            PanelTab.Detail -> detailFocus
+            PanelTab.Episodes -> epFocus
+            PanelTab.Sources -> srcFocus
+        }
+        try { fr.requestFocus() } catch (_: Exception) {}
+    }
+
+    LaunchedEffect(Unit) {
+        repeat(6) {
+            kotlinx.coroutines.delay(60)
+            try { activeTabFocus.requestFocus(); return@LaunchedEffect } catch (_: Exception) {}
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(PanelHeight)
+            .background(
+                Brush.verticalGradient(
+                    0f to Color(0xCC000000),
+                    0.5f to Color(0xE6000000),
+                    1f to Color(0xF2000000),
+                ),
+            )
+            .padding(start = 56.dp, end = 56.dp, top = 12.dp, bottom = 14.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            tabs.forEach { t ->
+                PanelTabItem(
+                    label = when (t) {
+                        PanelTab.Detail -> "详情"
+                        PanelTab.Episodes -> "选集"
+                        PanelTab.Sources -> "换源"
+                    },
+                    selected = t == tab,
+                    upTarget = scrubberFocus,
+                    onEnterContent = enterContent,
+                    onFocused = { onTabChange(t) },
+                    modifier = if (t == tab) Modifier.focusRequester(activeTabFocus) else Modifier,
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 内容区：按可用高度精确填充，避免底部留白；切换带横向滑入 + 淡入。
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            val ch = maxHeight
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    val dir = if (tabs.indexOf(targetState) >= tabs.indexOf(initialState)) 1 else -1
+                    (fadeIn(tween(200)) + slideInHorizontally(tween(240)) { it / 7 * dir }) togetherWith
+                        (fadeOut(tween(150)) + slideOutHorizontally(tween(240)) { -it / 7 * dir })
+                },
+                label = "panel_tab",
+            ) { t ->
+                when (t) {
+                    PanelTab.Detail -> DetailTabContent(
+                        title = title, info = heroInfo, hasNext = hasNext,
+                        currentEpisode = currentEpisode, onNextEpisode = onNextEpisode,
+                        contentHeight = ch, cardFocus = detailFocus, tabFocus = activeTabFocus,
+                    )
+                    PanelTab.Episodes -> EpisodesTabContent(
+                        episodes = episodes, episodesTitles = episodesTitles, currentEpisode = currentEpisode,
+                        onPick = onPickEpisode, contentHeight = ch, firstFocus = epFocus, tabFocus = activeTabFocus,
+                    )
+                    PanelTab.Sources -> SourcesTabContent(
+                        sources = sources, currentSourceKey = currentSourceKey, onPick = onPickSource,
+                        contentHeight = ch, firstFocus = srcFocus, tabFocus = activeTabFocus,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PanelTabItem(
+    label: String,
+    selected: Boolean,
+    upTarget: FocusRequester,
+    onEnterContent: () -> Unit,
+    onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = modifier
+                .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
+                .focusProperties { up = upTarget }
+                .onKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown) { onEnterContent(); true } else false
+                }
+                .focusable()
+                .clip(RoundedCornerShape(9.dp))
+                .background(if (focused) Color.White.copy(alpha = 0.14f) else Color.Transparent)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = label,
+                color = if (selected || focused) Color.White else Color.White.copy(alpha = 0.45f),
+                fontSize = 17.sp,
+                fontWeight = if (selected) FontWeight.W700 else FontWeight.W500,
+            )
+        }
+        Spacer(modifier = Modifier.height(5.dp))
+        Box(
+            modifier = Modifier
+                .width(22.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (selected) Color.White else Color.Transparent),
+        )
+    }
+}
+
+// ───────────────────────────── 详情标签 ─────────────────────────────
+
+@Composable
+private fun DetailTabContent(
+    title: String,
+    info: HeroInfo?,
+    hasNext: Boolean,
+    currentEpisode: Int,
+    onNextEpisode: () -> Unit,
+    contentHeight: Dp,
+    cardFocus: FocusRequester,
+    tabFocus: FocusRequester,
+) {
+    val poster = info?.poster?.takeIf { it.isNotEmpty() }
+    val displayTitle = info?.title?.takeIf { it.isNotBlank() } ?: title
+
+    Row(modifier = Modifier.fillMaxWidth().height(contentHeight)) {
+        Box(
+            modifier = Modifier
+                .size(width = contentHeight * 0.66f, height = contentHeight)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF222222)),
+        ) {
+            if (poster != null) {
+                AsyncImage(
+                    model = getImageUrlSync(poster),
+                    contentDescription = displayTitle,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(24.dp))
+
+        // 信息（左，纯展示）：顶部对齐封面顶端
+        Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Top) {
+            Text(text = displayTitle, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.W700, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                info?.genres?.take(3)?.forEach { g -> Text(text = g, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp) }
+                info?.rate?.let { Text(text = "★ $it", color = Color(0xFFE91E63), fontSize = 14.sp, fontWeight = FontWeight.W700) }
+            }
+            info?.subLine?.takeIf { it.isNotEmpty() }?.let {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(text = it, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = info?.summary?.takeIf { it.isNotEmpty() } ?: "暂无简介",
+                color = Color.White.copy(alpha = 0.62f),
+                fontSize = 13.sp,
+                lineHeight = 21.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Spacer(modifier = Modifier.width(24.dp))
+
+        UpNextCard(
+            hasNext = hasNext,
+            nextEpisode = currentEpisode + 2,
+            heightDp = contentHeight,
+            onClick = onNextEpisode,
+            focusRequester = cardFocus,
+            upTarget = tabFocus,
+        )
+    }
+}
+
+@Composable
+private fun UpNextCard(
+    hasNext: Boolean,
+    nextEpisode: Int,
+    heightDp: Dp,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester,
+    upTarget: FocusRequester,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.04f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "upnext_scale",
+    )
+    val fg = if (focused) Color(0xFF0A0A0A) else Color.White
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        onClick = onClick,
+        enabled = hasNext,
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .focusProperties { up = upTarget; down = FocusRequester.Cancel }
+            .width(184.dp)
+            .height(heightDp),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.08f),
+            focusedContainerColor = Color.White,
+            disabledContainerColor = Color.White.copy(alpha = 0.05f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(if (focused) Color(0xFF0A0A0A).copy(alpha = 0.10f) else Color.White.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = if (hasNext) fg else Color.White.copy(alpha = 0.3f),
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "下一集",
+                color = if (hasNext) fg.copy(alpha = if (focused) 0.65f else 0.6f) else Color.White.copy(alpha = 0.3f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W500,
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = if (hasNext) "第 $nextEpisode 集" else "已是最后一集",
+                color = if (hasNext) fg else Color.White.copy(alpha = 0.3f),
+                fontSize = if (hasNext) 17.sp else 13.sp,
+                fontWeight = FontWeight.W700,
+            )
+        }
+    }
+}
+
+// ───────────────────────────── 选集 / 换源标签 ─────────────────────────────
+
+@Composable
+private fun EpisodesTabContent(
+    episodes: List<String>,
+    episodesTitles: List<String>?,
+    currentEpisode: Int,
+    onPick: (Int) -> Unit,
+    contentHeight: Dp,
+    firstFocus: FocusRequester,
+    tabFocus: FocusRequester,
+) {
+    // 2 行密排横滚网格：填满内容区高度且不显空。列序：偶数 index = 上行、奇数 = 下行。
+    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = (currentEpisode - currentEpisode % 2).coerceAtLeast(0))
+    val rowGap = 10.dp
+    val chipH = (contentHeight - rowGap) / 2
+    LazyHorizontalGrid(
+        rows = GridCells.Fixed(2),
+        state = gridState,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(rowGap),
+        modifier = Modifier.fillMaxWidth().height(contentHeight),
+    ) {
+        gridItemsIndexed(episodes) { index, _ ->
+            val label = episodesTitles?.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "第 ${index + 1} 集"
+            EpisodeChip(
+                number = index + 1,
+                label = label,
+                current = index == currentEpisode,
+                topRow = index % 2 == 0,
+                heightDp = chipH,
+                onClick = { onPick(index) },
+                tabFocus = tabFocus,
+                focusRequester = if (index == currentEpisode.coerceIn(0, episodes.lastIndex.coerceAtLeast(0))) firstFocus else null,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SourcesTabContent(
+    sources: List<SearchResult>,
+    currentSourceKey: String,
+    onPick: (String) -> Unit,
+    contentHeight: Dp,
+    firstFocus: FocusRequester,
+    tabFocus: FocusRequester,
+) {
+    val listState = rememberLazyListState()
+    val selectedIndex = sources.indexOfFirst { sourceKey(it) == currentSourceKey }.coerceAtLeast(0)
+    LazyRow(
+        state = listState,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().height(contentHeight),
+    ) {
+        itemsIndexed(sources, key = { _, s -> sourceKey(s) }) { index, source ->
+            val key = sourceKey(source)
+            SourceTile(
+                name = source.sourceName,
+                episodeCount = source.episodes.size.coerceAtLeast(1),
+                poster = source.poster,
+                current = key == currentSourceKey,
+                heightDp = contentHeight,
+                onClick = { onPick(key) },
+                upTarget = tabFocus,
+                focusRequester = if (index == selectedIndex) firstFocus else null,
+            )
+        }
+    }
+}
+
+/** 选集芯片（2 行网格内的紧凑项）：集号 + 集标题；当前集绿框绿字 + 「● 在看」。 */
+@Composable
+private fun EpisodeChip(
+    number: Int,
+    label: String,
+    current: Boolean,
+    topRow: Boolean,
+    heightDp: Dp,
+    onClick: () -> Unit,
+    tabFocus: FocusRequester,
+    focusRequester: FocusRequester?,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.06f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "ep_chip_scale",
+    )
+    val shape = RoundedCornerShape(10.dp)
+    val numColor = if (focused) Color(0xFF0A0A0A) else if (current) Accent else Color.White.copy(alpha = 0.95f)
+    val titleColor = if (focused) Color(0xFF0A0A0A) else Color.White.copy(alpha = 0.82f)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .focusProperties { if (topRow) up = tabFocus else down = FocusRequester.Cancel }
+            .width(124.dp)
+            .height(heightDp),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (current) Accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.07f),
+            focusedContainerColor = Color.White,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(androidx.compose.foundation.BorderStroke(1.5.dp, if (current) Accent else Color.Transparent), shape = shape),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(text = "$number", color = numColor, fontSize = 25.sp, fontWeight = FontWeight.W700)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, color = titleColor, fontSize = 12.sp, fontWeight = FontWeight.W500, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp)
+                if (current) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(text = "● 在看", color = if (focused) Color(0xFF0A0A0A) else Accent, fontSize = 10.sp, fontWeight = FontWeight.W600)
+                }
+            }
+        }
+    }
+}
+
+/** 换源瓦片：源封面为底 + 底部源名/集数；当前源绿框 + 「在用」徽标，聚焦白描边。 */
+@Composable
+private fun SourceTile(
+    name: String,
+    episodeCount: Int,
+    poster: String,
+    current: Boolean,
+    heightDp: Dp,
+    onClick: () -> Unit,
+    upTarget: FocusRequester,
+    focusRequester: FocusRequester?,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "src_tile_scale",
+    )
+    val shape = RoundedCornerShape(12.dp)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .focusProperties { up = upTarget; down = FocusRequester.Cancel }
+            .width(124.dp)
+            .height(heightDp),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF1A1A1A),
+            focusedContainerColor = Color(0xFF1A1A1A),
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(androidx.compose.foundation.BorderStroke(if (current) 2.dp else 0.dp, if (current) Accent else Color.Transparent), shape = shape),
+            focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Color.White), shape = shape),
+        ),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (poster.isNotEmpty()) {
+                AsyncImage(
+                    model = getImageUrlSync(poster),
+                    contentDescription = name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            // 底部压暗确保文字可读
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.55f to Color(0x33000000),
+                        0.78f to Color(0xC0000000),
+                        1f to Color(0xF0000000),
+                    ),
+                ),
+            )
+            Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
+                Text(text = name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.W700, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = "$episodeCount 集", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+            }
+            if (current) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Accent)
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                ) {
+                    Text(text = "在用", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.W700)
+                }
+            }
+        }
+    }
+}

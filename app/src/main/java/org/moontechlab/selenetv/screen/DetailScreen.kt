@@ -40,6 +40,8 @@ import org.moontechlab.selenetv.screen.detail.DetailSourceResolver
 import org.moontechlab.selenetv.screen.detail.DetailUiState
 import org.moontechlab.selenetv.screen.detail.SourceFilter
 import org.moontechlab.selenetv.screen.detail.sourceKey
+import org.moontechlab.selenetv.screen.player.PlayerLaunch
+import org.moontechlab.selenetv.screen.player.PlayerScreen
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.BangumiService
@@ -272,6 +274,21 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    // 播放页覆盖层入口（内存覆盖层，不销毁详情）。launchPlayer 由选集/继续/播放触发。
+    var playerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
+    fun launchPlayer(source: SearchResult, episode: Int, startMs: Long, totalMs: Long) {
+        val epIndex = episode.coerceIn(0, source.episodes.lastIndex.coerceAtLeast(0))
+        playerLaunch = PlayerLaunch(
+            title = state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: state.entry.title,
+            heroInfo = state.heroInfo,
+            sources = state.sources,
+            selectedSourceKey = sourceKey(source),
+            episodeIndex = epIndex,
+            startPositionMs = startMs.coerceAtLeast(0),
+            durationMs = if (totalMs > 0L) totalMs else 45 * 60 * 1000L,
+        )
+    }
+
     val onToggleFavorite: () -> Unit = lam@{
         val source = state.selectedSource ?: return@lam
         val key = sourceKey(source)
@@ -326,22 +343,21 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     val onContinue: () -> Unit = lam@{
         val source = state.selectedSource ?: return@lam
         val rec = state.selectedPlayRecord
-        android.util.Log.d("DetailScreen", "continue: source=${source.source}+${source.id} ep=${rec?.index} pos=${rec?.playTime}")
+        // PlayRecord.index 为 1 基集号（与详情按钮/卡片 "N/总" 显示一致）；
+        // 播放页 episodeIndex 为 0 基数组下标，故 -1。
+        val epIndex = ((rec?.index ?: 1) - 1).coerceAtLeast(0)
+        // PlayRecord.playTime/totalTime 单位为秒（MoonTV 约定），播放页用毫秒，故 ×1000。
+        launchPlayer(source, epIndex, (rec?.playTime ?: 0L) * 1000, (rec?.totalTime ?: 0L) * 1000)
     }
 
     val onPlay: () -> Unit = lam@{
         val source = state.selectedSource ?: return@lam
         val rec = state.selectedPlayRecord
         when {
-            rec != null -> {
-                android.util.Log.d("DetailScreen", "play (resume): source=${source.source}+${source.id} ep=${rec.index} pos=${rec.playTime}")
-            }
-            source.episodes.size > 1 -> {
-                state = state.copy(episodePickerVisible = true)
-            }
-            else -> {
-                android.util.Log.d("DetailScreen", "play (single): source=${source.source}+${source.id} ep=0")
-            }
+            // 有续看记录时「播放」语义为「从头播放」
+            rec != null -> launchPlayer(source, 0, 0L, 0L)
+            source.episodes.size > 1 -> state = state.copy(episodePickerVisible = true)
+            else -> launchPlayer(source, 0, 0L, 0L)
         }
     }
 
@@ -390,7 +406,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                     modifier = Modifier
                         .fillMaxSize()
                         .focusGroup()
-                        .focusProperties { exit = { FocusRequester.Cancel } }
+                        // 平时禁止焦点逃逸到覆盖层下的首页；但播放页覆盖层打开时需放行，
+                        // 否则播放页 requestFocus 无法把焦点从详情内容里夺走（焦点钉死、任意键失效）。
+                        .focusProperties { exit = { if (playerLaunch != null) FocusRequester.Default else FocusRequester.Cancel } }
                         .verticalScroll(scrollState),
                 ) {
                     org.moontechlab.selenetv.screen.detail.DetailHero(
@@ -471,8 +489,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 episodes = source.episodes,
                 episodesTitles = source.episodesTitles,
                 onSelect = { idx ->
-                    android.util.Log.d("DetailScreen", "play: source=${source.source}+${source.id} ep=$idx")
                     state = state.copy(episodePickerVisible = false)
+                    launchPlayer(source, idx, 0L, 0L)
                 },
                 onDismiss = { state = state.copy(episodePickerVisible = false) },
             )
@@ -484,6 +502,19 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             summary = state.heroInfo?.summary.orEmpty(),
             onDismiss = { summaryDialogVisible = false },
         )
+
+        // 播放页覆盖层：淡入覆盖整个详情；退场期间保留最后一次入参，避免内容提前消失。
+        val retainedLaunch = remember { mutableStateOf<PlayerLaunch?>(null) }
+        playerLaunch?.let { retainedLaunch.value = it }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = playerLaunch != null,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(280)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(240)),
+        ) {
+            retainedLaunch.value?.let { l ->
+                PlayerScreen(launch = l, onExit = { playerLaunch = null })
+            }
+        }
     }
 }
 
