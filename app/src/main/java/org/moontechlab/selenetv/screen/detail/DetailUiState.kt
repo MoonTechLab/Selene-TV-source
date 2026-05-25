@@ -4,6 +4,7 @@ import org.moontechlab.selenetv.model.BangumiDetails
 import org.moontechlab.selenetv.model.DoubanMovieDetails
 import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.TmdbArt
 import org.moontechlab.selenetv.screen.DetailEntry
 import org.moontechlab.selenetv.service.SearchProgress
 
@@ -23,6 +24,8 @@ data class DetailUiState(
     val playRecords: Map<String, PlayRecord> = emptyMap(),
     val favoriteKeys: Set<String> = emptySet(),
     val episodePickerVisible: Boolean = false,
+    // TMDB 剧照/ logo（仅 hero 渲染）。非空且含 backdrop 时切到 Apple TV 式布局。
+    val tmdbArt: TmdbArt? = null,
 ) {
     val selectedSource: SearchResult?
         get() = sources.firstOrNull { "${it.source}+${it.id}" == selectedSourceKey }
@@ -40,12 +43,20 @@ data class DetailUiState(
      * - History / SearchAggregate → 若已拉到 tier2 豆瓣详情(details)则用之，否则用选中源自身信息
      */
     val heroInfo: HeroInfo?
-        get() = when (entry) {
-            is DetailEntry.Douban -> details?.toHeroInfo()
-            is DetailEntry.Bangumi -> bangumiDetails?.toHeroInfo()
-            is DetailEntry.History,
-            is DetailEntry.SearchAggregate -> details?.toHeroInfo() ?: selectedSource?.toHeroInfo()
+        get() {
+            val base = when (entry) {
+                is DetailEntry.Douban -> details?.toHeroInfo()
+                is DetailEntry.Bangumi -> bangumiDetails?.toHeroInfo()
+                is DetailEntry.History,
+                is DetailEntry.SearchAggregate -> details?.toHeroInfo() ?: selectedSource?.toHeroInfo()
+            }
+            // 注入 TMDB 剧照/ logo，其余字段保持豆瓣/bangumi 数据不变
+            return base?.copy(backdrop = tmdbArt?.backdropUrl, logo = tmdbArt?.logoUrl)
         }
+
+    /** 是否使用 Apple TV 式新 hero：拿到 TMDB 剧照即启用，否则旧布局。 */
+    val useHeroV2: Boolean
+        get() = tmdbArt?.backdropUrl != null
 }
 
 fun sourceKey(result: SearchResult): String = "${result.source}+${result.id}"

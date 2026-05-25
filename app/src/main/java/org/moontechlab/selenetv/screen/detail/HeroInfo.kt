@@ -15,6 +15,9 @@ data class HeroInfo(
     val genres: List<String> = emptyList(),
     val subLine: String? = null,    // 副信息行（· 连接）
     val summary: String? = null,
+    // 以下两项来自 TMDB（仅渲染用），由 DetailUiState 在派生时注入；其余字段始终取豆瓣/bangumi。
+    val backdrop: String? = null,   // TMDB 剧照，作 hero 背景；非空时启用 Apple TV 式新布局
+    val logo: String? = null,       // TMDB 标题 logo，作艺术字标题；为空回退文字标题
 )
 
 fun DoubanMovieDetails.toHeroInfo(): HeroInfo {

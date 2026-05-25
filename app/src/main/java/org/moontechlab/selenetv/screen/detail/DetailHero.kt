@@ -158,7 +158,7 @@ fun DetailHero(
  * 作为左列最上方的可聚焦元素，向上取消焦点搜索，避免逃逸到覆盖层下的首页。
  */
 @Composable
-private fun SummaryBlock(
+internal fun SummaryBlock(
     text: String,
     onClick: () -> Unit,
     focusRequester: FocusRequester,

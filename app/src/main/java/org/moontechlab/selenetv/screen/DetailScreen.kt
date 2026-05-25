@@ -44,11 +44,17 @@ import org.moontechlab.selenetv.screen.player.PlayerLaunch
 import org.moontechlab.selenetv.screen.player.PlayerScreen
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.ApiService
+import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.ContentFilterService
+import org.moontechlab.selenetv.service.DoubanCacheService
 import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchService
+import org.moontechlab.selenetv.service.TmdbService
+
+/** TMDB 剧照解析的触发参数：仅用 original_title（不回退中文标题）+ 年份消歧。 */
+private data class TmdbArtQuery(val originalTitle: String, val year: String)
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
@@ -57,6 +63,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     val scope = rememberCoroutineScope()
     val doubanService = remember { DoubanService.getInstance(context) }
     val bangumiService = remember { BangumiService.getInstance(context) }
+    val doubanCacheService = remember { DoubanCacheService.getInstance(context) }
 
     var state by remember(entry) { mutableStateOf(DetailUiState(entry = entry)) }
     // 搜索流累积的原始结果（Douban/Bangumi/History 用）
@@ -64,6 +71,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     // tier2 命中的 doubanId（>=2 相同）；一旦确定即稳定，供独立 effect 拉取豆瓣详情，
     // 避免把网络请求放在随 state.sources 变化而被取消的 effect 里（LeftCompositionCancellation）。
     var tier2Target by remember(entry) { mutableStateOf<String?>(null) }
+    // 已拿到豆瓣详情、且有 original_title 后，待解析 TMDB 剧照的查询。设置后保持加载页直到 TMDB
+    // 结算（见下方 effect），避免新布局在内容露出后才弹入造成跳变。仅豆瓣数据页会触发。
+    var tmdbTrigger by remember(entry) { mutableStateOf<TmdbArtQuery?>(null) }
 
     DisposableEffect(Unit) {
         onDispose { SearchService.stopSearch() }
@@ -127,9 +137,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     //    搜索结束仍未识别到组，则回退展示全部命中结果。
     LaunchedEffect(rawResults, state.sourcesComplete, entry) {
         val displayed = when (entry) {
-            is DetailEntry.History ->
-                DetailSourceResolver.historyGroupSources(rawResults, entry.source, entry.id)
+            is DetailEntry.History -> {
+                val group = DetailSourceResolver.historyGroupSources(rawResults, entry.source, entry.id)
                     ?: if (state.sourcesComplete) rawResults else emptyList()
+                // 从播放记录/收藏夹进入：把入口对应的源(source+id)排到首位（稳定排序，其余顺序不变）
+                val entryKey = "${entry.source}+${entry.id}"
+                group.sortedByDescending { sourceKey(it) == entryKey }
+            }
             else -> rawResults
         }
         state = state.copy(sources = displayed)
@@ -140,7 +154,16 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         if (entry is DetailEntry.Douban) {
             state = state.copy(detailsLoading = true, detailsError = null)
             when (val resp = doubanService.getDoubanDetails(entry.doubanId)) {
-                is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+                is ApiResponse.Success -> {
+                    val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
+                    if (ot != null) {
+                        // 有原名 → 保持加载页，交由 TMDB effect 结算 detailsLoading
+                        state = state.copy(details = resp.data)
+                        tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                    } else {
+                        state = state.copy(details = resp.data, detailsLoading = false)
+                    }
+                }
                 is ApiResponse.Error -> state = state.copy(detailsError = resp.message, detailsLoading = false)
             }
         }
@@ -180,9 +203,31 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     LaunchedEffect(tier2Target) {
         val id = tier2Target ?: return@LaunchedEffect
         when (val resp = doubanService.getDoubanDetails(id)) {
-            is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+            is ApiResponse.Success -> {
+                val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
+                if (ot != null) {
+                    state = state.copy(details = resp.data) // 保持加载页，等 TMDB 结算
+                    tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                } else {
+                    state = state.copy(details = resp.data, detailsLoading = false)
+                }
+            }
             is ApiResponse.Error -> state = state.copy(details = null, detailsLoading = false) // 失败兜底源信息
         }
+    }
+
+    // 5C) 解析 TMDB 剧照/ logo（仅豆瓣数据页、且有 original_title 时触发）。
+    //    在加载页背后完成：拿到结果（成功/失败/超时/未配 key）才撤加载页，故新旧布局一次性落定，无跳变。
+    //    依赖稳定的 tmdbTrigger，不随 state.sources 变化被取消。失败一律回退旧布局。缓存见 TmdbService。
+    LaunchedEffect(tmdbTrigger) {
+        val q = tmdbTrigger ?: return@LaunchedEffect
+        val key = AppDataService.getTmdbApiKey()
+        val art = if (key.isNotBlank()) {
+            kotlinx.coroutines.withTimeoutOrNull(4000) {
+                TmdbService.resolveArt(q.originalTitle, q.year, key, doubanCacheService)
+            }
+        } else null
+        state = state.copy(tmdbArt = art, detailsLoading = false)
     }
 
     // 拉播放记录
@@ -398,7 +443,15 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             state = state.copy(detailsLoading = true, detailsError = null)
                             when (val e = state.entry) {
                                 is DetailEntry.Douban -> when (val resp = doubanService.getDoubanDetails(e.doubanId)) {
-                                    is ApiResponse.Success -> state = state.copy(details = resp.data, detailsLoading = false)
+                                    is ApiResponse.Success -> {
+                                        val ot = resp.data.originalTitle?.takeIf { it.isNotBlank() }
+                                        if (ot != null) {
+                                            state = state.copy(details = resp.data)
+                                            tmdbTrigger = TmdbArtQuery(ot, resp.data.year)
+                                        } else {
+                                            state = state.copy(details = resp.data, detailsLoading = false)
+                                        }
+                                    }
                                     is ApiResponse.Error -> state = state.copy(detailsError = resp.message, detailsLoading = false)
                                 }
                                 is DetailEntry.Bangumi -> when (val resp = bangumiService.getBangumiDetail(e.bangumiId.toString())) {
@@ -421,12 +474,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                         .focusProperties { exit = { if (playerLaunch != null) FocusRequester.Default else FocusRequester.Cancel } }
                         .verticalScroll(scrollState),
                 ) {
-                    org.moontechlab.selenetv.screen.detail.DetailHero(
-                        entry = state.entry,
-                        info = state.heroInfo,
-                        summaryFocusRequester = if (hasSummary) summaryFocus else null,
-                        onSummaryClick = { summaryEverOpened = true; summaryDialogVisible = true },
-                        actionsRow = {
+                    // 操作按钮行：两种 hero 布局共用，故抽成 lambda 传入
+                    val actionsRowContent: @Composable () -> Unit = {
                             val hasRecord = state.selectedPlayRecord != null
                             val hasSource = state.selectedSource != null
                             val record = state.selectedPlayRecord
@@ -443,7 +492,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                 showDelete = hasSource && hasRecord,
                                 showFavorite = hasSource,
                                 isFavorite = state.isSelectedFavorite,
-                                sourceName = state.selectedSource?.sourceName,
+                                // 新 hero 布局把源名并入副信息行（见 DetailHeroV2），故按钮区不再显示
+                                sourceName = if (state.useHeroV2) null else state.selectedSource?.sourceName,
                                 onContinue = onContinue,
                                 onPlay = onPlay,
                                 onDelete = onDeleteRecord,
@@ -456,8 +506,26 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                     (record.playTime.toFloat() / record.totalTime.toFloat()).coerceIn(0f, 1f) else 0f,
                             )
                             }
-                        },
-                    )
+                    }
+                    // 拿到 TMDB 剧照 → Apple TV 式新布局；否则旧布局。两者参数一致。
+                    if (state.useHeroV2) {
+                        org.moontechlab.selenetv.screen.detail.DetailHeroV2(
+                            entry = state.entry,
+                            info = state.heroInfo,
+                            sourceName = state.selectedSource?.sourceName,
+                            summaryFocusRequester = if (hasSummary) summaryFocus else null,
+                            onSummaryClick = { summaryEverOpened = true; summaryDialogVisible = true },
+                            actionsRow = actionsRowContent,
+                        )
+                    } else {
+                        org.moontechlab.selenetv.screen.detail.DetailHero(
+                            entry = state.entry,
+                            info = state.heroInfo,
+                            summaryFocusRequester = if (hasSummary) summaryFocus else null,
+                            onSummaryClick = { summaryEverOpened = true; summaryDialogVisible = true },
+                            actionsRow = actionsRowContent,
+                        )
+                    }
                     Box(
                         modifier = Modifier.onFocusChanged {
                             if (it.hasFocus) scope.launch { scrollState.animateScrollTo(scrollState.maxValue) }

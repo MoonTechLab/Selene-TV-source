@@ -113,7 +113,7 @@ fun SettingsTab(
     // 设置项状态
     var doubanDataSource by remember { mutableStateOf("") }
     var doubanImageSource by remember { mutableStateOf("") }
-    // [TMDB API Key 暂时移除] var tmdbApiKey by remember { mutableStateOf("") }
+    var tmdbApiKey by remember { mutableStateOf("") }
     var m3u8ProxyUrl by remember { mutableStateOf("") }
 
     // IP 选择相关状态
@@ -130,11 +130,11 @@ fun SettingsTab(
     val ipSettingFocusRequester = remember { FocusRequester() }
     val doubanDataSourceFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
-    // [TMDB API Key 暂时移除] val tmdbApiKeyFocusRequester = remember { FocusRequester() }
+    val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
 
     // 输入弹框状态
-    // [TMDB API Key 暂时移除] var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
+    var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
     var showM3u8ProxyDialog by remember { mutableStateOf(false) }
 
     // 缓存清理确认弹框状态
@@ -157,7 +157,7 @@ fun SettingsTab(
         userRole = AppDataService.parseRoleFromCookies(cookies)
         doubanDataSource = AppDataService.getDoubanDataSourceDisplayName()
         doubanImageSource = AppDataService.getDoubanImageSourceDisplayName()
-        // [TMDB API Key 暂时移除] tmdbApiKey = AppDataService.getTmdbApiKey()
+        tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
         // 加载可用 IP 列表（网络接口枚举可能阻塞，放到 IO 线程）
         val ips = withContext(Dispatchers.IO) { getAllIpAddresses() }
@@ -248,13 +248,13 @@ fun SettingsTab(
                         modifier = Modifier.focusRequester(doubanImageSourceFocusRequester)
                     )
 
-                    // [TMDB API Key 暂时移除] 如需恢复，取消注释本区块及上方相关状态/弹框
-                    // SettingItem(
-                    //     label = "TMDB API Key",
-                    //     value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
-                    //     onClick = { showTmdbApiKeyDialog = true },
-                    //     modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
-                    // )
+                    // TMDB API Key（填写后详情页可拉取剧照/ logo 渲染 Apple TV 式 hero）
+                    SettingItem(
+                        label = "TMDB API Key",
+                        value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
+                        onClick = { showTmdbApiKeyDialog = true },
+                        modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
+                    )
 
                     // M3U8 代理
                     SettingItem(
@@ -350,26 +350,26 @@ fun SettingsTab(
         )
     }
 
-    // [TMDB API Key 暂时移除] 如需恢复，取消注释本弹框区块
-    // AnimatedSelectDialog(
-    //     visible = showTmdbApiKeyDialog,
-    //     onDismiss = { showTmdbApiKeyDialog = false },
-    //     onClosed = { tmdbApiKeyFocusRequester.requestFocus() }
-    // ) { onClose ->
-    //     TextInputDialogContent(
-    //         title = "TMDB API Key",
-    //         placeholder = "请输入 TMDB API Key",
-    //         initialValue = tmdbApiKey,
-    //         onConfirm = { value ->
-    //             coroutineScope.launch {
-    //                 AppDataService.saveTmdbApiKey(value)
-    //                 tmdbApiKey = value
-    //             }
-    //             onClose()
-    //         },
-    //         onDismiss = onClose
-    //     )
-    // }
+    // TMDB API Key 输入弹框
+    AnimatedSelectDialog(
+        visible = showTmdbApiKeyDialog,
+        onDismiss = { showTmdbApiKeyDialog = false },
+        onClosed = { tmdbApiKeyFocusRequester.requestFocus() }
+    ) { onClose ->
+        TextInputDialogContent(
+            title = "TMDB API Key",
+            placeholder = "请输入 TMDB API Key",
+            initialValue = tmdbApiKey,
+            onConfirm = { value ->
+                coroutineScope.launch {
+                    AppDataService.saveTmdbApiKey(value)
+                    tmdbApiKey = value
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
 
     // M3U8 代理输入弹框
     AnimatedSelectDialog(
