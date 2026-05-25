@@ -269,8 +269,15 @@ private fun LiveChannelTile(
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
         label = "live_channel_scale",
     )
-    val shape = RoundedCornerShape(10.dp)
-    val fg = if (focused) Color(0xFF0A0A0A) else Color.White
+    val shape = RoundedCornerShape(12.dp)
+    val nameHeight = 26.dp
+    val logoBoxHeight = heightDp - nameHeight - 4.dp
+    val logoBoxWidth = logoBoxHeight * 2f
+    val cardBorderColor = when {
+        current -> LiveAccent
+        focused -> Color.White
+        else -> Color.Transparent
+    }
 
     Surface(
         onClick = onClick,
@@ -281,32 +288,32 @@ private fun LiveChannelTile(
             .focusProperties {
                 if (topRow) up = tabFocus else down = FocusRequester.Cancel
             }
-            .width(172.dp)
+            .width(logoBoxWidth)
             .height(heightDp),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (current) LiveAccent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.07f),
-            focusedContainerColor = Color.White,
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
         ),
         border = ClickableSurfaceDefaults.border(
-            border = Border(BorderStroke(if (current) 2.dp else 1.dp, if (current) LiveAccent else Color.Transparent), shape = shape),
-            focusedBorder = Border(BorderStroke(2.5.dp, if (current) LiveAccent else Color.White), shape = shape),
+            border = Border(BorderStroke(if (current) 2.dp else 1.dp, cardBorderColor), shape = shape),
+            focusedBorder = Border(BorderStroke(2.5.dp, cardBorderColor), shape = shape),
         ),
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = 58.dp, height = heightDp - 18.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (focused) Color(0xFF0A0A0A).copy(alpha = 0.08f) else Color(0xFF1E1E1E))
+                    .fillMaxWidth()
+                    .height(logoBoxHeight)
+                    .clip(shape)
+                    .background(Color(0xFF1E1E1E))
                     .then(
-                        if (current) {
-                            Modifier.border(1.dp, LiveAccent, RoundedCornerShape(8.dp))
+                        if (focused) {
+                            Modifier.border(3.dp, if (current) LiveAccent else Color.White, shape)
                         } else {
                             Modifier
                         },
@@ -321,37 +328,46 @@ private fun LiveChannelTile(
                             .crossfade(true)
                             .build(),
                         contentDescription = channel.name,
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        modifier = Modifier.fillMaxSize().padding(if (focused) 14.dp else 16.dp),
                         contentScale = ContentScale.Fit,
                     )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Tv,
                         contentDescription = null,
-                        tint = if (focused) Color(0xFF0A0A0A).copy(alpha = 0.48f) else Color.White.copy(alpha = 0.28f),
-                        modifier = Modifier.size(30.dp),
+                        tint = Color(0xFF555555),
+                        modifier = Modifier.size(34.dp),
                     )
                 }
             }
 
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth().height(nameHeight),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+            ) {
                 Text(
                     text = channel.name,
-                    color = if (current && !focused) LiveAccent else fg,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.W700,
-                    maxLines = 2,
+                    color = if (current || focused) LiveAccent else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 17.sp,
-                    textAlign = TextAlign.Start,
+                    lineHeight = 14.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 if (current) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(1.dp))
                     Text(
                         text = "● 在看",
-                        color = if (focused) Color(0xFF0A0A0A) else LiveAccent,
-                        fontSize = 10.sp,
+                        color = LiveAccent,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.W600,
+                        lineHeight = 10.sp,
+                        maxLines = 1,
                     )
                 }
             }
