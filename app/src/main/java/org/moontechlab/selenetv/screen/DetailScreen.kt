@@ -212,6 +212,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     //    （否则慢速的豆瓣请求会抛 LeftCompositionCancellation → 误判为失败 → 兜底源信息）。
     LaunchedEffect(tier2Target) {
         val id = tier2Target ?: return@LaunchedEffect
+        // tier2 winner 取「出现次数最多」，随流式结果可能改判（X→Y）。本 effect 按 tier2Target 重入，
+        // 重入即作废上一目标遗留的 tmdbTrigger：否则旧目标的 5C 仍在后台跑，而本次若走 q==null/失败
+        // 分支会先把 detailsLoading 置 false 撤掉加载页（此刻 tmdbArt 仍空→旧布局、焦点已落定），随后
+        // 那个迟到的 5C 再写入 tmdbArt → useHeroV2 翻转 → hero 子树替换 → 布局跳变且焦点丢失。
+        // 置空即取消旧 5C，保证「撤加载页时布局已是终态」这一不变式（detailsLoading=false ⟹ 无待结算 TMDB）。
+        tmdbTrigger = null
         when (val resp = doubanService.getDoubanDetails(id)) {
             is ApiResponse.Success -> {
                 val q = tmdbQueryTitle(resp.data.originalTitle, resp.data.title)
