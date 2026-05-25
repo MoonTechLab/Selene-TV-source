@@ -1,9 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     kotlin("plugin.serialization") version "2.1.0"
 }
+
+// 稳定签名：从仓库根目录 key.properties 读取密码/别名，storeFile 默认指向已提交的 key.jks。
+// CI 在构建前用 secrets 写出 key.properties；本地缺失时回退 debug 签名，保证可正常编译。
+val keystorePropsFile = rootProject.file("key.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) FileInputStream(keystorePropsFile).use { load(it) }
+}
+val keystoreFile = rootProject.file(keystoreProps.getProperty("storeFile") ?: "key.jks")
+val hasReleaseSigning = keystorePropsFile.exists() && keystoreFile.exists()
 
 android {
     namespace = "org.moontechlab.selenetv"
@@ -19,8 +31,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = keystoreFile
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // 有 key.properties 时用稳定 release 签名；否则回退 debug 以便本地构建
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
