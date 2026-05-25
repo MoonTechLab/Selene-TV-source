@@ -13,7 +13,8 @@ object PlayProgress {
     /** m3u8 代理拼接：代理为空返回原 URL，否则 URL-encode 后加前缀。 */
     fun buildPlayUrl(rawUrl: String, proxyUrl: String): String {
         if (proxyUrl.isBlank()) return rawUrl
-        return proxyUrl + URLEncoder.encode(rawUrl, Charsets.UTF_8)
+        // 用 String 重载而非 Charset 重载：后者需 API 33，minSdk 23 会触发 NewApi lint 错误
+        return proxyUrl + URLEncoder.encode(rawUrl, "UTF-8")
     }
 
     /** 由当前源 + 进度构造播放记录。play_time/total_time 单位为秒（MoonTV 约定）。 */

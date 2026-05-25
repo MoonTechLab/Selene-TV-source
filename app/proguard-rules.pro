@@ -43,6 +43,9 @@
 -dontwarn io.ktor.**
 -keep class io.netty.** { *; }
 -dontwarn io.netty.**
+# Ktor-Netty 传递依赖的可选日志/调试集成，运行时不需要（仅被反射引用）
+-dontwarn org.slf4j.**
+-dontwarn reactor.blockhound.**
 
 # ---- Coil ----
 -dontwarn coil.**
