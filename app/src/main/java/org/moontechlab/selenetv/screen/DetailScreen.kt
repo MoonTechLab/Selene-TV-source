@@ -57,6 +57,14 @@ import org.moontechlab.selenetv.service.TmdbService
 private data class TmdbArtQuery(val originalTitle: String, val year: String)
 
 /**
+ * 内容（豆瓣/TMDB hero）入场动画时长：内容从 0.96 放大并淡入「落定」所需时间。
+ * 加载 overlay 的撤场据此延后——数据就绪后，内容先在 overlay 之下跑完这段入场动画，overlay 再淡出
+ * 揭示，确保揭示出来的是已落定的成品，而非动画中途/半成品（盖住→渲染完→揭示）。两处共用此常量，
+ * 改动画时长时撤场等待自动同步。
+ */
+private const val CONTENT_ENTER_MS = 420
+
+/**
  * TMDB 查询用标题：优先 original_title；为空时回退中文标题。
  * 国产内容豆瓣不返回 original_title，但 TMDB 以中文 original_name 收录，回退中文名可命中
  * （如「凡人修仙传」→ tv 106449）；外语片有 original_title 时仍优先原名，不受影响。两者皆空返回 null。
@@ -287,6 +295,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             kotlinx.coroutines.delay(150)
             if (state.detailsLoading) showMoonOverlay = true
         } else {
+            // 数据就绪：内容已开始在 overlay 之下渲染并播放入场动画。若加载页正在显示，先继续盖住，
+            // 等内容入场动画跑完(CONTENT_ENTER_MS)再淡出揭示成品，避免露出动画中途/半成品（盖住→渲染完→揭示）。
+            // 加载页未显示（命中缓存的快路径）则不引入任何等待，内容入场动画照常可见。
+            if (showMoonOverlay) {
+                kotlinx.coroutines.delay(CONTENT_ENTER_MS.toLong())
+            }
             showMoonOverlay = false
         }
     }
@@ -450,11 +464,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     Box(modifier = Modifier.fillMaxSize().background(brush = gradientBrush)) {
         androidx.compose.animation.AnimatedVisibility(
             visible = !state.detailsLoading,
-            // 撤掉加载屏：内容从 0.96 轻微放大并淡入「落定」，与月牙层的淡出+放大形成柔和过渡
-            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(420)) +
+            // 内容从 0.96 轻微放大并淡入「落定」。数据就绪后这段动画先在加载 overlay 之下跑完
+            // （见上方 showMoonOverlay 控制），overlay 再淡出揭示已落定的成品。
+            enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(CONTENT_ENTER_MS)) +
                 androidx.compose.animation.scaleIn(
                     initialScale = 0.96f,
-                    animationSpec = androidx.compose.animation.core.tween(420, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                    animationSpec = androidx.compose.animation.core.tween(CONTENT_ENTER_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
                 ),
             exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(0)),
         ) {
