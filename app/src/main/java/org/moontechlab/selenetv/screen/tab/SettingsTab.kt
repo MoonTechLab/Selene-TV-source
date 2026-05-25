@@ -16,6 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,7 +32,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -643,10 +647,31 @@ private fun TextInputDialogContent(
 ) {
     var inputValue by remember { mutableStateOf(initialValue) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
+    var fieldFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(100)
         confirmButtonFocusRequester.requestFocus()
+    }
+
+    // 弹框是独立 Dialog 窗口，输入框无法被 Activity.currentFocus 命中、收不到网络遥控的 commitText。
+    // 展示期间注册文本接收器，网络遥控文本直接写入本地状态（与 commitText 在光标处插入同义的追加）；
+    // 弹框销毁即注销，主窗口输入框（登录页）不受影响。
+    DisposableEffect(Unit) {
+        org.moontechlab.selenetv.RemoteTextSink.sink = { incoming -> inputValue += incoming }
+        onDispose { org.moontechlab.selenetv.RemoteTextSink.sink = null }
+    }
+
+    // IME 重弹死循环修复：弹框是独立窗口，输入框聚焦时弹 IME（另一个窗口）会抢走窗口焦点；
+    // 收起键盘后弹框窗口重获焦点，Compose 默认把焦点还给输入框 → IME 又弹出 → 死循环。
+    // 监听 IME 由「显示→隐藏」，若此刻输入框仍聚焦（含遥控 BACK 收键盘的路径），主动把焦点
+    // 移到确认按钮：输入框失焦后既不会触发回弹，焦点也仍留在弹框内、不丢落点。
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val imeVisible = imeBottom > 0
+    LaunchedEffect(imeVisible) {
+        if (!imeVisible && fieldFocused) {
+            try { confirmButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+        }
     }
 
     Column(
@@ -672,6 +697,7 @@ private fun TextInputDialogContent(
             onValueChange = { inputValue = it },
             modifier = Modifier
                 .fillMaxWidth()
+                .onFocusChanged { fieldFocused = it.isFocused }
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF2A2A2A))
                 .border(1.dp, Color(0xFF444444), RoundedCornerShape(12.dp))
@@ -682,6 +708,11 @@ private fun TextInputDialogContent(
             ),
             cursorBrush = SolidColor(Color.White),
             singleLine = true,
+            // 软键盘「完成」=确认动作：完成时把焦点移到确认按钮 → 输入框失焦、IME 关闭且不回弹
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                try { confirmButtonFocusRequester.requestFocus() } catch (_: Exception) {}
+            }),
             decorationBox = { innerTextField ->
                 Box {
                     if (inputValue.isEmpty()) {

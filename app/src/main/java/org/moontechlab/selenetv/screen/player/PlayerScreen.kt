@@ -46,7 +46,6 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -60,16 +59,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import org.moontechlab.selenetv.screen.detail.sourceKey
-import org.moontechlab.selenetv.util.getImageUrlSync
 
 private const val SEEK_STEP_MS = 10_000L
 private const val AUTO_HIDE_MS = 5_000L
@@ -289,15 +285,19 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             .focusProperties { exit = { FocusRequester.Cancel } },
     ) {
 
-        // 真实视频画面：海报背景垫底，PlayerView 叠在上层
-        StagePlaceholder(poster = launch.heroInfo?.poster?.takeIf { it.isNotEmpty() } ?: launch.sources.firstOrNull()?.poster)
+        // 视频画面：底色纯黑（不铺海报背景），PlayerView 叠在上层；非画面区域即纯黑。
+        // 用 texture_view 背景的 PlayerView（见 R.layout.player_view_texture）：默认 SurfaceView 的视频
+        // 像素在独立合成层、不受退出 fadeOut 的 Compose alpha 影响，会出现「黑边先淡出、中间视频后消失」的
+        // 两段式退场；TextureView 走普通视图层，视频随覆盖层一起淡出。
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    player = controller.exo
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                }
+                (android.view.LayoutInflater.from(ctx)
+                    .inflate(org.moontechlab.selenetv.R.layout.player_view_texture, null) as PlayerView)
+                    .apply {
+                        useController = false
+                        player = controller.exo
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    }
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -518,21 +518,6 @@ internal fun BackExitHint(visible: Boolean, modifier: Modifier = Modifier) {
 }
 
 // ───────────────────────────── 舞台占位 ─────────────────────────────
-
-@Composable
-private fun StagePlaceholder(poster: String?) {
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF050505))) {
-        if (poster != null) {
-            AsyncImage(
-                model = getImageUrlSync(poster),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().blur(40.dp).graphicsLayer { alpha = 0.32f },
-                contentScale = ContentScale.Crop,
-            )
-        }
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
-    }
-}
 
 // ───────────────────────────── 中央播放/暂停闪现 ─────────────────────────────
 

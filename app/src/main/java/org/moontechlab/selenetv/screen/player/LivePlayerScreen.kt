@@ -189,13 +189,17 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
             // 焦点陷阱：禁止任何方向把焦点带出播放页覆盖层、穿透到下层直播 Tab
             .focusProperties { exit = { FocusRequester.Cancel } },
     ) {
+        // texture_view 背景的 PlayerView：默认 SurfaceView 的视频不随退出 slideOut 位移，会与黑边脱节；
+        // TextureView 走普通视图层，视频随覆盖层一起滑出。详见 R.layout.player_view_texture。
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    player = controller.exo
-                    setBackgroundColor(android.graphics.Color.BLACK)
-                }
+                (android.view.LayoutInflater.from(ctx)
+                    .inflate(org.moontechlab.selenetv.R.layout.player_view_texture, null) as PlayerView)
+                    .apply {
+                        useController = false
+                        player = controller.exo
+                        setBackgroundColor(android.graphics.Color.BLACK)
+                    }
             },
             modifier = Modifier.fillMaxSize(),
         )

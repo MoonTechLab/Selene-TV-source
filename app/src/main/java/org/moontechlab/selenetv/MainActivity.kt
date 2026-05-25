@@ -22,6 +22,16 @@ import java.net.URL
 
 private const val TAG = "MainActivity"
 
+/**
+ * 网络遥控文本输入的「活动接收器」。
+ * 独立窗口（如设置里的输入弹框走 androidx.compose.ui.window.Dialog）里的输入框无法被
+ * Activity.currentFocus 命中，commitText 送不达。这类输入框在展示期间注册 sink，网络遥控文本
+ * 优先写入它；主窗口输入框（如登录页）不注册，sink 为 null，仍走 currentFocus + InputConnection。
+ */
+object RemoteTextSink {
+    var sink: ((String) -> Unit)? = null
+}
+
 // TV 设计基准：1080p 分辨率，density = 1.0（即 1dp = 1px）
 // 这样在 4K 电视上 1dp = 2px，保持视觉一致性
 private const val DESIGN_WIDTH_PX = 1080f
@@ -56,11 +66,16 @@ class MainActivity : ComponentActivity() {
         // 设置文本输入回调
         RemoteControlServer.setTextInputCallback { text ->
             mainHandler.post {
-                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                val focusedView = currentFocus
-                if (focusedView != null) {
-                    val inputConnection = focusedView.onCreateInputConnection(android.view.inputmethod.EditorInfo())
-                    inputConnection?.commitText(text, 1)
+                // 独立窗口输入框（如设置输入弹框）注册了 sink → 优先写入；否则走主窗口焦点视图。
+                val sink = RemoteTextSink.sink
+                if (sink != null) {
+                    sink(text)
+                } else {
+                    val focusedView = currentFocus
+                    if (focusedView != null) {
+                        val inputConnection = focusedView.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+                        inputConnection?.commitText(text, 1)
+                    }
                 }
             }
         }
@@ -68,6 +83,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppNavHost()
         }
+    }
+
+    // 返回键兜底（修复真机播放页返回失效）：
+    // 播放页覆盖层所在的 Compose 子树会消费 BACK 的 ACTION_DOWN（实测 super.dispatchKeyEvent 对
+    // DOWN 返回 true），致使 Activity 的按下追踪(startTracking)未启动 → 抬起时系统不触发
+    // onBackPressed → Compose 的 BackHandler 收不到返回事件。而 web 遥控直调 onBackPressedDispatcher
+    // 却正常，说明 dispatcher 与各 BackHandler 本身无误，断点只在「物理键没送到 dispatcher」。
+    // 故在 BACK 抬起时：先给视图层处理机会，若其未处理(super 返回 false，即被吞了 DOWN 的情况)，
+    // 主动转交 onBackPressedDispatcher，复刻 web 遥控已验证可用的路径；首页等正常链路 super 返回
+    // true(已在 onKeyUp 内触发过 onBackPressed)，则不重复触发。
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+            if (!super.dispatchKeyEvent(event)) {
+                onBackPressedDispatcher.onBackPressed()
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onDestroy() {

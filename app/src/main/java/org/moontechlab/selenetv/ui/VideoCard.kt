@@ -243,6 +243,8 @@ fun VideoCard(
             .width(cardWidth)
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
+                // 还原到来源卡片时上报，让 HomeScreen 的还原协程知道 requestFocus 已生效、停止重试
+                if (focusState.isFocused) returnFocus?.markFocused(returnKey)
             }
             .graphicsLayer {
                 scaleX = scale

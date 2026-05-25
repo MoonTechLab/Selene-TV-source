@@ -158,10 +158,26 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
             hadDetailOpen = true
         } else if (hadDetailOpen) {
             hadDetailOpen = false
-            delay(300) // 等覆盖层滑出动画(280ms)结束、DetailScreen 释放焦点后再恢复
             // 还原窗口内暂停各行的「获得焦点即跳第一张」，避免把精确还原弹回第一张
             detailReturn.restoreInProgress = true
-            restoreActiveTabFocus()
+            detailReturn.targetFocused = false
+            // 覆盖层滑出(280ms)结束、详情释放焦点的时刻有帧抖动，单次固定延时还原偶发失败
+            // （详情仍占用焦点时 requestFocus 被拒，表现为焦点掉到筛选行）。在一段窗口内重试，
+            // 直到来源卡片真正拿到焦点（markFocused 置位）为止。
+            if (detailReturn.targetKey != null) {
+                var attempts = 0
+                while (!detailReturn.targetFocused && attempts < 24) {
+                    delay(50)
+                    if (detailReturn.targetFocused) break
+                    try { detailReturn.requester.requestFocus() } catch (_: Exception) {}
+                    attempts++
+                }
+            }
+            // 始终未还原（无目标卡片，或其所在行已被回收）→ 回退到内容包裹层 focusRestorer
+            if (!detailReturn.targetFocused) {
+                delay(50)
+                try { contentRestoreFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
             delay(250)
             detailReturn.restoreInProgress = false
         }

@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,8 +112,7 @@ private fun EpisodeChip(label: String, onClick: () -> Unit, modifier: Modifier =
         onClick = onClick,
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .focusable(),
+            .graphicsLayer { scaleX = scale; scaleY = scale },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(

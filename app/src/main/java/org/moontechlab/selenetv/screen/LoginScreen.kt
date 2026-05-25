@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -478,27 +479,24 @@ private fun LoginQrCodeSection(
     modifier: Modifier = Modifier
 ) {
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var remoteUrl by remember { mutableStateOf("") }
 
-    // 生成二维码
+    // 与设置页 Web 遥控器一致：二维码内容为 http://IP:端口/remote_control。
+    // 手机同局域网用浏览器扫码/打开即可远程往登录框输入（D-pad 打字繁琐，引导走 Web 遥控）。
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
                 val ips = getAllIpAddresses()
+                val ip = ips.find { it.startsWith("192.168.") } ?: ips.firstOrNull()
                 val port = RemoteControlServer.getPort()
-                val token = AppDataService.getSessionToken()
-
-                // 构建 JSON
-                val json = JSONObject().apply {
-                    put("ips", JSONArray(ips))
-                    put("port", port)
-                    put("token", token)
+                if (ip != null) {
+                    val url = "http://$ip:$port/remote_control"
+                    remoteUrl = url
+                    val qrBytes = QRCode.ofSquares()
+                        .build(url)
+                        .renderToBytes()
+                    qrBitmap = BitmapFactory.decodeByteArray(qrBytes, 0, qrBytes.size)
                 }
-
-                val qrContent = json.toString()
-                val qrBytes = QRCode.ofSquares()
-                    .build(qrContent)
-                    .renderToBytes()
-                qrBitmap = BitmapFactory.decodeByteArray(qrBytes, 0, qrBytes.size)
             } catch (_: Exception) {
             }
         }
@@ -522,7 +520,7 @@ private fun LoginQrCodeSection(
         qrBitmap?.let { bitmap ->
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = "登录二维码",
+                contentDescription = "遥控器二维码",
                 modifier = Modifier
                     .size(240.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -542,19 +540,14 @@ private fun LoginQrCodeSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "使用 Selene 移动 App 扫描二维码登录",
-            fontSize = 11.sp,
-            color = TextGray
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-            
-        Text(
-            text = "Selene Mobile Ver. ≥ v1.7.0",
-            fontSize = 10.sp,
-            color = TextGray.copy(alpha = 0.7f)
-        )
+        if (remoteUrl.isNotEmpty()) {
+            Text(
+                text = "同局域网下浏览器打开：$remoteUrl",
+                fontSize = 13.sp,
+                color = TextGray,
+                textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(modifier = Modifier.height(28.dp))
 

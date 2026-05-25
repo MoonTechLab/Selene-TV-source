@@ -154,7 +154,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             }
             else -> rawResults
         }
-        state = state.copy(sources = displayed)
+        // 统一按 source+id 去重：SearchAggregate 快照与 History 回退未经搜索流的去重，
+        // 同一源可能重复出现；distinctBy 幂等，对已去重的搜索结果无副作用。
+        state = state.copy(sources = displayed.distinctBy { sourceKey(it) })
     }
 
     // 3) 拉豆瓣详情（Douban 入口）
@@ -336,6 +338,14 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         if (playerLaunch == null && playerEverOpened) {
             kotlinx.coroutines.delay(300)
             try { primaryFocus.requestFocus() } catch (_: Exception) {}
+            // 退出播放页后整体重拉播放记录，使详情页「继续播放」进度与服务端一致。
+            // 播放页的保存/换源删记录均为 fire-and-forget（PlayProgressReporter），
+            // 故再略等其落库后重拉；整体替换天然覆盖多次换源（新源记录 + 被删旧源记录）。
+            kotlinx.coroutines.delay(400)
+            try {
+                val records = withContext(Dispatchers.IO) { ApiService.getPlayRecords() }
+                state = state.copy(playRecords = records)
+            } catch (e: Exception) { android.util.Log.w("DetailScreen", "退出播放页刷新播放记录失败", e) }
         }
     }
     fun launchPlayer(source: SearchResult, episode: Int, startMs: Long, totalMs: Long) {
@@ -477,9 +487,18 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                     modifier = Modifier
                         .fillMaxSize()
                         .focusGroup()
-                        // 平时禁止焦点逃逸到覆盖层下的首页；但播放页覆盖层打开时需放行，
-                        // 否则播放页 requestFocus 无法把焦点从详情内容里夺走（焦点钉死、任意键失效）。
-                        .focusProperties { exit = { if (playerLaunch != null) FocusRequester.Default else FocusRequester.Cancel } }
+                        // 平时禁止焦点逃逸到覆盖层下的首页；但任意会抢焦点的覆盖层（播放页 /
+                        // 选集弹窗 / 简介弹窗）打开时需放行，否则其 requestFocus 无法把焦点从详情
+                        // 内容里夺走，焦点钉死在播放按钮、弹窗收不到方向键。
+                        .focusProperties {
+                            exit = {
+                                if (playerLaunch != null || state.episodePickerVisible || summaryDialogVisible) {
+                                    FocusRequester.Default
+                                } else {
+                                    FocusRequester.Cancel
+                                }
+                            }
+                        }
                         .verticalScroll(scrollState),
                 ) {
                     // 操作按钮行：两种 hero 布局共用，故抽成 lambda 传入
@@ -578,7 +597,14 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                     state = state.copy(episodePickerVisible = false)
                     launchPlayer(source, idx, 0L, 0L)
                 },
-                onDismiss = { state = state.copy(episodePickerVisible = false) },
+                onDismiss = {
+                    state = state.copy(episodePickerVisible = false)
+                    // 弹窗里被聚焦的剧集 chip 随之销毁，详情页会丢焦；把焦点交回主操作按钮。
+                    scope.launch {
+                        kotlinx.coroutines.delay(50)
+                        try { primaryFocus.requestFocus() } catch (_: Exception) {}
+                    }
+                },
             )
         }
 
