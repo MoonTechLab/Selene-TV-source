@@ -10,7 +10,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,7 +74,7 @@ import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.model.LiveChannelGroup
 
 private val LiveAccent = Color(0xFF4CAF50)
-private val LivePanelHeight = 256.dp
+private val LivePanelHeight = 300.dp
 private const val AllTab = "全部"
 
 internal fun livePanelChannelsForTab(groups: List<LiveChannelGroup>, tab: String): List<LiveChannel> =
@@ -252,6 +254,7 @@ private fun LiveChannelGrid(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun LiveChannelTile(
     channel: LiveChannel,
     current: Boolean,
@@ -270,7 +273,7 @@ private fun LiveChannelTile(
         label = "live_channel_scale",
     )
     val shape = RoundedCornerShape(12.dp)
-    val nameHeight = 26.dp
+    val nameHeight = 20.dp
     val logoBoxHeight = heightDp - nameHeight - 4.dp
     val logoBoxWidth = logoBoxHeight * 2f
     val cardBorderColor = when {
@@ -328,7 +331,7 @@ private fun LiveChannelTile(
                             .crossfade(true)
                             .build(),
                         contentDescription = channel.name,
-                        modifier = Modifier.fillMaxSize().padding(if (focused) 14.dp else 16.dp),
+                        modifier = Modifier.fillMaxSize().padding(if (focused) 5.dp else 7.dp),
                         contentScale = ContentScale.Fit,
                     )
                 } else {
@@ -336,7 +339,7 @@ private fun LiveChannelTile(
                         imageVector = Icons.Default.Tv,
                         contentDescription = null,
                         tint = Color(0xFF555555),
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(40.dp),
                     )
                 }
             }
@@ -348,17 +351,30 @@ private fun LiveChannelTile(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
             ) {
-                Text(
-                    text = channel.name,
-                    color = if (current || focused) LiveAccent else Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (focused) {
+                    Text(
+                        text = channel.name,
+                        color = if (current || focused) LiveAccent else Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
+                        maxLines = 1,
+                        softWrap = false,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.fillMaxWidth().basicMarquee(),
+                    )
+                } else {
+                    Text(
+                        text = channel.name,
+                        color = if (current || focused) LiveAccent else Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (current) {
                     Spacer(modifier = Modifier.height(1.dp))
                     Text(
