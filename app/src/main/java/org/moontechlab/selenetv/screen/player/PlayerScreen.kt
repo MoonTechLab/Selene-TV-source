@@ -277,8 +277,32 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         PlayPauseFlash(visible = flashVisible, isPlaying = isPlaying)
 
         if (controller.isBuffering) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 比详情页全屏加载更轻的径向压暗：播放画面在后，短暂缓冲不喧宾夺主
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.50f),
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    org.moontechlab.selenetv.ui.MoonSpinner(size = 104.dp)
+                    Text(
+                        text = "正在缓冲",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 12.sp,
+                        letterSpacing = 6.sp,
+                    )
+                }
             }
         }
         if (controller.error != null) {
