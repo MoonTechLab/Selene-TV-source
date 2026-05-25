@@ -119,6 +119,25 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     }
     fun openPanel() { controlsVisible = true; panelTab = PanelTab.Detail; panelOpen = true }
 
+    // 该 source+id 的播放记录（用于逐集续看：记录的 index 与目标集吻合时恢复其位置）
+    var sourceRecord by remember { mutableStateOf<org.moontechlab.selenetv.model.PlayRecord?>(null) }
+    LaunchedEffect(currentSourceKey) {
+        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+        sourceRecord = if (src != null) {
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    org.moontechlab.selenetv.service.ApiService.getPlayRecords()["${src.source}+${src.id}"]
+                }
+            } catch (_: Exception) { null }
+        } else null
+    }
+
+    // 目标集的续看起点（毫秒）：记录 index 命中该集才用，否则 0
+    fun resumeForEpisode(index: Int): Long {
+        val rec = sourceRecord ?: return 0L
+        return if (rec.index - 1 == index) rec.playTime * 1000 else 0L
+    }
+
     // 载入指定集；startMs 为续播位置（切集默认 0，进入时用 launch.startPositionMs）
     fun playEpisode(index: Int, startMs: Long) {
         val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
@@ -317,9 +336,29 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     tab = panelTab,
                     onTabChange = { panelTab = it },
                     onNextEpisode = { goNext() },
-                    onPickEpisode = { idx -> currentEpisode = idx; panelOpen = false; wake() },
+                    onPickEpisode = { idx ->
+                        val src = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+                        src?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, durationMs, force = true) }
+                        reporter.resetThrottle()
+                        currentEpisode = idx
+                        panelOpen = false
+                        playEpisode(idx, resumeForEpisode(idx))
+                        wake()
+                    },
                     onPickSource = { key ->
-                        if (key != currentSourceKey) { currentSourceKey = key; currentEpisode = 0 }
+                        if (key != currentSourceKey) {
+                            val oldSrc = launch.sources.firstOrNull { sourceKey(it) == currentSourceKey } ?: launch.selectedSource
+                            oldSrc?.let { reporter.save(it, launch.title, currentEpisode, controller.positionMs, durationMs, force = true) }
+                            reporter.resetThrottle()
+                            val carriedMs = controller.positionMs
+                            val newSrc = launch.sources.firstOrNull { sourceKey(it) == key }
+                            // 带进度续播：新源集数足够则保持集号与位置，否则回落到第 1 集 0 秒
+                            val newEpisode = currentEpisode.coerceIn(0, (newSrc?.episodes?.lastIndex ?: 0).coerceAtLeast(0))
+                            val startMs = if (newEpisode == currentEpisode) carriedMs else 0L
+                            currentSourceKey = key
+                            currentEpisode = newEpisode
+                            playEpisode(newEpisode, startMs)
+                        }
                         panelOpen = false; wake()
                     },
                     scrubberFocus = scrubberFocus,
