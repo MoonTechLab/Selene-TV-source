@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +45,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,13 +53,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.LiveChannel
 import org.moontechlab.selenetv.service.MediaHttp
 
 private const val LIVE_AUTO_HIDE_MS = 4_000L
-private val LiveGreen = Color(0xFF4CAF50)
 
 @Composable
 fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
@@ -201,15 +206,36 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
                     )
                     .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (panelOpen) 2.dp else 18.dp),
             ) {
-                LiveOsd(
-                    channelName = currentChannel.name,
-                    controlsVisible = controlsVisible,
-                    focusRequester = osdFocus,
-                    onFocused = { panelOpen = false },
-                    onWake = { wake() },
-                    onToggle = { togglePlay() },
-                    onOpenPanel = { openPanel() },
-                )
+                Column {
+                    LiveOsd(
+                        channelName = currentChannel.name,
+                        channelLogo = currentChannel.logo,
+                        userAgent = MediaHttp.resolveLiveUa(launch.source.ua),
+                        controlsVisible = controlsVisible,
+                        focusRequester = osdFocus,
+                        onFocused = { panelOpen = false },
+                        onWake = { wake() },
+                        onToggle = { togglePlay() },
+                        onOpenPanel = { openPanel() },
+                    )
+                    if (!panelOpen) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.35f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "频道列表", color = Color.White.copy(alpha = 0.35f), fontSize = 11.sp)
+                        }
+                    }
+                }
             }
 
             if (panelOpen) {
@@ -229,6 +255,8 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
 @Composable
 private fun LiveOsd(
     channelName: String,
+    channelLogo: String,
+    userAgent: String,
     controlsVisible: Boolean,
     focusRequester: FocusRequester,
     onFocused: () -> Unit,
@@ -236,6 +264,8 @@ private fun LiveOsd(
     onToggle: () -> Unit,
     onOpenPanel: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -281,17 +311,27 @@ private fun LiveOsd(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Spacer(modifier = Modifier.width(22.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color.White.copy(alpha = 0.10f))
-                .padding(horizontal = 13.dp, vertical = 7.dp),
-        ) {
-            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(LiveGreen))
-            Text(text = "LIVE", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.W800)
+        if (channelLogo.isNotBlank()) {
+            Spacer(modifier = Modifier.width(22.dp))
+            Box(
+                modifier = Modifier
+                    .height(34.dp)
+                    .widthIn(max = 72.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(channelLogo)
+                        .addHeader("User-Agent", userAgent)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(6.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
         }
     }
 }
