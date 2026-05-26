@@ -36,9 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -150,7 +152,7 @@ private fun LoadingActionPill(modifier: Modifier = Modifier) {
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
         label = "loading_pill_scale",
     )
-    val fg = if (focused) FocusedFg else UnfocusedFg
+    val textColor = Color.White.copy(alpha = if (focused) 0.95f else 0.6f)
     Surface(
         onClick = {},
         modifier = modifier
@@ -170,36 +172,57 @@ private fun LoadingActionPill(modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MiniSpinner(color = fg, modifier = Modifier.size(16.dp))
-            Text(text = "正在加载播放源", color = fg, fontSize = 15.sp, fontWeight = FontWeight.W600)
+            MoonCrescentSpinner(modifier = Modifier.size(18.dp))
+            Text(text = "正在加载播放源", color = textColor, fontSize = 15.sp, fontWeight = FontWeight.W600)
         }
     }
 }
 
-/** 极简加载细弧：单色 270° 圆弧匀速旋转，贴合简洁胶囊，区别于全屏国风月牙加载层。 */
+/**
+ * 月神国风加载：仅中间月牙匀速旋转 + 一层轻柔光晕，去掉 [MoonSpinner] 的外环星点/巡天亮星，
+ * 适配按钮内联小尺寸。月牙路径与 MoonSpinner 同源（外圆 45% + 内椭圆 32%×45% 挖出缺口）。
+ */
 @Composable
-private fun MiniSpinner(color: Color, modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "mini_spinner")
-    val angle by transition.animateFloat(
+private fun MoonCrescentSpinner(modifier: Modifier = Modifier) {
+    val infinite = rememberInfiniteTransition(label = "moon_pill")
+    val rotation by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = LinearEasing),
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "mini_spinner_angle",
+        label = "moon_pill_rot",
     )
-    Canvas(modifier = modifier) {
-        val stroke = 2.dp.toPx()
-        drawArc(
-            color = color,
-            startAngle = angle,
-            sweepAngle = 270f,
-            useCenter = false,
-            topLeft = Offset(stroke / 2, stroke / 2),
-            size = Size(size.width - stroke, size.height - stroke),
-            style = Stroke(width = stroke, cap = StrokeCap.Round),
-        )
+    Canvas(modifier = modifier.graphicsLayer { rotationZ = rotation }) {
+        val w = size.width
+        val h = size.height
+        val outerR = w * 0.45f
+        val innerRx = w * 0.32f
+        val innerRy = h * 0.45f
+        val cx = w / 2f
+        val cy = h / 2f
+        val path = Path().apply {
+            arcTo(
+                rect = Rect(Offset(cx - outerR, cy - outerR), Size(outerR * 2, outerR * 2)),
+                startAngleDegrees = -90f, sweepAngleDegrees = 180f, forceMoveTo = true,
+            )
+            arcTo(
+                rect = Rect(Offset(cx - innerRx, cy - innerRy), Size(innerRx * 2, innerRy * 2)),
+                startAngleDegrees = 90f, sweepAngleDegrees = -180f, forceMoveTo = false,
+            )
+            close()
+        }
+        drawIntoCanvas { canvas ->
+            val paint = Paint().apply {
+                color = Color(0xFFFAFAFA)
+                asFrameworkPaint().apply {
+                    isAntiAlias = true
+                    setShadowLayer(3f, 0f, 0f, android.graphics.Color.argb(120, 255, 255, 255))
+                }
+            }
+            canvas.drawPath(path, paint)
+        }
     }
 }
 
