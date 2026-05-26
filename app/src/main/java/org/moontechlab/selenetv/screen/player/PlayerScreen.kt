@@ -86,7 +86,7 @@ private const val BACK_EXIT_WINDOW_MS = 2_000L
 fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val controller = remember { PlayerController(context) }
+    val controller: VideoPlayer = remember { PlayerFactory.create(context) }
     val reporter = remember { PlayProgressReporter() }
 
     var controlsVisible by remember { mutableStateOf(true) }

@@ -68,7 +68,7 @@ private val LiveGreen = Color(0xFF4CAF50)
 @Composable
 fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val controller = remember { PlayerController(context, MediaHttp.dataSourceFactory(launch.source.ua)) }
+    val controller: VideoPlayer = remember { PlayerFactory.create(context, launch.source.ua) }
 
     var currentChannel by remember { mutableStateOf(launch.channel) }
     var controlsVisible by remember { mutableStateOf(true) }
