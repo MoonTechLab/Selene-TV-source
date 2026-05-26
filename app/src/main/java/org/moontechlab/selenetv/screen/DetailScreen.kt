@@ -768,15 +768,20 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             onDismiss = { summaryDialogVisible = false },
         )
 
-        // 播放页覆盖层：淡入覆盖整个详情；退场期间保留最后一次入参，避免内容提前消失。
-        val retainedLaunch = remember { mutableStateOf<PlayerLaunch?>(null) }
-        playerLaunch?.let { retainedLaunch.value = it }
-        androidx.compose.animation.AnimatedVisibility(
-            visible = playerLaunch != null,
-            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(280)),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(240)),
-        ) {
-            retainedLaunch.value?.let { l ->
+        // 播放页覆盖层：用 Dialog 建立独立焦点域（与 EpisodePickerDialog / SummaryDialog 同理）。
+        // 详情根 Box 是 focusGroup(exit=Cancel)，作为兄弟节点的播放页无法被跨焦点组的 requestFocus
+        // 夺焦（焦点进不去 → 方向键全失效）；Dialog 是独立窗口，焦点天然隔离，进度条 requestFocus 即生效。
+        // 返回键的分层逻辑（收面板/隐控制条/二次确认退出）由 PlayerScreen 自身 BackHandler 处理，
+        // 故关闭 Dialog 默认的 back 消费。
+        playerLaunch?.let { l ->
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { playerLaunch = null },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                ),
+            ) {
                 PlayerScreen(launch = l, onExit = { playerLaunch = null })
             }
         }
