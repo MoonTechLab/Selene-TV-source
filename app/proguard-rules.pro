@@ -52,3 +52,6 @@
 
 # ---- Coroutines ----
 -dontwarn kotlinx.coroutines.**
+
+# libmpv JNI 绑定：native 方法所在类不可裁剪/混淆
+-keep class dev.jdtech.mpv.** { *; }

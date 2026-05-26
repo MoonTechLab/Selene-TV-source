@@ -117,6 +117,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.datasource.okhttp)
+    implementation(libs.libmpv)
 
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")

@@ -12,6 +12,8 @@
         android:name="android.software.leanback"
         android:required="false" />
 
+    <uses-sdk tools:overrideLibrary="dev.jdtech.mpv" />
+
     <application
         android:name=".SeleneApplication"
         android:allowBackup="true"
