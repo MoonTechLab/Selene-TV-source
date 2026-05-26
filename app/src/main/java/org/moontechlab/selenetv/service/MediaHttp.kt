@@ -20,6 +20,9 @@ object MediaHttp {
 
     private val client: OkHttpClient by lazy { createUnsafeOkHttpClient() }
 
+    /** 供测速等普通 HTTP 请求复用的客户端（同样信任所有证书、跳过 hostname 校验）。 */
+    val httpClient: OkHttpClient get() = client
+
     /** ExoPlayer DefaultMediaSourceFactory 使用的 DataSource 工厂。 */
     val dataSourceFactory: DataSource.Factory by lazy {
         OkHttpDataSource.Factory(client)

@@ -2,6 +2,7 @@ package org.moontechlab.selenetv.screen.detail
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,8 +52,11 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.SourceSpeed
+import org.moontechlab.selenetv.model.SpeedTestState
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.service.SearchProgress
+import org.moontechlab.selenetv.service.SpeedTestService
 import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
 
@@ -63,11 +70,30 @@ fun DetailSourcesSection(
     complete: Boolean,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    // 在已选中的源卡片上再次按 OK：等同于点按主操作按钮（继续观看 / 播放 / 多集选集）。
+    onPlaySelected: () -> Unit = {},
     onSearch: () -> Unit = {},
     searchFocusRequester: FocusRequester? = null,
+    // 测速优选
+    speedResults: Map<String, SourceSpeed> = emptyMap(),
+    speedTesting: Boolean = false,
+    onSpeedTest: () -> Unit = {},
+    onStopSpeedTest: () -> Unit = {},
+    speedTestFocusRequester: FocusRequester? = null,
 ) {
     val listState = rememberLazyListState()
     val firstItemFocus = remember { FocusRequester() }
+
+    // 测速进行中，当前综合分最高的源 → 绿色「领先」描边。每出一条新结果按当前批次基准重算。
+    val leadingKey by remember(speedResults, speedTesting) {
+        derivedStateOf {
+            if (!speedTesting) return@derivedStateOf null
+            val done = speedResults.filterValues { it.state == SpeedTestState.DONE }
+            if (done.isEmpty()) return@derivedStateOf null
+            val maxSpeed = SpeedTestService.maxSpeed(done.values)
+            done.maxByOrNull { SpeedTestService.score(it.value, maxSpeed) }?.key
+        }
+    }
 
     // 详情内容禁用了垂直 bringIntoView（会向下级联），这里给横向 LazyRow 重新提供横向滚动 spec，
     // 否则左右选源时不会把卡片滚入视野。
@@ -145,10 +171,22 @@ fun DetailSourcesSection(
                         .focusGroup()
                         .focusRestorer(firstItemFocus),
                 ) {
+                    // 前导测速胶囊：与源卡片同一导航平面，左右键即可够到；测速中变为「停止」入口。
+                    item(key = "__speedtest__", contentType = "speedtest") {
+                        SpeedTestPill(
+                            testing = speedTesting,
+                            testedCount = speedResults.count { it.value.state != SpeedTestState.TESTING },
+                            totalCount = speedResults.size,
+                            onClick = { if (speedTesting) onStopSpeedTest() else onSpeedTest() },
+                            modifier = speedTestFocusRequester
+                                ?.let { Modifier.focusRequester(it) } ?: Modifier,
+                        )
+                    }
                     itemsIndexed(sources, key = { _, s -> "${s.source}+${s.id}" }) { index, result ->
                         val key = "${result.source}+${result.id}"
                         val record = playRecords[key]
                         val isSelected = selectedSourceKey == key
+                        val speed = speedResults[key]
                         VideoCard(
                             videoInfo = VideoInfo(
                                 id = result.id,
@@ -166,9 +204,20 @@ fun DetailSourcesSection(
                                 doubanId = result.doubanId?.toString(),
                             ),
                             from = VideoCardSource.SOURCE,
-                            onClick = { onSelect(key) },
+                            // 测速进行中禁止操作；否则：未选中 → 切换为当前源；已是当前源 → 等同主播放按钮
+                            onClick = {
+                                if (!speedTesting) {
+                                    if (isSelected) onPlaySelected() else onSelect(key)
+                                }
+                            },
                             isSelected = isSelected,
-                            modifier = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier,
+                            speed = speed,
+                            leading = key == leadingKey,
+                            dimmed = speedTesting && (speed == null || speed.state == SpeedTestState.TESTING),
+                            // 测速完成后按分重排时，卡片平滑位移（签名交互）
+                            modifier = Modifier
+                                .animateItem()
+                                .then(if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier),
                         )
                     }
                 }
@@ -216,6 +265,98 @@ private fun SearchCtaButton(onClick: () -> Unit, modifier: Modifier = Modifier) 
                 fontWeight = FontWeight.W600,
             )
         }
+    }
+}
+
+// 焦点态黑白反色（与 DetailActionButtons 的动作按钮同一约定）：聚焦白底深字，非聚焦半透明白底白字。
+private val PillUnfocusedBg = Color.White.copy(alpha = 0.15f)
+private val PillFocusedBg = Color.White
+private val PillFocusedFg = Color(0xFF0A0A0A)
+
+/**
+ * 源 rail 的前导测速胶囊：卡片尺寸的瓦片（与 VideoCard LARGE 封面同宽高，顶部对齐）。
+ * 待命态：自绘闪电 + 「测速优选」；测速中：月牙 spinner + 进度 + 「按 OK 停止」。
+ * 内容随焦点黑白反色，不使用任何强调色。
+ */
+@Composable
+private fun SpeedTestPill(
+    testing: Boolean,
+    testedCount: Int,
+    totalCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "speedtest_pill_scale",
+    )
+    val fg = if (focused) PillFocusedFg else Color.White
+    val subFg = fg.copy(alpha = 0.55f)
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .width(120.dp)
+            .height(180.dp),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = PillUnfocusedBg,
+            focusedContainerColor = PillFocusedBg,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (testing) {
+                MoonCrescentSpinner(modifier = Modifier.size(34.dp), color = fg)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "测速中", color = fg, fontSize = 15.sp, fontWeight = FontWeight.W700)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$testedCount/$totalCount",
+                    color = subFg,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.W600,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(text = "按 OK 停止", color = subFg, fontSize = 11.sp)
+            } else {
+                LightningBolt(color = fg, modifier = Modifier.size(width = 24.dp, height = 36.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(text = "测速优选", color = fg, fontSize = 15.sp, fontWeight = FontWeight.W700)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = "自动选最优源", color = subFg, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+/**
+ * 自绘闪电图标（矢量 Path，随父级颜色反色），替代系统 emoji。
+ * 七点折线勾出经典闪电轮廓，在 [0,1] 归一坐标下按容器尺寸缩放。
+ */
+@Composable
+private fun LightningBolt(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val path = Path().apply {
+            moveTo(0.60f * w, 0f)
+            lineTo(0.14f * w, 0.56f * h)
+            lineTo(0.44f * w, 0.56f * h)
+            lineTo(0.32f * w, 1f * h)
+            lineTo(0.86f * w, 0.40f * h)
+            lineTo(0.56f * w, 0.40f * h)
+            lineTo(0.72f * w, 0f)
+            close()
+        }
+        drawPath(path = path, color = color)
     }
 }
 

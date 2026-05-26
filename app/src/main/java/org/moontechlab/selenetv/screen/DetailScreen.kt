@@ -34,12 +34,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.SourceSpeed
+import org.moontechlab.selenetv.model.SpeedTestState
 import org.moontechlab.selenetv.screen.detail.DetailSourceResolver
 import org.moontechlab.selenetv.screen.detail.DetailUiState
 import org.moontechlab.selenetv.screen.detail.SourceFilter
@@ -56,6 +60,7 @@ import org.moontechlab.selenetv.service.DoubanService
 import org.moontechlab.selenetv.service.DownstreamService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchService
+import org.moontechlab.selenetv.service.SpeedTestService
 import org.moontechlab.selenetv.service.TmdbService
 
 /** TMDB 剧照解析的触发参数：标题（原名或中文回退）+ 年份消歧。 */
@@ -344,6 +349,50 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     val primaryFocus = remember { FocusRequester() }
     val summaryFocus = remember { FocusRequester() }
     val searchCtaFocus = remember { FocusRequester() }
+    val speedTestFocus = remember { FocusRequester() }
+
+    // 测速优选：并发测全部源 → 实时出分 → 全部完成后按分排序、自动选中冠军。
+    var speedTestJob by remember { mutableStateOf<Job?>(null) }
+    val startSpeedTest: () -> Unit = handler@{
+        if (state.speedTesting) return@handler
+        // 仅测有试播链接的源；其余跳过（不计入分母、不参与排序打分）
+        val testable = state.sources.filter { SpeedTestService.testUrl(it) != null }
+        if (testable.isEmpty()) return@handler
+        val seed = testable.associate { sourceKey(it) to SourceSpeed(SpeedTestState.TESTING) }
+        state = state.copy(speedTesting = true, speedResults = seed)
+        speedTestJob = scope.launch {
+            val jobScope = this
+            // ConcurrentHashMap 承接 IO 线程并发回调，主线程仅用其快照刷新 UI，避免读改写竞态。
+            // UI 刷新挂在 job 自身 scope 下，随取消一并停止，避免迟到刷新覆盖最终态。
+            val acc = java.util.concurrent.ConcurrentHashMap<String, SourceSpeed>(seed)
+            try {
+                SpeedTestService.testAll(testable) { key, result ->
+                    acc[key] = result
+                    jobScope.launch(Dispatchers.Main) { state = state.copy(speedResults = HashMap(acc)) }
+                }
+                // 全部完成：按综合分降序重排，自动选中并标记冠军（失败源沉底）
+                val maxSpeed = SpeedTestService.maxSpeed(acc.values)
+                val ranked = state.sources.sortedByDescending { src ->
+                    acc[sourceKey(src)]?.let { SpeedTestService.score(it, maxSpeed) } ?: -1.0
+                }
+                val winnerKey = ranked
+                    .firstOrNull { acc[sourceKey(it)]?.state == SpeedTestState.DONE }
+                    ?.let { sourceKey(it) }
+                state = state.copy(
+                    sources = ranked,
+                    speedResults = HashMap(acc),
+                    selectedSourceKey = winnerKey ?: state.selectedSourceKey,
+                    speedTesting = false,
+                )
+            } catch (e: CancellationException) {
+                // 用户打断：清掉未完成项（避免「测速中」角标冻结），保留已出结果，不重排、不改选中
+                val settled = acc.filterValues { it.state != SpeedTestState.TESTING }
+                state = state.copy(speedResults = HashMap(settled), speedTesting = false)
+                throw e
+            }
+        }
+    }
+    val stopSpeedTest: () -> Unit = { speedTestJob?.cancel() }
     // 覆盖层根焦点捕获器：详情页绘制在仍存活的首页之上（见 HomeScreen 详情覆盖层），加载 overlay 期间
     // 或布局已出但播放源未解析完（无播放按钮可吸收焦点）时，覆盖层内没有任何可聚焦元素，焦点会留在
     // 背后的首页上，方向键便去驱动首页网格。入场即把焦点抓进这个零尺寸捕获器，并在根部统一 exit=Cancel，
@@ -662,8 +711,15 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             progress = state.sourcesProgress,
                             complete = state.sourcesComplete,
                             onSelect = { key -> state = state.copy(selectedSourceKey = key) },
+                            // 已是当前源时再按 OK：与主操作按钮一致——有记录则继续观看，否则播放（多集无记录走选集）
+                            onPlaySelected = { if (state.selectedPlayRecord != null) onContinue() else onPlay() },
                             onSearch = { onGoToSearch(state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: state.entry.title) },
                             searchFocusRequester = searchCtaFocus,
+                            speedResults = state.speedResults,
+                            speedTesting = state.speedTesting,
+                            onSpeedTest = startSpeedTest,
+                            onStopSpeedTest = stopSpeedTest,
+                            speedTestFocusRequester = speedTestFocus,
                         )
                     }
                 }

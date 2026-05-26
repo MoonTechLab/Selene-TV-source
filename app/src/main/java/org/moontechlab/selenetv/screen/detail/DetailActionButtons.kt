@@ -47,6 +47,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -183,7 +184,7 @@ private fun LoadingActionPill(modifier: Modifier = Modifier) {
  * 适配按钮内联小尺寸。月牙路径与 MoonSpinner 同源（外圆 45% + 内椭圆 32%×45% 挖出缺口）。
  */
 @Composable
-private fun MoonCrescentSpinner(modifier: Modifier = Modifier) {
+internal fun MoonCrescentSpinner(modifier: Modifier = Modifier, color: Color = Color(0xFFFAFAFA)) {
     val infinite = rememberInfiniteTransition(label = "moon_pill")
     val rotation by infinite.animateFloat(
         initialValue = 0f,
@@ -215,10 +216,10 @@ private fun MoonCrescentSpinner(modifier: Modifier = Modifier) {
         }
         drawIntoCanvas { canvas ->
             val paint = Paint().apply {
-                color = Color(0xFFFAFAFA)
+                this.color = color
                 asFrameworkPaint().apply {
                     isAntiAlias = true
-                    setShadowLayer(3f, 0f, 0f, android.graphics.Color.argb(120, 255, 255, 255))
+                    setShadowLayer(3f, 0f, 0f, color.copy(alpha = 0.47f).toArgb())
                 }
             }
             canvas.drawPath(path, paint)

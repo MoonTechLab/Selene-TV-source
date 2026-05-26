@@ -40,6 +40,8 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import org.moontechlab.selenetv.model.SourceSpeed
+import org.moontechlab.selenetv.model.SpeedTestState
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.util.getImageUrlSync
 import kotlin.math.roundToInt
@@ -128,7 +130,13 @@ fun VideoCard(
     onLongClick: (() -> Unit)? = null,
     // 所属区块标识：同一内容可能同时出现在多行（如「继续观看」与「我的收藏」），
     // 仅靠 source+id 无法区分，返回详情时焦点会落到错误那张卡片。带上区块标识即可唯一。
-    sectionKey: String = ""
+    sectionKey: String = "",
+    // 测速结果：非 null 时在封面底部叠加测速角标（分辨率·速度 / 测速中 / 超时）。仅 SOURCE 卡片使用。
+    speed: SourceSpeed? = null,
+    // 测速进行中、当前综合分最高 → 绿色描边「领先」（未聚焦时生效，聚焦白边优先）。
+    leading: Boolean = false,
+    // 测速进行中、本卡尚未出分 → 封面变暗，提示当前不可选。
+    dimmed: Boolean = false
 ) {
     val cardWidth = style.width
     val cardHeight = style.height
@@ -272,16 +280,24 @@ fun VideoCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer { alpha = if (dimmed) 0.4f else 1f }
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(Color(0xFF2A2A2A))
                         .then(
-                            if (isFocused) {
-                                Modifier.border(
+                            // 聚焦白边优先；否则测速领先时显示绿边
+                            when {
+                                isFocused -> Modifier.border(
                                     width = style.borderWidth,
                                     color = Color.White,
                                     shape = RoundedCornerShape(cornerRadius)
                                 )
-                            } else Modifier
+                                leading -> Modifier.border(
+                                    width = style.borderWidth,
+                                    color = Color(0xFF4CAF50),
+                                    shape = RoundedCornerShape(cornerRadius)
+                                )
+                                else -> Modifier
+                            }
                         )
                 ) {
                     AsyncImage(
@@ -289,8 +305,8 @@ fun VideoCard(
                         contentDescription = videoInfo.title,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(if (isFocused) 2.dp else 0.dp)
-                            .clip(RoundedCornerShape(if (isFocused) innerCornerRadius else cornerRadius)),
+                            .padding(if (isFocused || leading) 2.dp else 0.dp)
+                            .clip(RoundedCornerShape(if (isFocused || leading) innerCornerRadius else cornerRadius)),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -312,6 +328,40 @@ fun VideoCard(
                             contentDescription = "Selected",
                             tint = Color.White,
                             modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+
+                // 测速角标（封面底部条）：测速中 → 「测速中」；DONE → 「1080p · 2.1MB/s」；FAILED → 「超时」
+                if (speed != null) {
+                    val label = when (speed.state) {
+                        SpeedTestState.TESTING -> "测速中"
+                        SpeedTestState.FAILED -> "超时"
+                        SpeedTestState.DONE -> listOf(speed.quality, speed.speedLabel)
+                            .filter { it.isNotEmpty() }
+                            .joinToString(" · ")
+                            .ifEmpty { "未知" }
+                    }
+                    val labelColor = when (speed.state) {
+                        SpeedTestState.FAILED -> Color(0xFFE57373)
+                        SpeedTestState.TESTING -> Color.White.copy(alpha = 0.7f)
+                        SpeedTestState.DONE -> Color.White
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .background(Color.Black.copy(alpha = 0.62f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = labelColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.W600,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

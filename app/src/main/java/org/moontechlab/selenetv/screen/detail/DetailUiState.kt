@@ -4,6 +4,7 @@ import org.moontechlab.selenetv.model.BangumiDetails
 import org.moontechlab.selenetv.model.DoubanMovieDetails
 import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.SourceSpeed
 import org.moontechlab.selenetv.model.TmdbArt
 import org.moontechlab.selenetv.screen.DetailEntry
 import org.moontechlab.selenetv.service.SearchProgress
@@ -26,6 +27,9 @@ data class DetailUiState(
     val episodePickerVisible: Boolean = false,
     // TMDB 剧照/ logo（仅 hero 渲染）。非空且含 backdrop 时切到 Apple TV 式布局。
     val tmdbArt: TmdbArt? = null,
+    // 测速优选：key 为 source+id。speedTesting 期间禁止选源、源卡片变暗；完成后按分排序并自动选中冠军。
+    val speedResults: Map<String, SourceSpeed> = emptyMap(),
+    val speedTesting: Boolean = false,
 ) {
     val selectedSource: SearchResult?
         get() = sources.firstOrNull { "${it.source}+${it.id}" == selectedSourceKey }
