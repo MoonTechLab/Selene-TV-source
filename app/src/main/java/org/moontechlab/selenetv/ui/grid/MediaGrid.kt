@@ -1,11 +1,5 @@
 package org.moontechlab.selenetv.ui.grid
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -438,17 +432,9 @@ private fun <T> MediaGridRow(
  */
 @Composable
 fun MediaCardSkeleton() {
-    // 骨架屏闪烁动画
-    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "skeleton_alpha"
-    )
+    // 静态占位（取原呼吸动画 0.3~0.6 的中点）：骨架成屏出现、显示短暂，shimmer 几乎无人察觉；
+    // 而原先每个占位项各自跑无限动画、又把动画值读进 background → 每帧重组数十个占位项，去掉换静态值省下持续开销。
+    val alpha = 0.45f
 
     Column(
         modifier = Modifier.width(GRID_CARD_WIDTH.dp),

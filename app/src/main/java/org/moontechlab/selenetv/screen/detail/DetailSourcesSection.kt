@@ -1,13 +1,7 @@
 package org.moontechlab.selenetv.screen.detail
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -227,16 +221,8 @@ private fun SearchCtaButton(onClick: () -> Unit, modifier: Modifier = Modifier) 
 
 @Composable
 private fun SourceCardSkeleton() {
-    val infinite = rememberInfiniteTransition(label = "src_skel")
-    val alpha by infinite.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.42f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "src_skel_alpha",
-    )
+    // 静态占位（取原呼吸动画 0.15~0.42 的中点）：去掉每项各自的无限动画 + 每帧重组，详见 MediaCardSkeleton
+    val alpha = 0.28f
     Column(modifier = Modifier.width(120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier

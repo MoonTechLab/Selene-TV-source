@@ -427,16 +427,8 @@ private fun LiveFilterSection(
 /** 「分组」筛选行的骨架占位：尺寸与 FilterSelector 一致，避免数据落地后布局抖动。 */
 @Composable
 private fun GroupFilterSkeleton() {
-    val infiniteTransition = rememberInfiniteTransition(label = "group_skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "group_skeleton_alpha"
-    )
+    // 静态占位（取原呼吸动画 0.18~0.4 的中点）：去掉无限动画 + 每帧重组，详见 MediaCardSkeleton
+    val alpha = 0.29f
     Row(
         modifier = Modifier
             .background(
@@ -772,16 +764,8 @@ private fun ChannelCardSkeleton(
     logoHeight: Dp,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "skeleton_alpha"
-    )
+    // 静态占位（取原呼吸动画 0.3~0.6 的中点）：去掉每项各自的无限动画 + 每帧重组，详见 MediaCardSkeleton
+    val alpha = 0.45f
 
     Column(
         modifier = modifier,
