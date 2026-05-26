@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -327,7 +329,21 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     val primaryFocus = remember { FocusRequester() }
     val summaryFocus = remember { FocusRequester() }
     val searchCtaFocus = remember { FocusRequester() }
+    // 覆盖层根焦点捕获器：详情页绘制在仍存活的首页之上（见 HomeScreen 详情覆盖层），加载 overlay 期间
+    // 或布局已出但播放源未解析完（无播放按钮可吸收焦点）时，覆盖层内没有任何可聚焦元素，焦点会留在
+    // 背后的首页上，方向键便去驱动首页网格。入场即把焦点抓进这个零尺寸捕获器，并在根部统一 exit=Cancel，
+    // 使焦点在任何加载阶段都钉在覆盖层内；真正内容就绪后由 primaryFocus/searchCta 接管，焦点移入内容后
+    // 被内容 Column 自身的 exit=Cancel 留住，不再回到捕获器。
+    val rootFocus = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+
+    // 入场抓焦：覆盖层随滑入动画挂载，requester 可能尚未就位，重试数帧直到成功。
+    LaunchedEffect(Unit) {
+        repeat(10) {
+            kotlinx.coroutines.delay(30)
+            try { rootFocus.requestFocus(); return@LaunchedEffect } catch (_: Exception) {}
+        }
+    }
 
     // 无可用播放源时，动作行为空，把焦点落到「去搜索」按钮，保证遥控器始终有落点
     val noSources = state.sourcesComplete && state.sources.isEmpty()
@@ -489,7 +505,20 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         1.0f to Color(0xFF050505),
     )
 
-    Box(modifier = Modifier.fillMaxSize().background(brush = gradientBrush)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush = gradientBrush)
+            // 覆盖层根焦点组：始终禁止焦点逃逸到背后的首页（加载/源解析的空窗期亦然）。
+            // 内部的播放页 / 选集弹窗 / 简介弹窗都是本组子节点，焦点在它们之间移动属组内移动，
+            // 不触发 exit，故不受影响。
+            .focusGroup()
+            .focusProperties { exit = { FocusRequester.Cancel } },
+    ) {
+        // 零尺寸焦点捕获器：入场即承接焦点，使方向键在内容就绪前不外漏到首页。
+        // 零尺寸不参与方向键的 2D 焦点搜索，故不干扰内容出现后的正常导航。
+        Box(modifier = Modifier.focusRequester(rootFocus).focusable())
+
         androidx.compose.animation.AnimatedVisibility(
             visible = !state.detailsLoading,
             // 内容从 0.96 轻微放大并淡入「落定」。数据就绪后这段动画先在加载 overlay 之下跑完

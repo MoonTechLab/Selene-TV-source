@@ -1,6 +1,5 @@
 package org.moontechlab.selenetv.screen.detail
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,10 +34,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
+/**
+ * 选集弹窗。用 Dialog 建立独立焦点域（与 SummaryDialog 同理）：详情页内容 Column 在弹窗打开时放行 exit，
+ * 但焦点无法跨焦点组进入详情页内的 sibling focusGroup（实测 requestFocus 夺焦失败、焦点滞留背后页面）。
+ * Dialog 是独立窗口，焦点进入后被窗口天然隔离，requestFocus 到首集 chip 即生效，亦不会漏到背后页面。
+ * 返回键经 Dialog 的 onDismissRequest 关闭。
+ */
 @Composable
 fun EpisodePickerDialog(
     visible: Boolean,
@@ -49,51 +57,55 @@ fun EpisodePickerDialog(
 ) {
     if (!visible) return
 
-    val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(visible) {
-        if (visible) {
-            kotlinx.coroutines.delay(50)
-            try { firstFocus.requestFocus() } catch (_: Exception) {}
-        }
-    }
-
-    BackHandler { onDismiss() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center,
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Column(
+        val firstFocus = remember { FocusRequester() }
+        // 弹窗窗口挂载后把焦点落到首集；网格首项的 requester 可能晚一帧挂上，重试数帧确保夺焦成功。
+        LaunchedEffect(Unit) {
+            repeat(12) {
+                kotlinx.coroutines.delay(30)
+                try { firstFocus.requestFocus(); return@LaunchedEffect } catch (_: Exception) {}
+            }
+        }
+
+        Box(
             modifier = Modifier
-                .widthIn(max = 900.dp)
-                .background(Color(0xFF1A1A1A).copy(alpha = 0.95f), RoundedCornerShape(16.dp))
-                .padding(32.dp),
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "选择剧集 · $sourceName",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.W700,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(8),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp),
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(360.dp),
+                    .widthIn(max = 900.dp)
+                    .background(Color(0xFF1A1A1A).copy(alpha = 0.95f), RoundedCornerShape(16.dp))
+                    .padding(32.dp),
             ) {
-                itemsIndexed(episodes) { index, _ ->
-                    val label = episodesTitles?.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "第 ${index + 1} 集"
-                    EpisodeChip(
-                        label = label,
-                        onClick = { onSelect(index) },
-                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                    )
+                Text(
+                    text = "选择剧集 · $sourceName",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.W700,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(8),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                ) {
+                    itemsIndexed(episodes) { index, _ ->
+                        val label = episodesTitles?.getOrNull(index)?.takeIf { it.isNotEmpty() } ?: "第 ${index + 1} 集"
+                        EpisodeChip(
+                            label = label,
+                            onClick = { onSelect(index) },
+                            modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                        )
+                    }
                 }
             }
         }
