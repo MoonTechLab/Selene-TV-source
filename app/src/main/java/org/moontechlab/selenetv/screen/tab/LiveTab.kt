@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -477,6 +478,7 @@ private fun LiveFilterRow(
 
 // ==================== 内容区域 ====================
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun LiveContentSection(
     rows: List<List<LiveChannel>>,
@@ -495,9 +497,16 @@ private fun LiveContentSection(
     focusRequester: FocusRequester,
     onNavigateUp: () -> Unit
 ) {
+    // 关闭直播播放页返回网格时，让焦点恢复直接落到「进入播放页的那张频道卡片」（挂了
+    // returnFocus.requester），而不是 focusGroup 默认的第一张卡片——消除「先落第一张再跳到目标」的抖动。
+    val returnFocus = org.moontechlab.selenetv.screen.LocalDetailReturnFocus.current
     Column(
         modifier = Modifier
             .focusRequester(focusRequester)
+            .focusRestorer {
+                if (returnFocus?.targetKey?.startsWith("live|") == true) returnFocus.requester
+                else FocusRequester.Default
+            }
             .focusGroup(),
         verticalArrangement = Arrangement.spacedBy(ROW_GAP.dp)
     ) {

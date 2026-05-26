@@ -124,8 +124,9 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         1.0f to Color(0xFF050505)
     )
 
-    // 关闭详情覆盖层后，把焦点确定性还原到来源卡片（来源卡片挂了 detailReturn.requester）；
-    // 若来源卡片已不在组合中（例如所在行被回收），回退到内容包裹层的 focusRestorer。
+    // 关闭直播播放页后，把焦点还原到来源频道卡片（卡片挂了 detailReturn.requester）。
+    // 现在焦点还原主要由 LiveContentSection 的 focusRestorer 在覆盖层关闭时直接落到目标卡完成；
+    // 此处保留一次延时兜底请求，应对 focusRestorer 偶发未命中。
     val restoreActiveTabFocus: () -> Unit = {
         try {
             detailReturn.requester.requestFocus()
@@ -189,8 +190,8 @@ fun HomeScreen(navController: androidx.navigation.NavController) {
         } else if (hadLiveOpen) {
             hadLiveOpen = false
             delay(300)
-            // 还原到进入直播播放页的那张频道卡片（卡片已挂 detailReturn.requester）；
-            // 卡片不在组合中时回退到内容包裹层 focusRestorer，再退到筛选行。
+            // 焦点还原主要由 LiveContentSection 的 focusRestorer 在覆盖层关闭时完成；
+            // 这里做一次延时兜底，目标卡不在组合中时回退到内容包裹层、再退到筛选行。
             try {
                 restoreActiveTabFocus()
             } catch (_: Exception) {
