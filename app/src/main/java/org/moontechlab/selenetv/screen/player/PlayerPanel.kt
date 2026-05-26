@@ -231,14 +231,19 @@ private fun PanelTabItem(
                 }
                 .focusable()
                 .clip(RoundedCornerShape(9.dp))
-                .background(if (focused) Color.White.copy(alpha = 0.14f) else Color.Transparent)
+                // 焦点态 = 实心白底（全场最高对比，与内容卡白描边焦点同源）；选中但未聚焦时无底，靠下划线标记
+                .background(if (focused) Color.White else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 8.dp),
         ) {
             Text(
                 text = label,
-                color = if (selected || focused) Color.White else Color.White.copy(alpha = 0.45f),
+                color = when {
+                    focused -> Color(0xFF0A0A0A)
+                    selected -> Color.White
+                    else -> Color.White.copy(alpha = 0.45f)
+                },
                 fontSize = 17.sp,
-                fontWeight = if (selected) FontWeight.W700 else FontWeight.W500,
+                fontWeight = if (selected || focused) FontWeight.W700 else FontWeight.W500,
             )
         }
         Spacer(modifier = Modifier.height(5.dp))
@@ -247,7 +252,8 @@ private fun PanelTabItem(
                 .width(22.dp)
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(if (selected) Color.White else Color.Transparent),
+                // 聚焦时白底胶囊已是焦点，撤掉下划线避免重复；仅在「选中但焦点已下沉到内容区」时用下划线标记当前标签
+                .background(if (selected && !focused) Color.White else Color.Transparent),
         )
     }
 }
@@ -576,8 +582,10 @@ private fun SourceTile(
             containerColor = Color(0xFF1A1A1A),
             focusedContainerColor = Color(0xFF1A1A1A),
         ),
+        // 焦点白圈是唯一的整圈描边（专属焦点语义）；当前源不再用绿圈（会和白焦点环撞形态、
+        // 被误读成焦点），改由右上角「在用」绿色角标承载——与直播换台卡保持一致。
         border = ClickableSurfaceDefaults.border(
-            border = Border(androidx.compose.foundation.BorderStroke(if (current) 2.dp else 0.dp, if (current) Accent else Color.Transparent), shape = shape),
+            border = Border(androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent), shape = shape),
             focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Color.White), shape = shape),
         ),
     ) {

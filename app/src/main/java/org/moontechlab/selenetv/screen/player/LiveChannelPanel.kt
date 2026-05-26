@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tv
@@ -198,14 +199,19 @@ private fun LivePanelTabItem(
                 }
                 .focusable()
                 .clip(RoundedCornerShape(9.dp))
-                .background(if (focused) Color.White.copy(alpha = 0.14f) else Color.Transparent)
+                // 焦点态 = 实心白底（全场最高对比，与内容卡白描边焦点同源）；选中但未聚焦时无底，靠下划线标记
+                .background(if (focused) Color.White else Color.Transparent)
                 .padding(horizontal = 18.dp, vertical = 8.dp),
         ) {
             Text(
                 text = label,
-                color = if (selected || focused) Color.White else Color.White.copy(alpha = 0.45f),
+                color = when {
+                    focused -> Color(0xFF0A0A0A)
+                    selected -> Color.White
+                    else -> Color.White.copy(alpha = 0.45f)
+                },
                 fontSize = 17.sp,
-                fontWeight = if (selected) FontWeight.W700 else FontWeight.W500,
+                fontWeight = if (selected || focused) FontWeight.W700 else FontWeight.W500,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -216,7 +222,8 @@ private fun LivePanelTabItem(
                 .width(22.dp)
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(if (selected) Color.White else Color.Transparent),
+                // 聚焦时白底胶囊已是焦点，撤掉下划线避免重复；仅在「选中但焦点已下沉到频道网格」时用下划线标记当前分组
+                .background(if (selected && !focused) Color.White else Color.Transparent),
         )
     }
 }
@@ -301,12 +308,9 @@ private fun LiveChannelTile(
         ).size.width
         with(density) { w.toDp() } > logoBoxWidth
     }
-    // 选中/聚焦只在 logo 外圈描边（在看=绿、聚焦=白），不再给整张卡片（logo+文本）套一圈边
-    val logoBorderColor = when {
-        current -> LiveAccent
-        focused -> Color.White
-        else -> null
-    }
+    // 焦点环只在聚焦时出现（白圈），是全卡唯一的「整圈描边」——专属焦点语义。
+    // 「在看」不再用绿框（会和白焦点环撞形态、被误读成焦点），改为 logo 右上角绿圆点角标。
+    val logoBorderColor = if (focused) Color.White else null
 
     Surface(
         onClick = onClick,
@@ -342,9 +346,9 @@ private fun LiveChannelTile(
                     .clip(shape)
                     .background(Color(0xFF1E1E1E))
                     .then(
-                        // 在看(绿)/聚焦(白) 描在 logo 外圈；在看即使未聚焦也保持绿圈
+                        // 焦点白圈：全卡唯一的整圈描边，专属焦点语义
                         if (logoBorderColor != null) {
-                            Modifier.border(if (focused) 3.dp else 2.dp, logoBorderColor, shape)
+                            Modifier.border(3.dp, logoBorderColor, shape)
                         } else {
                             Modifier
                         },
@@ -370,6 +374,21 @@ private fun LiveChannelTile(
                         modifier = Modifier.size(40.dp),
                     )
                 }
+
+                // 「在看」角标：右上角绿圆点（带深色描边在亮 logo 上也可见），不做成整圈避免冒充焦点环
+                if (current) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(11.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0A0A0A))
+                            .padding(1.5.dp)
+                            .clip(CircleShape)
+                            .background(LiveAccent),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -383,7 +402,8 @@ private fun LiveChannelTile(
                 val marquee = focused && nameOverflows
                 Text(
                     text = channel.name,
-                    color = if (current || focused) LiveAccent else Color.White,
+                    // 绿色专留给「在看」；聚焦靠白圈+缩放表达，名字不再染绿，避免和「在看」撞语义
+                    color = if (current) LiveAccent else Color.White,
                     fontSize = 12.sp,
                     fontWeight = if (current || focused) FontWeight.W700 else FontWeight.W500,
                     maxLines = 1,

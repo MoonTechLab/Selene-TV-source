@@ -85,17 +85,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 返回键兜底（修复真机播放页返回失效）：
-    // 播放页覆盖层所在的 Compose 子树会消费 BACK 的 ACTION_DOWN（实测 super.dispatchKeyEvent 对
-    // DOWN 返回 true），致使 Activity 的按下追踪(startTracking)未启动 → 抬起时系统不触发
-    // onBackPressed → Compose 的 BackHandler 收不到返回事件。而 web 遥控直调 onBackPressedDispatcher
-    // 却正常，说明 dispatcher 与各 BackHandler 本身无误，断点只在「物理键没送到 dispatcher」。
-    // 故在 BACK 抬起时：先给视图层处理机会，若其未处理(super 返回 false，即被吞了 DOWN 的情况)，
-    // 主动转交 onBackPressedDispatcher，复刻 web 遥控已验证可用的路径；首页等正常链路 super 返回
-    // true(已在 onKeyUp 内触发过 onBackPressed)，则不重复触发。
+    // 返回键完全自管（修复真机播放页返回失效，同时杜绝重复分发）：
+    // 历史上播放页覆盖层会吞掉 BACK 的 ACTION_DOWN，致使 Activity 未 startTracking、抬起时系统不触发
+    // onBackPressed，BackHandler 收不到返回。早期改为「super 未处理(返回 false)则补发 onBackPressed」，
+    // 但部分平台(实测 API 36)super.dispatchKeyEvent 对 BACK-UP 其实已经走 onBackPressedDispatcher
+    // 触发了 BackHandler，却仍返回 false → 补发再触发一次，单次物理返回被分发两次。
+    // 由于 Compose MutableState 是同步写入，第二次分发会读到第一次刚置位的状态(如 backExitArmed=true)
+    // 立即执行下一步，把直播/点播播放页「按两次才退出」的二次确认压成一次。
+    // 故此处对 BACK 一律自管：吞掉 DOWN，抬起时只触发一次 onBackPressed；绝不交给 super 的返回处理，
+    // 从根上避免「触发 + 补发」的双分发。BackHandler 仍由 onBackPressedDispatcher 正常调度；
+    // IME 弹出时 BACK 由输入法窗口先行消费、根本不会进到这里，故不影响收起键盘。
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-            if (!super.dispatchKeyEvent(event)) {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
                 onBackPressedDispatcher.onBackPressed()
             }
             return true
