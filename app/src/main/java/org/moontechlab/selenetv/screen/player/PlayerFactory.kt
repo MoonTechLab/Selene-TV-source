@@ -23,8 +23,8 @@ object PlayerFactory {
         val decode = AppDataService.getDecodeModeSync()
         val type = resolveEffectivePlayerType(AppDataService.getPlayerTypeSync(), Build.VERSION.SDK_INT)
         return when (type) {
-            // TODO(Task7): 接入 MpvPlayerController（当前 MPV 暂回退 Exo 以保持可编译）
-            PlayerType.MPV, PlayerType.EXOPLAYER -> {
+            PlayerType.MPV -> MpvPlayerController(context, userAgent, decode)
+            PlayerType.EXOPLAYER -> {
                 val ds: DataSource.Factory =
                     if (userAgent != null) MediaHttp.dataSourceFactory(userAgent) else MediaHttp.dataSourceFactory
                 PlayerController(context, ds, decode)
