@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -220,6 +221,14 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     // 退出 / 离开时释放播放器
     DisposableEffect(Unit) {
         onDispose { controller.release() }
+    }
+
+    // 播放/缓冲期间保持屏幕常亮，防止机器进入休眠/屏保；暂停或离开播放页后恢复系统息屏超时
+    val keepScreenOnView = LocalView.current
+    val keepScreenOn = controller.isPlaying || controller.isBuffering
+    DisposableEffect(keepScreenOn) {
+        keepScreenOnView.keepScreenOn = keepScreenOn
+        onDispose { keepScreenOnView.keepScreenOn = false }
     }
 
     // OSD 自动隐藏：播放中、面板未开、静止满 4s 即隐去

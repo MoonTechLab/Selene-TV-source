@@ -46,6 +46,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -139,6 +140,14 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
 
     DisposableEffect(Unit) {
         onDispose { controller.release() }
+    }
+
+    // 播放/缓冲期间保持屏幕常亮，防止机器进入休眠/屏保；离开直播页后恢复系统息屏超时
+    val keepScreenOnView = LocalView.current
+    val keepScreenOn = controller.isPlaying || controller.isBuffering
+    DisposableEffect(keepScreenOn) {
+        keepScreenOnView.keepScreenOn = keepScreenOn
+        onDispose { keepScreenOnView.keepScreenOn = false }
     }
 
     LaunchedEffect(controlsVisible, isPlaying, panelOpen, interactionTick) {
