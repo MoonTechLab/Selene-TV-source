@@ -1,6 +1,7 @@
 package org.moontechlab.selenetv.screen.detail
 
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.titlesMatch
 
 /**
  * 详情页源筛选规则：
@@ -19,7 +20,7 @@ object SourceFilter {
         return when {
             resultDoubanId == doubanId -> true
             resultDoubanId == null -> {
-                val titleOk = result.title == title
+                val titleOk = titlesMatch(result.title, title)
                 val yearOk = result.year == year || year.isEmpty() || result.year.isEmpty()
                 titleOk && yearOk
             }
@@ -35,7 +36,7 @@ object SourceFilter {
         title: String,
         year: String,
     ): Boolean {
-        val titleOk = result.title == title
+        val titleOk = titlesMatch(result.title, title)
         val yearOk = result.year == year || year.isEmpty() || result.year.isEmpty()
         return titleOk && yearOk
     }

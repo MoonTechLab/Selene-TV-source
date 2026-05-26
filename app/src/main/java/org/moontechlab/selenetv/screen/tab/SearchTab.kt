@@ -79,6 +79,7 @@ import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.AggregatedSearchResult
 import org.moontechlab.selenetv.model.SearchResult
 import org.moontechlab.selenetv.model.aggregateSearchResults
+import org.moontechlab.selenetv.model.titlesMatch
 import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchProgress
@@ -237,7 +238,7 @@ fun SearchTab(
         
         // 标题筛选
         if (filter.title != "全部") {
-            filtered = filtered.filter { it.title == filter.title }
+            filtered = filtered.filter { titlesMatch(it.title, filter.title) }
         }
         
         // 年份筛选

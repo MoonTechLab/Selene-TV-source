@@ -80,12 +80,26 @@ data class AggregatedSearchResult(
 }
 
 /**
+ * 标题匹配归一化：删去全部空白字符（含半角/全角空格）后比较。
+ * 使「钢铁侠」与「钢铁 侠」视为同一标题。所有标题相等判断都应走这里。
+ */
+fun normalizeTitleForMatch(title: String): String =
+    title.replace(Regex("[\\s\\u3000]+"), "")
+
+/**
+ * 两个标题删去全部空格后是否相同。
+ */
+fun titlesMatch(a: String, b: String): Boolean =
+    normalizeTitleForMatch(a) == normalizeTitleForMatch(b)
+
+/**
  * 生成聚合键
  */
 fun SearchResult.generateAggregateKey(): String {
     val episodeCount = episodes.size.coerceAtLeast(1)
     val type = if (episodeCount > 1) "tv" else "movie"
-    return "${title}_${year}_$type"
+    // 标题去空格后参与聚合键，使仅空格不同的标题聚合到同一组（展示仍用原始标题）
+    return "${normalizeTitleForMatch(title)}_${year}_$type"
 }
 
 /**
