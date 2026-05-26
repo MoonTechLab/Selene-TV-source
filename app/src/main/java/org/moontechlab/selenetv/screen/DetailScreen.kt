@@ -365,7 +365,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     }
 
     fun showToast(msg: String) {
-        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+        org.moontechlab.selenetv.ui.MoonToast.show(msg)
     }
 
     // 播放页覆盖层入口（内存覆盖层，不销毁详情）。launchPlayer 由选集/继续/播放触发。

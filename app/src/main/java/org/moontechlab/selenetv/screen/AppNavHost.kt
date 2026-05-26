@@ -5,12 +5,19 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.moontechlab.selenetv.service.AppDataService
+import org.moontechlab.selenetv.ui.MoonToastHost
 
 @Composable
 fun AppNavHost() {
@@ -21,6 +28,7 @@ fun AppNavHost() {
         if (AppDataService.isLoggedInSync()) HomeRoute else LoginRoute
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -51,5 +59,13 @@ fun AppNavHost() {
         }
         // 详情页不再是独立的导航目的地，而是作为覆盖层渲染在 HomeScreen 之上
         // （见 HomeScreen 的 detailRoute overlay），以保持首页组合存活、数据与焦点不丢失。
+    }
+
+        // 全局自绘 Toast：渲染在所有页面/覆盖层之上，底部居中
+        MoonToastHost(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 64.dp),
+        )
     }
 }

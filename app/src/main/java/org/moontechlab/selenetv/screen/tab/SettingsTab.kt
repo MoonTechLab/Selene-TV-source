@@ -1,7 +1,6 @@
 package org.moontechlab.selenetv.screen.tab
 
 import android.graphics.BitmapFactory
-import android.widget.Toast
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.core.animateFloatAsState
@@ -409,7 +408,7 @@ fun SettingsTab(
             onConfirm = {
                 coroutineScope.launch {
                     doubanCacheService.clearAll()
-                    Toast.makeText(context, "豆瓣缓存已清空", Toast.LENGTH_SHORT).show()
+                    org.moontechlab.selenetv.ui.MoonToast.show("豆瓣缓存已清空")
                 }
                 onClose()
             },
@@ -429,7 +428,7 @@ fun SettingsTab(
             onConfirm = {
                 coroutineScope.launch {
                     SearchCacheService.clearCache()
-                    Toast.makeText(context, "搜索缓存已清空", Toast.LENGTH_SHORT).show()
+                    org.moontechlab.selenetv.ui.MoonToast.show("搜索缓存已清空")
                 }
                 onClose()
             },

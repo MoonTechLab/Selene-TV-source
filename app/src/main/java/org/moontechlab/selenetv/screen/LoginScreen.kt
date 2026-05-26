@@ -33,7 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.graphics.BitmapFactory
-import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -123,9 +122,9 @@ private fun LoginScreenContent(
     }
     var isLoading by remember { mutableStateOf(false) }
     
-    // Toast 显示函数
+    // Toast 显示函数（统一走自绘 MoonToast）
     fun showToast(message: String) {
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        org.moontechlab.selenetv.ui.MoonToast.show(message)
     }
 
     // FocusRequester
