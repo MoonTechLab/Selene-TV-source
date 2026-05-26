@@ -187,6 +187,7 @@ fun PlayerPanel(
                 when (t) {
                     PanelTab.Detail -> DetailTabContent(
                         title = title, info = heroInfo, hasNext = hasNext,
+                        showUpNext = epCount > 1,
                         currentEpisode = currentEpisode, onNextEpisode = onNextEpisode,
                         contentHeight = ch, cardFocus = detailFocus, tabFocus = activeTabFocus,
                     )
@@ -265,6 +266,7 @@ private fun DetailTabContent(
     title: String,
     info: HeroInfo?,
     hasNext: Boolean,
+    showUpNext: Boolean,
     currentEpisode: Int,
     onNextEpisode: () -> Unit,
     contentHeight: Dp,
@@ -316,16 +318,19 @@ private fun DetailTabContent(
             )
         }
 
-        Spacer(modifier = Modifier.width(24.dp))
+        // 单集内容（电影等）不展示「下一集」卡片；多集即使在最后一集也保留（显示「已是最后一集」禁用态）
+        if (showUpNext) {
+            Spacer(modifier = Modifier.width(24.dp))
 
-        UpNextCard(
-            hasNext = hasNext,
-            nextEpisode = currentEpisode + 2,
-            heightDp = contentHeight,
-            onClick = onNextEpisode,
-            focusRequester = cardFocus,
-            upTarget = tabFocus,
-        )
+            UpNextCard(
+                hasNext = hasNext,
+                nextEpisode = currentEpisode + 2,
+                heightDp = contentHeight,
+                onClick = onNextEpisode,
+                focusRequester = cardFocus,
+                upTarget = tabFocus,
+            )
+        }
     }
 }
 
