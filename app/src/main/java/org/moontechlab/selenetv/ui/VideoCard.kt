@@ -133,8 +133,6 @@ fun VideoCard(
     sectionKey: String = "",
     // 测速结果：非 null 时在封面底部叠加测速角标（分辨率·速度 / 测速中 / 超时）。仅 SOURCE 卡片使用。
     speed: SourceSpeed? = null,
-    // 测速进行中、当前综合分最高 → 绿色描边「领先」（未聚焦时生效，聚焦白边优先）。
-    leading: Boolean = false,
     // 测速进行中、本卡尚未出分 → 封面变暗，提示当前不可选。
     dimmed: Boolean = false
 ) {
@@ -284,20 +282,13 @@ fun VideoCard(
                         .clip(RoundedCornerShape(cornerRadius))
                         .background(Color(0xFF2A2A2A))
                         .then(
-                            // 聚焦白边优先；否则测速领先时显示绿边
-                            when {
-                                isFocused -> Modifier.border(
+                            if (isFocused) {
+                                Modifier.border(
                                     width = style.borderWidth,
                                     color = Color.White,
                                     shape = RoundedCornerShape(cornerRadius)
                                 )
-                                leading -> Modifier.border(
-                                    width = style.borderWidth,
-                                    color = Color(0xFF4CAF50),
-                                    shape = RoundedCornerShape(cornerRadius)
-                                )
-                                else -> Modifier
-                            }
+                            } else Modifier
                         )
                 ) {
                     AsyncImage(
@@ -305,8 +296,8 @@ fun VideoCard(
                         contentDescription = videoInfo.title,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(if (isFocused || leading) 2.dp else 0.dp)
-                            .clip(RoundedCornerShape(if (isFocused || leading) innerCornerRadius else cornerRadius)),
+                            .padding(if (isFocused) 2.dp else 0.dp)
+                            .clip(RoundedCornerShape(if (isFocused) innerCornerRadius else cornerRadius)),
                         contentScale = ContentScale.Crop
                     )
                 }

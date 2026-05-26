@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +55,6 @@ import org.moontechlab.selenetv.model.SourceSpeed
 import org.moontechlab.selenetv.model.SpeedTestState
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.service.SearchProgress
-import org.moontechlab.selenetv.service.SpeedTestService
 import org.moontechlab.selenetv.ui.VideoCard
 import org.moontechlab.selenetv.ui.VideoCardSource
 
@@ -83,17 +81,6 @@ fun DetailSourcesSection(
 ) {
     val listState = rememberLazyListState()
     val firstItemFocus = remember { FocusRequester() }
-
-    // 测速进行中，当前综合分最高的源 → 绿色「领先」描边。每出一条新结果按当前批次基准重算。
-    val leadingKey by remember(speedResults, speedTesting) {
-        derivedStateOf {
-            if (!speedTesting) return@derivedStateOf null
-            val done = speedResults.filterValues { it.state == SpeedTestState.DONE }
-            if (done.isEmpty()) return@derivedStateOf null
-            val maxSpeed = SpeedTestService.maxSpeed(done.values)
-            done.maxByOrNull { SpeedTestService.score(it.value, maxSpeed) }?.key
-        }
-    }
 
     // 详情内容禁用了垂直 bringIntoView（会向下级联），这里给横向 LazyRow 重新提供横向滚动 spec，
     // 否则左右选源时不会把卡片滚入视野。
@@ -212,7 +199,6 @@ fun DetailSourcesSection(
                             },
                             isSelected = isSelected,
                             speed = speed,
-                            leading = key == leadingKey,
                             dimmed = speedTesting && (speed == null || speed.state == SpeedTestState.TESTING),
                             // 测速完成后按分重排时，卡片平滑位移（签名交互）
                             modifier = Modifier
