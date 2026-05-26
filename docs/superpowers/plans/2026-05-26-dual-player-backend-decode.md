@@ -185,6 +185,10 @@ interface VideoPlayer {
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true)
     fun seekTo(ms: Long)
     fun togglePlay()
+    /** 强制暂停（不是切换）。宿主在 App 切后台时调用。 */
+    fun pause()
+    /** 跳到直播边缘；点播实现等价为 seek 到默认位置。直播 togglePlay 恢复前调用。 */
+    fun seekToLiveEdge()
     /** 把后端当前位置/缓冲/时长同步到状态；由宿主周期调用。 */
     fun syncProgress()
     fun release()
@@ -389,6 +393,12 @@ class PlayerController(
     override fun togglePlay() { exo.playWhenReady = !exo.playWhenReady }
 
     @MainThread
+    override fun pause() { exo.playWhenReady = false }
+
+    @MainThread
+    override fun seekToLiveEdge() { exo.seekToDefaultPosition() }
+
+    @MainThread
     override fun syncProgress() {
         positionMs = exo.currentPosition.coerceAtLeast(0)
         bufferedMs = exo.bufferedPosition.coerceAtLeast(0)
@@ -438,9 +448,13 @@ In `PlayerScreen.kt`：删除 `295` 行起的整段 `AndroidView(factory = { ...
 
 确认顶部不再需要 `import androidx.media3.ui.PlayerView` 与 `import androidx.compose.ui.viewinterop.AndroidView`（若文件其它处无用则删除，避免未用 import 警告）。
 
+另外（`exo` 转 private 后必须改）：`PlayerScreen.kt` 中 `ON_PAUSE` 处的 `controller.exo.playWhenReady = false` 改为 `controller.pause()`。
+
 - [ ] **Step 4: LivePlayerScreen 改用 VideoSurface**
 
 In `LivePlayerScreen.kt`：同样找到绑定 `player = controller.exo` 的 `AndroidView` 块，替换为 `controller.VideoSurface(Modifier.fillMaxSize())`，并清理多余 import。
+
+另外（`exo` 转 private 后必须改）：`LivePlayerScreen.kt` `togglePlay()` 中的 `controller.exo.seekToDefaultPosition()` 改为 `controller.seekToLiveEdge()`。
 
 - [ ] **Step 5: 编译确认通过**
 
@@ -614,12 +628,8 @@ libmpv = { group = "dev.jdtech.mpv", name = "libmpv", version.ref = "libmpv" }
 
 - [ ] **Step 2: build.gradle.kts 加依赖 + abiFilters**
 
-In `app/build.gradle.kts` `defaultConfig { ... }`（`testInstrumentationRunner` 那行之后）加：
-```kotlin
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
-```
+ABI 限定：本项目 `app/build.gradle.kts` 已有 `splits { abi { include("arm64-v8a", "armeabi-v7a") } }`，已把构建限定到这两个 arm ABI（libmpv AAR 里的 x86/x86_64 .so 不会进 APK）。**不要**再加 `defaultConfig.ndk.abiFilters`——AGP 在 `splits.abi` 与 `ndk.abiFilters` 同时存在时会报 "Conflicting configuration" 错误。
+
 In `dependencies { ... }`（media3 几行之后）加：
 ```kotlin
     implementation(libs.libmpv)
@@ -671,6 +681,8 @@ git commit -m "build: 引入 dev.jdtech.mpv:libmpv:1.0.0 + overrideLibrary 门�
 打开依赖里的 `dev.jdtech.mpv.MPVLib` 类（IDE 里 `Cmd+点击` 或反编译 AAR），确认以下方法签名（与 mpv-android 同源）：`create(Context)`、`init()`、`destroy()`、`attachSurface(Surface)`、`detachSurface()`、`setOptionString(String,String)`、`setPropertyString(String,String)`、`command(Array<String>)`、`observeProperty(String, Int)`、`addObserver(EventObserver)`、`removeObserver(EventObserver)`，以及 `EventObserver` 接口的回调方法名（`eventProperty(property, value)` 的各重载）与格式常量（`MPV_FORMAT_NONE/FLAG/INT64/DOUBLE/STRING`）。下一步代码以这些名字为准；若实际命名不同，按实际调整（仅名称差异，结构不变）。
 
 - [ ] **Step 2: 实现 MpvPlayerController**
+
+> **实测 API（1.0.0，已落地）：** `MPVLib` 是**实例式**而非静态——`val mpv = MPVLib.create(context)!!`（`create` 返回平台可空），其余 `init/destroy/attachSurface/command/setOptionString/setPropertyString/observeProperty/addObserver` 都在实例 `mpv.` 上调用。格式/事件常量在嵌套对象：`MPVLib.MpvFormat.MPV_FORMAT_DOUBLE/FLAG`、`MPVLib.MpvEvent.MPV_EVENT_END_FILE`。`EventObserver` 6 个抽象方法与下方一致。下方为结构示意，实际用实例调用。
 
 ```kotlin
 package org.moontechlab.selenetv.screen.player
@@ -765,6 +777,11 @@ class MpvPlayerController(
     override fun togglePlay() {
         MPVLib.setPropertyString("pause", if (isPlaying) "yes" else "no")
     }
+
+    override fun pause() { MPVLib.setPropertyString("pause", "yes") }
+
+    // mpv 直播流通常不可 seek，解暂停后自然回到边缘；此处 no-op 即可。
+    override fun seekToLiveEdge() {}
 
     override fun syncProgress() { /* MPV 走属性回调推送，无需主动拉取 */ }
 

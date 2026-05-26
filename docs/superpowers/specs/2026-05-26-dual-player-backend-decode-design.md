@@ -28,7 +28,7 @@
 | MPV 库 | `dev.jdtech.mpv:libmpv:1.0.0`（Maven Central，仓库已配置） | 唯一成熟、含预编译 `.so` + `MPVLib` JNI 绑定的制品 |
 | minSdk | **保持 23** | 库要求 minSdk 26；用 `tools:overrideLibrary` 强制合并 + 运行时门控，老设备不加载 `.so` |
 | 运行时门控 | `Build.VERSION.SDK_INT < 26` 时强制 ExoPlayer，设置页隐藏 MPV 选项 | `.so` 仅在选中 MPV 时加载，<26 永不触碰原生代码，不会崩 |
-| ABI | 仅 `arm64-v8a` / `armeabi-v7a`，并在 `defaultConfig.ndk.abiFilters` 显式声明 | 现有 splits 已只产出 arm 包；abiFilters 进一步把 x86/x86_64 的 `.so` 排除出构建 |
+| ABI | 仅 `arm64-v8a` / `armeabi-v7a`，由现有 `splits.abi` 限定 | splits 已只产 arm 包、自动排除 AAR 里 x86/x86_64 .so；**不能**再加 `ndk.abiFilters`（与 splits 冲突，AGP 报错） |
 | 许可 | 接受 GPL 约束 | libmpv 制品的 `.so` 几乎确定为 GPL（Findroid 以 GPLv3 发布）；release APK 为签名分发 |
 | 解码默认 | 硬解 | 与需求一致 |
 
@@ -76,6 +76,8 @@ interface VideoPlayer {
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true)
     fun seekTo(ms: Long)
     fun togglePlay()
+    fun pause()              // 强制暂停（切后台用）
+    fun seekToLiveEdge()     // 跳直播边缘；点播=seek 默认位置
     fun syncProgress()
     fun release()
 
