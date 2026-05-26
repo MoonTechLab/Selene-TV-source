@@ -368,13 +368,17 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             try {
                 SpeedTestService.testAll(testable) { key, result ->
                     acc[key] = result
-                    jobScope.launch(Dispatchers.Main) { state = state.copy(speedResults = HashMap(acc)) }
+                    // 每出一条结果即实时重排：已完成按分降序居前，测速中留后(原序)，失败沉底
+                    jobScope.launch(Dispatchers.Main) {
+                        val snap = HashMap(acc)
+                        val maxSpeed = SpeedTestService.maxSpeed(snap.values)
+                        val ranked = state.sources.sortedByDescending { src -> speedRank(snap[sourceKey(src)], maxSpeed) }
+                        state = state.copy(speedResults = snap, sources = ranked)
+                    }
                 }
-                // 全部完成：按综合分降序重排，自动选中并标记冠军（失败源沉底）
+                // 全部完成：按最终分定稿排序，自动选中冠军（失败源沉底）
                 val maxSpeed = SpeedTestService.maxSpeed(acc.values)
-                val ranked = state.sources.sortedByDescending { src ->
-                    acc[sourceKey(src)]?.let { SpeedTestService.score(it, maxSpeed) } ?: -1.0
-                }
+                val ranked = state.sources.sortedByDescending { src -> speedRank(acc[sourceKey(src)], maxSpeed) }
                 val winnerKey = ranked
                     .firstOrNull { acc[sourceKey(it)]?.state == SpeedTestState.DONE }
                     ?.let { sourceKey(it) }
@@ -823,4 +827,14 @@ private fun HeroErrorState(message: String, onRetry: () -> Unit, modifier: Modif
             }
         }
     }
+}
+
+/**
+ * 测速排序键（越大越靠前）：已完成→综合分(0~100)；测速中/未测→ -1（沉到已完成之后、保持原序）；
+ * 失败→ -2（最底）。实时重排与最终定稿共用，保证两阶段排序口径一致。
+ */
+private fun speedRank(result: SourceSpeed?, maxSpeed: Double): Double = when {
+    result == null || result.state == SpeedTestState.TESTING -> -1.0
+    result.state == SpeedTestState.FAILED -> -2.0
+    else -> SpeedTestService.score(result, maxSpeed)
 }
