@@ -36,6 +36,7 @@ class MpvPlayerController(
     private var pendingUrl: String? = null
     private var pendingStartMs: Long = 0
     private var surfaceAttached = false
+    @Volatile private var released = false
 
     override var positionMs by mutableLongStateOf(0L); private set
     override var durationMs by mutableLongStateOf(0L); private set
@@ -102,6 +103,8 @@ class MpvPlayerController(
     override fun syncProgress() { /* MPV 走属性回调推送，无需主动拉取 */ }
 
     override fun release() {
+        if (released) return
+        released = true
         mpv.removeObserver(this)
         mpv.command(arrayOf("stop"))
         mpv.destroy()
@@ -112,6 +115,7 @@ class MpvPlayerController(
     override fun eventProperty(property: String, value: Long) {}
     override fun eventProperty(property: String, value: Boolean) {
         main.post {
+            if (released) return@post
             when (property) {
                 "pause" -> isPlaying = !value
                 "paused-for-cache" -> isBuffering = value
@@ -121,6 +125,7 @@ class MpvPlayerController(
     }
     override fun eventProperty(property: String, value: Double) {
         main.post {
+            if (released) return@post
             when (property) {
                 "time-pos" -> { positionMs = (value * 1000).toLong().coerceAtLeast(0); if (!hasStarted && value > 0) hasStarted = true }
                 "duration" -> durationMs = (value * 1000).toLong().coerceAtLeast(0)
@@ -131,6 +136,7 @@ class MpvPlayerController(
     override fun eventProperty(property: String, value: String) {}
     override fun event(eventId: Int) {
         if (eventId == MPVLib.MpvEvent.MPV_EVENT_END_FILE) main.post {
+            if (released) return@post
             if (!hasStarted) error = "mpv: playback failed"
         }
     }
@@ -142,15 +148,18 @@ class MpvPlayerController(
                 SurfaceView(ctx).apply {
                     holder.addCallback(object : SurfaceHolder.Callback {
                         override fun surfaceCreated(holder: SurfaceHolder) {
+                            if (released) return
                             mpv.attachSurface(holder.surface)
                             mpv.setOptionString("force-window", "yes")
                             surfaceAttached = true
                             pendingUrl?.let { doLoad(it, pendingStartMs, true); pendingUrl = null }
                         }
                         override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, ht: Int) {
+                            if (released) return
                             mpv.setPropertyString("android-surface-size", "${w}x$ht")
                         }
                         override fun surfaceDestroyed(holder: SurfaceHolder) {
+                            if (released) return
                             surfaceAttached = false
                             mpv.setPropertyString("vo", "null")
                             mpv.setOptionString("force-window", "no")

@@ -22,13 +22,19 @@ object PlayerFactory {
     fun create(context: Context, userAgent: String? = null): VideoPlayer {
         val decode = AppDataService.getDecodeModeSync()
         val type = resolveEffectivePlayerType(AppDataService.getPlayerTypeSync(), Build.VERSION.SDK_INT)
+        fun exo(): VideoPlayer {
+            val ds: DataSource.Factory =
+                if (userAgent != null) MediaHttp.dataSourceFactory(userAgent) else MediaHttp.dataSourceFactory
+            return PlayerController(context, ds, decode)
+        }
         return when (type) {
-            PlayerType.MPV -> MpvPlayerController(context, userAgent, decode)
-            PlayerType.EXOPLAYER -> {
-                val ds: DataSource.Factory =
-                    if (userAgent != null) MediaHttp.dataSourceFactory(userAgent) else MediaHttp.dataSourceFactory
-                PlayerController(context, ds, decode)
+            PlayerType.MPV -> try {
+                MpvPlayerController(context, userAgent, decode)
+            } catch (e: Throwable) {
+                android.util.Log.e("PlayerFactory", "MPV 初始化失败，回退 ExoPlayer", e)
+                exo()
             }
+            PlayerType.EXOPLAYER -> exo()
         }
     }
 }
