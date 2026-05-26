@@ -23,6 +23,10 @@ interface VideoPlayer {
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true)
     fun seekTo(ms: Long)
     fun togglePlay()
+    /** 强制暂停（不是切换）。宿主在 App 切后台时调用。 */
+    fun pause()
+    /** 跳到直播边缘；点播实现等价为 seek 到默认位置。直播 togglePlay 恢复前调用。 */
+    fun seekToLiveEdge()
     /** 把后端当前位置/缓冲/时长同步到状态；由宿主周期调用。 */
     fun syncProgress()
     fun release()

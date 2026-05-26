@@ -40,10 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -211,7 +209,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 saveProgress(force = true)
-                controller.exo.playWhenReady = false
+                controller.pause()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -294,22 +292,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             .focusProperties { exit = { FocusRequester.Cancel } },
     ) {
 
-        // 视频画面：底色纯黑（不铺海报背景），PlayerView 叠在上层；非画面区域即纯黑。
-        // 用 texture_view 背景的 PlayerView（见 R.layout.player_view_texture）：默认 SurfaceView 的视频
-        // 像素在独立合成层、不受退出 fadeOut 的 Compose alpha 影响，会出现「黑边先淡出、中间视频后消失」的
-        // 两段式退场；TextureView 走普通视图层，视频随覆盖层一起淡出。
-        AndroidView(
-            factory = { ctx ->
-                (android.view.LayoutInflater.from(ctx)
-                    .inflate(org.moontechlab.selenetv.R.layout.player_view_texture, null) as PlayerView)
-                    .apply {
-                        useController = false
-                        player = controller.exo
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        controller.VideoSurface(Modifier.fillMaxSize())
 
         // 面板打开时压暗画面
         val dim by animateFloatAsState(if (panelOpen) 0.5f else 0f, tween(280), label = "dim")

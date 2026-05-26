@@ -51,8 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
@@ -89,7 +87,7 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
 
     fun togglePlay() {
         if (!controller.isPlaying) {
-            controller.exo.seekToDefaultPosition()
+            controller.seekToLiveEdge()
         }
         controller.togglePlay()
         wake()
@@ -198,20 +196,7 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
             // 焦点陷阱：禁止任何方向把焦点带出播放页覆盖层、穿透到下层直播 Tab
             .focusProperties { exit = { FocusRequester.Cancel } },
     ) {
-        // texture_view 背景的 PlayerView：默认 SurfaceView 的视频不随退出 slideOut 位移，会与黑边脱节；
-        // TextureView 走普通视图层，视频随覆盖层一起滑出。详见 R.layout.player_view_texture。
-        AndroidView(
-            factory = { ctx ->
-                (android.view.LayoutInflater.from(ctx)
-                    .inflate(org.moontechlab.selenetv.R.layout.player_view_texture, null) as PlayerView)
-                    .apply {
-                        useController = false
-                        player = controller.exo
-                        setBackgroundColor(android.graphics.Color.BLACK)
-                    }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        controller.VideoSurface(Modifier.fillMaxSize())
 
         val dim by animateFloatAsState(if (panelOpen) 0.5f else 0f, tween(280), label = "live_dim")
         if (dim > 0f) {
