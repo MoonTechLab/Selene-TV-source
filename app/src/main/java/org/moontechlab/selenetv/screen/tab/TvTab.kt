@@ -116,6 +116,7 @@ val TV_FILTER_REGION_OPTIONS = listOf(
 val TV_FILTER_YEAR_OPTIONS = listOf(
     SelectorOption("all", "全部"),
     SelectorOption("2020s", "2020年代"),
+    SelectorOption("2026", "2026"),
     SelectorOption("2025", "2025"),
     SelectorOption("2024", "2024"),
     SelectorOption("2023", "2023"),
