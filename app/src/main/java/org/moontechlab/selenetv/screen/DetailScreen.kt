@@ -1,5 +1,6 @@
 package org.moontechlab.selenetv.screen
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -52,6 +53,7 @@ import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.ContentFilterService
 import org.moontechlab.selenetv.service.DoubanCacheService
 import org.moontechlab.selenetv.service.DoubanService
+import org.moontechlab.selenetv.service.DownstreamService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchService
 import org.moontechlab.selenetv.service.TmdbService
@@ -145,7 +147,20 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                 }
                             }
                             is SearchEvent.Progress -> state = state.copy(sourcesProgress = event.progress)
-                            is SearchEvent.Complete -> state = state.copy(sourcesComplete = true)
+                            is SearchEvent.Complete -> {
+                                // 播放记录/收藏夹（带 source+id）：标题搜索未命中该具体源时，
+                                // 用 source+id 精确补齐这一条加入结果集，保证保存的源始终可播。
+                                if (entry is DetailEntry.History &&
+                                    rawResults.none { it.source == entry.source && it.id == entry.id }
+                                ) {
+                                    val detail = DownstreamService.getDetailBySourceId(entry.source, entry.id)
+                                    Log.d("DetailFallback", "补齐 source=${entry.source} id=${entry.id} -> ${detail?.let { "${it.title}(${it.episodes.size}集)" } ?: "null"}")
+                                    if (detail != null && detail.episodes.isNotEmpty()) {
+                                        rawResults = SearchService.deduplicateResults(rawResults + detail)
+                                    }
+                                }
+                                state = state.copy(sourcesComplete = true)
+                            }
                             is SearchEvent.Error -> {}
                         }
                     }

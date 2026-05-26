@@ -45,6 +45,9 @@ object DownstreamService {
     private const val TAG = "DownstreamService"
     private const val MAX_SEARCH_PAGES = 5
     private const val REQUEST_TIMEOUT = 8000 // 8秒超时
+    private const val DETAIL_TIMEOUT = 10000 // 详情请求 10 秒超时
+    private const val UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -315,5 +318,161 @@ object DownstreamService {
             typeName = item["type_name"]?.jsonPrimitive?.contentOrNull,
             doubanId = item["vod_douban_id"]?.jsonPrimitive?.longOrNull
         )
+    }
+
+    /**
+     * 通过 source+id 直接向下游 API 精确拉取单条详情。
+     * 用于：详情页来自播放记录/收藏夹（带 source+id），但按标题搜索未命中该具体源时，
+     * 精确补齐这一条加入结果集。失败返回 null。
+     * 迁移自 mobile SearchService.getDetailSync。
+     */
+    suspend fun getDetailBySourceId(source: String, id: String): SearchResult? =
+        withContext(Dispatchers.IO) {
+            try {
+                val resource = ApiService.getSearchResources()
+                    .firstOrNull { it.key == source }
+                if (resource == null) {
+                    Log.w(TAG, "getDetailBySourceId: 未找到源 key=$source")
+                    return@withContext null
+                }
+
+                // 优先走标准 JSON 详情接口（?ac=videolist&ids=），绝大多数 CMS 源此接口可用，
+                // 且能像搜索那样自动挑选 m3u8 播放组。仅当它拿不到剧集时再回退 HTML 抓取。
+                // （mobile 原逻辑是「detail 非空就走 HTML」，但部分源如 dyttzy 的 HTML 详情页已被
+                //   反爬墙拦截，反而 JSON 接口完好——故这里调换优先级。）
+                val fromJson = fetchJsonDetail(id, resource)
+                if (fromJson != null && fromJson.episodes.isNotEmpty()) {
+                    return@withContext fromJson
+                }
+
+                if (!resource.detail.isNullOrBlank()) {
+                    val sp = fetchSpecialSourceDetail(id, resource)
+                    if (sp != null && sp.episodes.isNotEmpty()) {
+                        return@withContext sp
+                    }
+                    Log.w(TAG, "getDetailBySourceId: JSON 与 HTML 均无可用剧集 key=$source id=$id")
+                }
+                fromJson // 可能为 null 或 episodes 为空（交由调用方决定是否使用）
+            } catch (e: Exception) {
+                Log.e(TAG, "getDetailBySourceId 失败: ${e.message}", e)
+                null
+            }
+        }
+
+    /**
+     * 标准 JSON 详情接口（?ac=videolist&ids=）解析为单条 SearchResult。无果返回 null。
+     */
+    private fun fetchJsonDetail(id: String, resource: SearchResource): SearchResult? {
+        val detailUrl = "${resource.api}?ac=videolist&ids=$id"
+        val body = httpGet(detailUrl, "application/json") ?: return null
+
+        val list = try {
+            json.parseToJsonElement(body).jsonObject["list"]?.jsonArray
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchJsonDetail: 响应非 JSON url=$detailUrl 前 120 字符=${body.take(120)}")
+            return null
+        }
+        if (list.isNullOrEmpty()) return null
+
+        val item = list[0].jsonObject
+        // 复用搜索项解析；强制 id 为请求值，避免下游详情返回的 vod_id 与请求不一致
+        val base = parseSearchResultItem(item, resource)?.copy(id = id) ?: return null
+
+        // 播放源为空时，从 vod_content 兜底抓取 m3u8（迁移自 mobile）
+        if (base.episodes.isEmpty()) {
+            val content = item["vod_content"]?.jsonPrimitive?.contentOrNull
+            if (!content.isNullOrBlank()) {
+                val m3u8 = Regex("""https?://[^\s<>"]+\.m3u8""")
+                    .findAll(content).map { it.value }.toList()
+                if (m3u8.isNotEmpty()) {
+                    return base.copy(
+                        episodes = m3u8,
+                        episodesTitles = m3u8.indices.map { (it + 1).toString() },
+                    )
+                }
+            }
+        }
+        return base
+    }
+
+    /**
+     * 特殊源详情（detail 非空）：抓取 HTML 详情页并正则解析 m3u8/标题/封面等。
+     * 迁移自 mobile SearchService._handleSpecialSourceDetail。
+     */
+    private fun fetchSpecialSourceDetail(id: String, resource: SearchResource): SearchResult? {
+        val detailUrl = "${resource.detail}/index.php/vod/detail/id/$id.html"
+        val html = httpGet(detailUrl, "text/html") ?: return null
+
+        // ffzy 源使用更严格的正则，其余源/未命中时退回通用 m3u8 正则
+        var matches: List<String> = if (resource.key == "ffzy") {
+            Regex("""\$(https?://[^"'\s]+?/\d{8}/\d+_[a-f0-9]+/index\.m3u8)""")
+                .findAll(html).map { it.value }.toList()
+        } else emptyList()
+
+        if (matches.isEmpty()) {
+            matches = Regex("""\$(https?://[^"'\s]+?\.m3u8)""")
+                .findAll(html).map { it.value }.toList()
+        }
+
+        // 去重并清理链接前缀（去掉开头的 $ 与可能的括号后缀）
+        val episodes = matches.toSet().toList().map { link ->
+            val l = link.substring(1)
+            val paren = l.indexOf('(')
+            if (paren > 0) l.substring(0, paren) else l
+        }
+        if (episodes.isEmpty()) return null
+
+        val titles = episodes.indices.map { (it + 1).toString() }
+        val title = Regex("""<h1[^>]*>([^<]+)</h1>""").find(html)?.groupValues?.get(1)?.trim() ?: ""
+        val desc = Regex("""<div[^>]*class=["']sketch["'][^>]*>([\s\S]*?)</div>""")
+            .find(html)?.groupValues?.get(1)?.let { cleanHtmlTags(it) } ?: ""
+        val cover = Regex("""https?://[^"'\s]+?\.jpg""").find(html)?.value?.trim() ?: ""
+        val year = Regex(""">(\d{4})<""").find(html)?.groupValues?.get(1) ?: "unknown"
+
+        return SearchResult(
+            id = id,
+            title = title.replace(Regex("\\s+"), " ").trim(),
+            poster = cover,
+            episodes = episodes,
+            episodesTitles = titles,
+            source = resource.key,
+            sourceName = resource.name,
+            classType = "",
+            year = year,
+            desc = desc,
+            typeName = "",
+            doubanId = null,
+        )
+    }
+
+    /**
+     * 简单 GET（信任所有证书），失败/非 2xx 返回 null。详情拉取用，与搜索分页解耦。
+     */
+    private fun httpGet(url: String, accept: String): String? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                if (this is HttpsURLConnection) {
+                    sslSocketFactory = trustAllSslContext.socketFactory
+                    hostnameVerifier = HostnameVerifier { _, _ -> true }
+                }
+                requestMethod = "GET"
+                connectTimeout = DETAIL_TIMEOUT
+                readTimeout = DETAIL_TIMEOUT
+                setRequestProperty("User-Agent", UA)
+                setRequestProperty("Accept", accept)
+            }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                Log.w(TAG, "httpGet 非 2xx: $code url=$url")
+                return null
+            }
+            connection.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }
+        } catch (e: Exception) {
+            Log.e(TAG, "httpGet 失败: $url ${e.message}")
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 }
