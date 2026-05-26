@@ -65,10 +65,8 @@ private val RoleBadgeAdmin = Color(0xFFFFD700) // 管理 - 黄色
 private val RoleBadgeOwner = Color(0xFF9B59B6) // 站长 - 紫色
 private val RoleBadgeUser = Color(0xFF2ECC71)  // 用户 - 绿色
 
-private val CacheButtonBg = Color(0x33F39C12) // 半透明橙黄
-private val CacheButtonBgFocused = Color(0xFFF39C12) // 实色橙黄
-private val LogoutButtonBg = Color(0x33E74C3C) // 半透明红
-private val LogoutButtonBgFocused = Color(0xFFE74C3C) // 实色红
+private val CacheButtonBgFocused = Color(0xFFF39C12) // 缓存行聚焦填充：实色橙黄
+private val LogoutButtonBgFocused = Color(0xFFE74C3C) // 退出登录聚焦填充：实色红
 
 /**
  * 获取设备所有 IPv4 地址（除回环 IP）
@@ -108,6 +106,9 @@ fun SettingsTab(
     val coroutineScope = rememberCoroutineScope()
     val doubanCacheService = remember { DoubanCacheService.getInstance(context) }
 
+    // 右侧设置列的滚动状态：内容超出视口时由 bringIntoView 跟随焦点自动滚动
+    val rightScrollState = rememberScrollState()
+
     // 用户状态
     var hasLogin by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
@@ -130,7 +131,17 @@ fun SettingsTab(
     var showDoubanDataSourceDialog by remember { mutableStateOf(false) }
     var showDoubanImageSourceDialog by remember { mutableStateOf(false) }
 
+    // 退出登录两步弹框（均由「登录实例」项触发）：
+    // A 登录实例弹框（含单个退出登录按钮）→ B 二次确认弹框（取消 / 确认）
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+    // A→B 过渡标记：A 关闭后才开 B，期间不回收焦点
+    var logoutChainToConfirm by remember { mutableStateOf(false) }
+    // B 已确认登出标记：确认后已跳转登录页，B 关闭时不回收设置焦点
+    var logoutConfirmed by remember { mutableStateOf(false) }
+
     // 各设置项的 FocusRequester
+    val loginInstanceFocusRequester = remember { FocusRequester() }
     val ipSettingFocusRequester = remember { FocusRequester() }
     val doubanDataSourceFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
@@ -178,9 +189,12 @@ fun SettingsTab(
         Spacer(modifier = Modifier.height(68.dp))
 
         // 主内容区域 - 两栏布局（各占50%）
+        // 用 weight(1f) 占满 TabSwitcher 与底部留白之间的全部高度，给右侧列一个确定的视口高度，
+        // 否则两列都 fillMaxHeight 时 Row 会塌缩、滚动视口短于内容导致内容被裁。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .padding(horizontal = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(40.dp)
         ) {
@@ -193,102 +207,109 @@ fun SettingsTab(
             )
 
             // 右侧设置区域 - 占50%
+            // tvOS 风格的紧凑分组列表：安静的分组标题 + hairline 分隔的细行，
+            // 去掉原先的胶囊背景（每项约省一半高度），并接上垂直滚动作为未来扩容的兜底。
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(rightScrollState)
             ) {
-                // 用户信息区（已登录时显示）
+                // 顶部留白，与左侧二维码标题对齐
+                Spacer(modifier = Modifier.height(48.dp))
+
+                // 用户头部（已登录时显示）
                 if (hasLogin) {
-                    UserInfoSection(username = username, role = userRole)
-                    Spacer(modifier = Modifier.height(2.dp))
-                } else {
-                    Spacer(modifier = Modifier.height(42.dp))
+                    CompactUserHeader(username = username, role = userRole)
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
 
-                // 设置项组
-                SettingsGroup {
-                    // 登录实例（已登录时显示，仅显示不可点击）
-                    if (hasLogin) {
-                        SettingItem(
-                            label = "登录实例",
-                            value = serverUrl.ifEmpty { "未设置" },
-                            focusable = false,
-                            transparentBg = true
-                        )
-                    }
-
-                    // 登录按钮（未登录时显示）
-                    if (!hasLogin) {
-                        SettingButton(
-                            text = "登录",
-                            onClick = { onShowLoginScreen() },
-                            modifier = Modifier.focusRequester(focusRequester)
-                        )
-                    }
-
-                    // 调整遥控二维码 IP
-                    SettingItem(
-                        label = "调整遥控二维码 IP",
-                        value = selectedIp.ifEmpty { "未知" },
-                        onClick = { showIpSelectDialog = true },
+                // —— 账户 ——
+                SectionLabel("账户")
+                if (hasLogin) {
+                    // 登录实例：可点击，弹出仅含「退出登录」的弹框
+                    SettingRow(
+                        label = "登录实例",
+                        value = serverUrl.ifEmpty { "未设置" },
+                        showDivider = false,
+                        onClick = { showLogoutDialog = true },
+                        // 已登录时此项是最顶端可聚焦项，承接从 TabSwitcher 下来的入口焦点
                         modifier = Modifier
-                            .focusRequester(ipSettingFocusRequester)
-                            .then(if (hasLogin) Modifier.focusRequester(focusRequester) else Modifier)
+                            .focusRequester(loginInstanceFocusRequester)
+                            .focusRequester(focusRequester)
                     )
-
-                    // 豆瓣数据源
-                    SettingItem(
-                        label = "豆瓣数据源",
-                        value = doubanDataSource.ifEmpty { "直连" },
-                        onClick = { showDoubanDataSourceDialog = true },
-                        modifier = Modifier.focusRequester(doubanDataSourceFocusRequester)
+                } else {
+                    // 登录按钮（未登录时显示）
+                    SettingRow(
+                        label = "登录",
+                        showDivider = false,
+                        onClick = { onShowLoginScreen() },
+                        modifier = Modifier.focusRequester(focusRequester)
                     )
-
-                    // 豆瓣图片源
-                    SettingItem(
-                        label = "豆瓣图片源",
-                        value = doubanImageSource.ifEmpty { "直连" },
-                        onClick = { showDoubanImageSourceDialog = true },
-                        modifier = Modifier.focusRequester(doubanImageSourceFocusRequester)
-                    )
-
-                    // TMDB API Key（填写后详情页可拉取剧照/ logo 渲染 Apple TV 式 hero）
-                    SettingItem(
-                        label = "TMDB API Key",
-                        value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
-                        onClick = { showTmdbApiKeyDialog = true },
-                        modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
-                    )
-
-                    // M3U8 代理
-                    SettingItem(
-                        label = "M3U8 代理",
-                        value = m3u8ProxyUrl.ifEmpty { "未设置" },
-                        onClick = { showM3u8ProxyDialog = true },
-                        modifier = Modifier.focusRequester(m3u8ProxyFocusRequester)
-                    )
-
-                    // 缓存清理按钮组
-                    CacheButtonsRow(
-                        onClearDoubanCache = { showClearDoubanCacheDialog = true },
-                        onClearSearchCache = { showClearSearchCacheDialog = true },
-                        clearDoubanCacheFocusRequester = clearDoubanCacheFocusRequester,
-                        clearSearchCacheFocusRequester = clearSearchCacheFocusRequester
-                    )
-
-                    // 退出登录按钮（已登录时显示）
-                    if (hasLogin) {
-                        LogoutButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    AppDataService.clearPasswordAndCookies()
-                                    hasLogin = false
-                                    userRole = "user"
-                                }
-                            }
-                        )
-                    }
                 }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // —— 遥控器 ——
+                SectionLabel("遥控器")
+                SettingRow(
+                    label = "调整遥控二维码 IP",
+                    value = selectedIp.ifEmpty { "未知" },
+                    showDivider = false,
+                    onClick = { showIpSelectDialog = true },
+                    modifier = Modifier.focusRequester(ipSettingFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // —— 数据源 ——
+                SectionLabel("数据源")
+                SettingRow(
+                    label = "豆瓣数据源",
+                    value = doubanDataSource.ifEmpty { "直连" },
+                    onClick = { showDoubanDataSourceDialog = true },
+                    modifier = Modifier.focusRequester(doubanDataSourceFocusRequester)
+                )
+                SettingRow(
+                    label = "豆瓣图片源",
+                    value = doubanImageSource.ifEmpty { "直连" },
+                    onClick = { showDoubanImageSourceDialog = true },
+                    modifier = Modifier.focusRequester(doubanImageSourceFocusRequester)
+                )
+                // TMDB API Key（填写后详情页可拉取剧照/ logo 渲染 Apple TV 式 hero）
+                SettingRow(
+                    label = "TMDB API Key",
+                    value = if (tmdbApiKey.isEmpty()) "未设置" else "已设置",
+                    onClick = { showTmdbApiKeyDialog = true },
+                    modifier = Modifier.focusRequester(tmdbApiKeyFocusRequester)
+                )
+                SettingRow(
+                    label = "M3U8 代理",
+                    value = m3u8ProxyUrl.ifEmpty { "未设置" },
+                    showDivider = false,
+                    onClick = { showM3u8ProxyDialog = true },
+                    modifier = Modifier.focusRequester(m3u8ProxyFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // —— 缓存 ——
+                SectionLabel("缓存")
+                SettingRow(
+                    label = "清空豆瓣缓存",
+                    accent = RowAccent.Orange,
+                    onClick = { showClearDoubanCacheDialog = true },
+                    modifier = Modifier.focusRequester(clearDoubanCacheFocusRequester)
+                )
+                SettingRow(
+                    label = "清空搜索缓存",
+                    accent = RowAccent.Orange,
+                    showDivider = false,
+                    onClick = { showClearSearchCacheDialog = true },
+                    modifier = Modifier.focusRequester(clearSearchCacheFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
 
@@ -430,6 +451,63 @@ fun SettingsTab(
                     SearchCacheService.clearCache()
                     org.moontechlab.selenetv.ui.MoonToast.show("搜索缓存已清空")
                 }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 退出登录弹框 A（由「登录实例」项触发，仅含一个退出登录按钮）
+    // 焦点处理参考 TMDB 弹框：关闭后把焦点交还触发项；点退出登录则进入二次确认弹框 B，
+    // 此时不回收焦点，待 A 关闭动画结束再开 B，保证两个独立 Dialog 窗口的焦点顺序交接。
+    AnimatedSelectDialog(
+        visible = showLogoutDialog,
+        onDismiss = { showLogoutDialog = false },
+        onClosed = {
+            if (logoutChainToConfirm) {
+                logoutChainToConfirm = false
+                showLogoutConfirmDialog = true
+            } else {
+                try { loginInstanceFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
+        }
+    ) { onClose ->
+        LogoutDialogContent(
+            serverUrl = serverUrl,
+            onConfirm = {
+                logoutChainToConfirm = true
+                onClose()
+            }
+        )
+    }
+
+    // 退出登录弹框 B（二次确认，取消 / 确认）
+    // 确认即清除登录态并跳转登录页，焦点交给登录页，故关闭时不回收设置焦点；
+    // 取消则把焦点交还「登录实例」项（此时尚未登出，该项仍在）。
+    AnimatedSelectDialog(
+        visible = showLogoutConfirmDialog,
+        onDismiss = { showLogoutConfirmDialog = false },
+        onClosed = {
+            if (logoutConfirmed) {
+                logoutConfirmed = false
+            } else {
+                try { loginInstanceFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
+        }
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "退出登录",
+            message = "确定要退出登录吗？",
+            confirmText = "确认",
+            confirmDestructive = true,
+            focusConfirm = false,
+            onConfirm = {
+                logoutConfirmed = true
+                hasLogin = false
+                userRole = "user"
+                coroutineScope.launch { AppDataService.clearPasswordAndCookies() }
+                // 登出后回到登录页
+                onShowLoginScreen()
                 onClose()
             },
             onDismiss = onClose
@@ -761,12 +839,14 @@ private fun DialogButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isPrimary: Boolean = false
+    isPrimary: Boolean = false,
+    isDestructive: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
     val textColor = when {
-        isFocused -> TextFocused
+        isFocused -> if (isDestructive) Color.White else TextFocused
+        isDestructive -> Color(0xFFE74C3C)
         isPrimary -> Color(0xFF4CAF50)
         else -> TextDefault
     }
@@ -777,8 +857,12 @@ private fun DialogButton(
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isPrimary) Color(0x334CAF50) else ItemBgDefault,
-            focusedContainerColor = ItemBgFocused
+            containerColor = when {
+                isDestructive -> Color(0x33E74C3C)
+                isPrimary -> Color(0x334CAF50)
+                else -> ItemBgDefault
+            },
+            focusedContainerColor = if (isDestructive) LogoutButtonBgFocused else ItemBgFocused
         )
     ) {
         Box(
@@ -794,6 +878,61 @@ private fun DialogButton(
                 color = textColor
             )
         }
+    }
+}
+
+/**
+ * 退出登录确认弹框内容
+ * 展示登录实例地址 + 单个红色「退出登录」按钮（无取消按钮，BACK 即关闭）。
+ * 焦点处理参考 TMDB 弹框：弹出后延迟聚焦到按钮，避免独立 Dialog 窗口下的焦点丢失。
+ */
+@Composable
+private fun LogoutDialogContent(
+    serverUrl: String,
+    onConfirm: () -> Unit
+) {
+    val confirmButtonFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(100)
+        confirmButtonFocusRequester.requestFocus()
+    }
+
+    Column(
+        modifier = Modifier
+            .width(400.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1A1A1A))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "登录实例",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextDefault
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = serverUrl.ifEmpty { "未设置" },
+            fontSize = 14.sp,
+            color = TextGray,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        DialogButton(
+            text = "退出登录",
+            onClick = onConfirm,
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(confirmButtonFocusRequester),
+            isDestructive = true
+        )
     }
 }
 
@@ -1046,10 +1185,11 @@ private fun VersionColophon(
 }
 
 /**
- * 用户信息区
+ * 用户头部（居中）
+ * 「当前用户」标签 + 用户名 + 角色徽章，整体水平居中于右侧栏。
  */
 @Composable
-private fun UserInfoSection(
+private fun CompactUserHeader(
     username: String,
     role: String
 ) {
@@ -1057,16 +1197,14 @@ private fun UserInfoSection(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 当前用户标签
         Text(
             text = "当前用户",
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             color = TextGray
         )
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // 用户名 + 角色徽章
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1081,6 +1219,21 @@ private fun UserInfoSection(
             RoleBadge(role = role)
         }
     }
+}
+
+/**
+ * 分组标题：安静的灰色小字标，作为 tvOS 风格分组的分隔。
+ */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        color = TextGray.copy(alpha = 0.9f),
+        modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
+    )
 }
 
 /**
@@ -1110,154 +1263,133 @@ private fun RoleBadge(role: String) {
 }
 
 /**
- * 设置项组容器
+ * 设置行的强调色：默认 / 橙（缓存）/ 红（退出登录）。
  */
-@Composable
-private fun SettingsGroup(
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        content = content
-    )
-}
+private enum class RowAccent { Default, Orange, Red }
 
 /**
- * 设置项
- * 胶囊形状，固定宽度480dp，聚焦时缩放1.02倍
+ * tvOS 风格设置行
+ * 无胶囊背景、紧凑高度（约为原胶囊的一半），靠 hairline 分隔线分组；
+ * 聚焦时整行填充（默认白底深字，强调色行填充对应色 + 白字），不缩放，像干净的列表高亮。
  */
 @Composable
-private fun SettingItem(
+private fun SettingRow(
     label: String,
-    value: String,
+    value: String? = null,
+    accent: RowAccent = RowAccent.Default,
     focusable: Boolean = true,
-    transparentBg: Boolean = false,
+    showDivider: Boolean = true,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // 不可聚焦时使用普通 Row
+    // 不可聚焦：纯展示行
     if (!focusable) {
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .then(
-                    if (!transparentBg) Modifier
-                        .clip(RoundedCornerShape(40.dp))
-                        .background(ItemBgDefault)
-                    else Modifier
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextDefault
                 )
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextDefault
-            )
-            Text(
-                text = value,
-                fontSize = 13.sp,
-                color = TextGray,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 260.dp)
-            )
+                if (value != null) {
+                    Text(
+                        text = value,
+                        fontSize = 13.sp,
+                        color = TextGray,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 240.dp)
+                    )
+                }
+            }
+            if (showDivider) RowDivider()
         }
         return
     }
 
     var isFocused by remember { mutableStateOf(false) }
 
-    val labelColor = if (isFocused) TextFocused else TextDefault
-    val valueColor = if (isFocused) TextFocused else TextGray
+    val idleLabelColor = when (accent) {
+        RowAccent.Default -> TextDefault
+        RowAccent.Orange -> Color(0xFFF39C12)
+        RowAccent.Red -> Color(0xFFE74C3C)
+    }
+    val focusFill = when (accent) {
+        RowAccent.Default -> ItemBgFocused
+        RowAccent.Orange -> CacheButtonBgFocused
+        RowAccent.Red -> LogoutButtonBgFocused
+    }
+    val focusTextColor = if (accent == RowAccent.Default) TextFocused else Color.White
 
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .onKeyEvent { event ->
-                // 拦截左右方向键，阻止焦点移动
-                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
-            },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (transparentBg) Color.Transparent else ItemBgDefault,
-            focusedContainerColor = ItemBgFocused
-        )
-    ) {
-        Row(
-            modifier = Modifier
+    val labelColor = if (isFocused) focusTextColor else idleLabelColor
+    val valueColor = if (isFocused) focusTextColor else TextGray
+
+    Column {
+        Surface(
+            onClick = onClick,
+            modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .onFocusChanged { isFocused = it.isFocused }
+                .onKeyEvent { event ->
+                    // 拦截左右方向键，阻止焦点移动
+                    event.key == Key.DirectionLeft || event.key == Key.DirectionRight
+                },
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = focusFill
+            )
         ) {
-            Text(
-                text = label,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = labelColor
-            )
-            Text(
-                text = value,
-                fontSize = 13.sp,
-                color = valueColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 260.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = labelColor
+                )
+                if (value != null) {
+                    Text(
+                        text = value,
+                        fontSize = 13.sp,
+                        color = valueColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 240.dp)
+                    )
+                }
+            }
         }
+        // 聚焦行隐藏自身底部分隔线，避免与白色填充叠在一起；高度保持 1dp 不抖动
+        if (showDivider) RowDivider(visible = !isFocused)
     }
 }
 
 /**
- * 设置按钮（如登录按钮）
- * 胶囊形状，固定宽度480dp，聚焦时缩放1.02倍
+ * 行间 hairline 分隔线（与玻璃拟态层同源的低透明度白），左右内缩与行内容对齐。
  */
 @Composable
-private fun SettingButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    val textColor = if (isFocused) TextFocused else TextDefault
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier
+private fun RowDivider(visible: Boolean = true) {
+    Box(
+        modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .onKeyEvent { event ->
-                // 拦截左右方向键，阻止焦点移动
-                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
-            },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = ItemBgDefault,
-            focusedContainerColor = ItemBgFocused
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor
-            )
-        }
-    }
+            .padding(horizontal = 16.dp)
+            .height(1.dp)
+            .background(if (visible) Color.White.copy(alpha = 0.07f) else Color.Transparent)
+    )
 }
 
 /**
@@ -1268,13 +1400,19 @@ private fun ConfirmDialogContent(
     title: String,
     message: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    confirmText: String = "确定",
+    confirmDestructive: Boolean = false,
+    // 默认聚焦确认；危险操作聚焦取消——取消是首个可聚焦项，与弹框窗口的默认落焦一致，
+    // 不产生焦点位移，既消除「确认→取消→确认」的闪现，也是危险操作更安全的默认项。
+    focusConfirm: Boolean = true
 ) {
     val confirmButtonFocusRequester = remember { FocusRequester() }
+    val cancelButtonFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         delay(100)
-        confirmButtonFocusRequester.requestFocus()
+        (if (focusConfirm) confirmButtonFocusRequester else cancelButtonFocusRequester).requestFocus()
     }
 
     Column(
@@ -1311,130 +1449,20 @@ private fun ConfirmDialogContent(
             DialogButton(
                 text = "取消",
                 onClick = onDismiss,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(cancelButtonFocusRequester)
             )
 
             // 确认按钮
             DialogButton(
-                text = "确定",
+                text = confirmText,
                 onClick = onConfirm,
                 modifier = Modifier
                     .weight(1f)
                     .focusRequester(confirmButtonFocusRequester),
-                isPrimary = true
-            )
-        }
-    }
-}
-
-/**
- * 缓存清理按钮组
- */
-@Composable
-private fun CacheButtonsRow(
-    onClearDoubanCache: () -> Unit,
-    onClearSearchCache: () -> Unit,
-    clearDoubanCacheFocusRequester: FocusRequester = remember { FocusRequester() },
-    clearSearchCacheFocusRequester: FocusRequester = remember { FocusRequester() }
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        CacheButton(
-            text = "清空豆瓣缓存",
-            modifier = Modifier
-                .weight(1f)
-                .focusRequester(clearDoubanCacheFocusRequester),
-            onClick = onClearDoubanCache
-        )
-        CacheButton(
-            text = "清空搜索缓存",
-            modifier = Modifier
-                .weight(1f)
-                .focusRequester(clearSearchCacheFocusRequester),
-            onClick = onClearSearchCache
-        )
-    }
-}
-
-/**
- * 缓存清理按钮
- */
-@Composable
-private fun CacheButton(
-    text: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    val textColor = if (isFocused) Color.White else Color(0xFFF39C12)
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = CacheButtonBg,
-            focusedContainerColor = CacheButtonBgFocused
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor
-            )
-        }
-    }
-}
-
-/**
- * 退出登录按钮
- */
-@Composable
-private fun LogoutButton(
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    val textColor = if (isFocused) Color.White else Color(0xFFE74C3C)
-
-    Surface(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .onKeyEvent { event ->
-                // 拦截左右方向键，阻止焦点移动
-                event.key == Key.DirectionLeft || event.key == Key.DirectionRight
-            },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(40.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = LogoutButtonBg,
-            focusedContainerColor = LogoutButtonBgFocused
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "退出登录",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor
+                isPrimary = !confirmDestructive,
+                isDestructive = confirmDestructive
             )
         }
     }
