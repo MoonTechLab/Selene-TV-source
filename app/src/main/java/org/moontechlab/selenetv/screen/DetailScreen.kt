@@ -372,8 +372,10 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
     }
 
-    LaunchedEffect(state.detailsLoading, state.selectedSource != null) {
-        if (!state.detailsLoading && state.selectedSource != null) {
+    // hero 出现后把焦点落到主按钮槽位：有源→播放按钮；源仍在加载→加载占位胶囊（两者都挂 primaryFocus）。
+    // 源就绪、占位换成真实按钮时本 effect 因 selectedSource 变化重跑，把焦点原位移交给播放按钮。
+    LaunchedEffect(state.detailsLoading, state.selectedSource != null, noSources) {
+        if (!state.detailsLoading && !noSources) {
             kotlinx.coroutines.delay(260)
             try { primaryFocus.requestFocus() } catch (_: Exception) {}
             scrollState.scrollTo(0)
@@ -605,6 +607,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                 onToggleFavorite = onToggleFavorite,
                                 primaryFocusRequester = primaryFocus,
                                 upTarget = if (hasSummary) summaryFocus else null,
+                                // hero 已出、但播放源仍在解析（非「搜完且无源」）→ 显示加载占位胶囊
+                                sourcesLoading = !hasSource && !noSources,
                                 // 续看：集数（总集>1 才显示）+ 进度，嵌进「继续播放」按钮
                                 continueEpisode = if (record != null && epCount > 1 && record.index > 0) record.index else null,
                                 continueProgress = if (record != null && record.totalTime > 0L)

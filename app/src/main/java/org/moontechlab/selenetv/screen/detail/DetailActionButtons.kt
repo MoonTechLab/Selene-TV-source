@@ -1,7 +1,14 @@
 package org.moontechlab.selenetv.screen.detail
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -67,15 +79,25 @@ fun DetailActionButtons(
     upTarget: FocusRequester? = null,
     continueEpisode: Int? = null,
     continueProgress: Float = 0f,
+    // 详情 hero 已出但播放源仍在解析：无任何动作按钮可承接焦点。此时在主按钮槽位放一个等高的
+    // 加载占位胶囊（承接 primaryFocus），既给焦点落点/明确反馈，又预留行高，源就绪后原位替换、零跳变。
+    sourcesLoading: Boolean = false,
 ) {
+    val hasAnyAction = showContinue || showPlay || showFavorite
     Row(
         // 向上焦点：有简介块时上键聚焦到它，否则取消搜索，避免焦点逃逸到覆盖层下的首页（#4）
         modifier = modifier
             .fillMaxWidth()
+            // 恒定预留行高：占位胶囊→真实按钮的切换之间可能闪过一帧「两者都不渲染」（如 sourcesComplete
+            // 先于派生 sources 落定的瞬态），若不锁高，行会塌成 0、把上方内容拽下又弹回，造成跳变。
+            .heightIn(min = ButtonHeight)
             .focusProperties { up = upTarget ?: FocusRequester.Cancel },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (!hasAnyAction && sourcesLoading) {
+            LoadingActionPill(modifier = Modifier.focusRequester(primaryFocusRequester))
+        }
         if (showContinue) {
             ContinueActionButton(
                 episode = continueEpisode,
@@ -112,6 +134,72 @@ fun DetailActionButtons(
             Spacer(modifier = Modifier.weight(1f))
             SourceNameLabel(name = sourceName)
         }
+    }
+}
+
+/**
+ * 加载占位胶囊：与真实动作按钮同属一族——等高/同形/同底色(UnfocusedBg)，仅聚焦态不做黑白反色而是
+ * 轻微提亮，暗示「加载中、暂不可操作」。前导用一个极简的旋转细弧(而非全屏国风月牙)，与简洁胶囊一致。
+ * 点击无操作；源解析完成后由上层换成真实按钮，原位无跳变。
+ */
+@Composable
+private fun LoadingActionPill(modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.05f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "loading_pill_scale",
+    )
+    val fg = if (focused) FocusedFg else UnfocusedFg
+    Surface(
+        onClick = {},
+        modifier = modifier
+            .onFocusChanged { focused = it.isFocused }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .height(ButtonHeight),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = ButtonShape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = UnfocusedBg,
+            // 聚焦不做黑白反色（区别于可操作按钮），只提亮一档，表明仍在加载
+            focusedContainerColor = Color.White.copy(alpha = 0.3f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxHeight().padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MiniSpinner(color = fg, modifier = Modifier.size(16.dp))
+            Text(text = "正在加载播放源", color = fg, fontSize = 15.sp, fontWeight = FontWeight.W600)
+        }
+    }
+}
+
+/** 极简加载细弧：单色 270° 圆弧匀速旋转，贴合简洁胶囊，区别于全屏国风月牙加载层。 */
+@Composable
+private fun MiniSpinner(color: Color, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "mini_spinner")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "mini_spinner_angle",
+    )
+    Canvas(modifier = modifier) {
+        val stroke = 2.dp.toPx()
+        drawArc(
+            color = color,
+            startAngle = angle,
+            sweepAngle = 270f,
+            useCenter = false,
+            topLeft = Offset(stroke / 2, stroke / 2),
+            size = Size(size.width - stroke, size.height - stroke),
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
+        )
     }
 }
 
