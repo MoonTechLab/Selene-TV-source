@@ -85,7 +85,14 @@ class MpvPlayerController(
 
     private fun doLoad(url: String, startMs: Long, playWhenReady: Boolean) {
         val startSec = (startMs / 1000.0).coerceAtLeast(0.0)
-        mpv.command(arrayOf("loadfile", url, "replace", "start=$startSec"))
+        // loadfile 语法：loadfile <url> [<flags> [<index> [<options>]]]。
+        // start 是 option，必须放在第 4 个位置（index 之后）；放在 index 位会被当成整数解析失败、
+        // 导致整条 loadfile 被拒、什么都不播（黑屏）。start=0 时不传 option。
+        if (startSec > 0) {
+            mpv.command(arrayOf("loadfile", url, "replace", "0", "start=$startSec"))
+        } else {
+            mpv.command(arrayOf("loadfile", url, "replace"))
+        }
         mpv.setPropertyString("pause", if (playWhenReady) "no" else "yes")
     }
 
