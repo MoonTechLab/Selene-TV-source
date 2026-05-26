@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-Selene-TV 是一款 Android TV（Leanback）媒体中心应用，作为 MoonTV 类自托管服务的 TV 端客户端。主要职责是：浏览影视/动漫/综艺/直播元数据、聚合搜索、调度后端服务，并通过内嵌 Web 服务器接收手机遥控指令。视频播放已选定 **ExoPlayer (Media3)**，详见「视频播放（选型决策）」一节（截至当前尚未实现集成）。
+Selene-TV 是一款 Android TV（Leanback）媒体中心应用，作为 MoonTV 类自托管服务的 TV 端客户端。主要职责是：浏览影视/动漫/综艺/直播元数据、聚合搜索、调度后端服务，并通过内嵌 Web 服务器接收手机遥控指令。视频播放采用 **ExoPlayer (Media3)**，详见「视频播放（选型决策）」一节。
 
 `applicationId` 为 `org.moontechlab.selenetv`，单 Activity（`MainActivity`）+ Compose for TV 架构。
 
@@ -75,7 +75,7 @@ Ktor Netty 嵌入式 HTTP 服务器，从 `28256` 起逐端口探测可用端口
 `TextMeasureProvider` + `TextMeasureContext` 提供异步文本宽度测量队列，用于支撑 `VideoCard` 等焦点时根据文字宽度伸缩的卡片。新增类似动态宽度组件时复用这套机制，不要直接在 composable 中反复 `Layout` 测量。
 
 ### 视频播放（选型决策）
-**已决定采用 ExoPlayer (Media3)**，截至当前尚未实现集成（依赖项中暂无 Media3/ExoPlayer）。
+**已采用 ExoPlayer (Media3)**，依赖见 `app/build.gradle.kts`（`media3-exoplayer` / `-exoplayer-hls` / `-ui` / `-datasource-okhttp`）。
 
 - **场景**：以 m3u8 (HLS) 为主，少量 mp4，偶尔 FLV 直播；希望「给链接自动判别格式」。
 - **选 ExoPlayer 的理由**：HLS/MP4 原生支持最强、HLS 自适应码率与低延迟直播调校成熟；冷启动快、内存基线低、APK 体积增量小（纯 Kotlin/Java 依赖，无 .so）；与 Compose for TV 集成有官方 `androidx.media3.ui.compose`（`PlayerSurface`）。
