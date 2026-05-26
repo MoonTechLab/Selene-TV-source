@@ -441,6 +441,15 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         val key = sourceKey(source)
         val backup = state.playRecords[key] ?: return@lam
         state = state.copy(playRecords = state.playRecords - key)
+        // 删除后 hasRecord=false →「继续播放」「删除」两个按钮一并移除，承载焦点的「删除」按钮离开组合
+        // 会让焦点悬空。删除后「播放」按钮接管 primaryFocus（见 DetailActionButtons），故重组稳定后把焦点
+        // 改派给它；requester 在新布局挂载前 requestFocus 会抛异常，重试数帧直到成功。
+        scope.launch {
+            repeat(8) {
+                kotlinx.coroutines.delay(30)
+                try { primaryFocus.requestFocus(); return@launch } catch (_: Exception) {}
+            }
+        }
         scope.launch {
             try {
                 withContext(Dispatchers.IO) { ApiService.deletePlayRecord(source.source, source.id) }
