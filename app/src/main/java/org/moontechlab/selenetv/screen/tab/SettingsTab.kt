@@ -120,6 +120,9 @@ fun SettingsTab(
     var doubanImageSource by remember { mutableStateOf("") }
     var tmdbApiKey by remember { mutableStateOf("") }
     var m3u8ProxyUrl by remember { mutableStateOf("") }
+    var playerType by remember { mutableStateOf("") }
+    var decodeMode by remember { mutableStateOf("") }
+    val mpvSupported = android.os.Build.VERSION.SDK_INT >= org.moontechlab.selenetv.screen.player.MPV_MIN_SDK
 
     // IP 选择相关状态
     var showIpSelectDialog by remember { mutableStateOf(false) }
@@ -130,6 +133,8 @@ fun SettingsTab(
     // 豆瓣源选择弹框状态
     var showDoubanDataSourceDialog by remember { mutableStateOf(false) }
     var showDoubanImageSourceDialog by remember { mutableStateOf(false) }
+    var showPlayerTypeDialog by remember { mutableStateOf(false) }
+    var showDecodeModeDialog by remember { mutableStateOf(false) }
 
     // 退出登录两步弹框（均由「登录实例」项触发）：
     // A 登录实例弹框（含单个退出登录按钮）→ B 二次确认弹框（取消 / 确认）
@@ -144,6 +149,8 @@ fun SettingsTab(
     val loginInstanceFocusRequester = remember { FocusRequester() }
     val ipSettingFocusRequester = remember { FocusRequester() }
     val doubanDataSourceFocusRequester = remember { FocusRequester() }
+    val playerTypeFocusRequester = remember { FocusRequester() }
+    val decodeModeFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
     val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
@@ -174,6 +181,8 @@ fun SettingsTab(
         doubanImageSource = AppDataService.getDoubanImageSourceDisplayName()
         tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
+        playerType = AppDataService.getPlayerTypeDisplayName()
+        decodeMode = AppDataService.getDecodeModeDisplayName()
         // 加载可用 IP 列表（网络接口枚举可能阻塞，放到 IO 线程）
         val ips = withContext(Dispatchers.IO) { getAllIpAddresses() }
         availableIps = ips
@@ -293,6 +302,24 @@ fun SettingsTab(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                // —— 播放 ——
+                SectionLabel("播放")
+                SettingRow(
+                    label = "播放器",
+                    value = playerType.ifEmpty { "ExoPlayer" },
+                    onClick = { showPlayerTypeDialog = true },
+                    modifier = Modifier.focusRequester(playerTypeFocusRequester)
+                )
+                SettingRow(
+                    label = "解码",
+                    value = decodeMode.ifEmpty { "硬解" },
+                    showDivider = false,
+                    onClick = { showDecodeModeDialog = true },
+                    modifier = Modifier.focusRequester(decodeModeFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
                 // —— 缓存 ——
                 SectionLabel("缓存")
                 SettingRow(
@@ -368,6 +395,50 @@ fun SettingsTab(
                 coroutineScope.launch {
                     AppDataService.saveDoubanImageSource(displayName)
                     doubanImageSource = displayName
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 播放器选择弹框
+    AnimatedSelectDialog(
+        visible = showPlayerTypeDialog,
+        onDismiss = { showPlayerTypeDialog = false },
+        onClosed = { playerTypeFocusRequester.requestFocus() }
+    ) { onClose ->
+        SourceSelectDialogContent(
+            title = "选择播放器",
+            options = if (mpvSupported)
+                AppDataService.PlayerType.entries.map { it.displayName }
+            else listOf(AppDataService.PlayerType.EXOPLAYER.displayName),
+            currentValue = playerType,
+            onSelected = { displayName ->
+                coroutineScope.launch {
+                    AppDataService.savePlayerType(displayName)
+                    playerType = displayName
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 解码方式选择弹框
+    AnimatedSelectDialog(
+        visible = showDecodeModeDialog,
+        onDismiss = { showDecodeModeDialog = false },
+        onClosed = { decodeModeFocusRequester.requestFocus() }
+    ) { onClose ->
+        SourceSelectDialogContent(
+            title = "选择解码方式",
+            options = AppDataService.DecodeMode.entries.map { it.displayName },
+            currentValue = decodeMode,
+            onSelected = { displayName ->
+                coroutineScope.launch {
+                    AppDataService.saveDecodeMode(displayName)
+                    decodeMode = displayName
                 }
                 onClose()
             },
