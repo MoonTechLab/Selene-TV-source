@@ -78,7 +78,7 @@ private const val BACK_EXIT_WINDOW_MS = 2_000L
  * 选集 / 换源 / 详情统一收进「进度条按下键唤出」的上拉标签面板（默认详情，详情含「下一集」快捷入口）。
  * 面板上滑时把进度条整体上顶；焦点向上回到进度条时面板自动收起。
  *
- * 舞台为 Media3 ExoPlayer（PlayerView），position/duration/播放态由 [PlayerController] 驱动；
+ * 舞台为可插拔的播放器后端（[VideoPlayer]），position/duration/播放态由 [PlayerController] 驱动；
  * 控制层 / 面板 / 焦点模型保持不变。
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
@@ -98,7 +98,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var flashTick by remember { mutableIntStateOf(0) }
     var flashVisible by remember { mutableStateOf(false) }
 
-    // 播放状态全部来自 ExoPlayer
+    // 播放状态全部来自播放器后端（VideoPlayer）
     val isPlaying = controller.isPlaying
     val positionMs = controller.positionMs
     val durationMs = if (controller.durationMs > 0) controller.durationMs else launch.durationMs
@@ -173,7 +173,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         playEpisode(currentEpisode, launch.startPositionMs.coerceAtLeast(0))
     }
 
-    // 周期把 ExoPlayer 位置同步到 State
+    // 周期把播放器后端位置同步到 State
     LaunchedEffect(Unit) {
         while (true) {
             controller.syncProgress()

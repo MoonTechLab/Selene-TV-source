@@ -35,6 +35,7 @@ class MpvPlayerController(
     private val main = Handler(Looper.getMainLooper())
     private var pendingUrl: String? = null
     private var pendingStartMs: Long = 0
+    private var pendingPlayWhenReady: Boolean = true
     private var surfaceAttached = false
     @Volatile private var released = false
 
@@ -76,6 +77,7 @@ class MpvPlayerController(
         positionMs = 0; durationMs = 0; bufferedMs = 0
         if (!surfaceAttached) {
             pendingUrl = url; pendingStartMs = startMs
+            pendingPlayWhenReady = playWhenReady
             return
         }
         doLoad(url, startMs, playWhenReady)
@@ -151,8 +153,9 @@ class MpvPlayerController(
                             if (released) return
                             mpv.attachSurface(holder.surface)
                             mpv.setOptionString("force-window", "yes")
+                            mpv.setPropertyString("vo", "gpu")
                             surfaceAttached = true
-                            pendingUrl?.let { doLoad(it, pendingStartMs, true); pendingUrl = null }
+                            pendingUrl?.let { doLoad(it, pendingStartMs, pendingPlayWhenReady); pendingUrl = null }
                         }
                         override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, ht: Int) {
                             if (released) return
