@@ -39,6 +39,13 @@ class MpvPlayerController(
     private var surfaceAttached = false
     @Volatile private var released = false
 
+    // 切频道/切集用 loadfile ... replace 会让「旧文件」先收到一个 END_FILE(stop)。
+    // EventObserver 只给 event(id)、拿不到结束原因，无法区分「旧文件被替换」与「新文件加载失败」。
+    // 故记录：当前是否有文件在播(fileActive)，以及 replace 时应忽略的旧文件停止事件数(pendingStopEndFiles)。
+    // 这些变量只在主线程读写（doLoad 与 event 的 main.post 回调都在主线程）。
+    private var fileActive = false
+    private var pendingStopEndFiles = 0
+
     override var positionMs by mutableLongStateOf(0L); private set
     override var durationMs by mutableLongStateOf(0L); private set
     override var bufferedMs by mutableLongStateOf(0L); private set
@@ -75,6 +82,10 @@ class MpvPlayerController(
         error = null
         hasStarted = false
         positionMs = 0; durationMs = 0; bufferedMs = 0
+        // mpv 的 paused-for-cache 只反映「播放中」的缓存停顿，不覆盖初始连接/解封装/首帧解码阶段。
+        // 这里在开始载入时主动置 true（等价于 ExoPlayer prepare() 触发的 STATE_BUFFERING），
+        // 让加载月牙立即出现，避免首帧前一段纯黑无反馈；首帧到达（time-pos>0）时清掉。
+        isBuffering = true
         if (!surfaceAttached) {
             pendingUrl = url; pendingStartMs = startMs
             pendingPlayWhenReady = playWhenReady
@@ -84,6 +95,9 @@ class MpvPlayerController(
     }
 
     private fun doLoad(url: String, startMs: Long, playWhenReady: Boolean) {
+        // 若已有文件在播，replace 会先给旧文件发一个 END_FILE(stop)，需忽略，避免误判为新源加载失败。
+        if (fileActive) pendingStopEndFiles++
+        fileActive = true
         val startSec = (startMs / 1000.0).coerceAtLeast(0.0)
         // loadfile 语法：loadfile <url> [<flags> [<index> [<options>]]]。
         // start 是 option，必须放在第 4 个位置（index 之后）；放在 index 位会被当成整数解析失败、
@@ -136,7 +150,11 @@ class MpvPlayerController(
         main.post {
             if (released) return@post
             when (property) {
-                "time-pos" -> { positionMs = (value * 1000).toLong().coerceAtLeast(0); if (!hasStarted && value > 0) hasStarted = true }
+                "time-pos" -> {
+                    positionMs = (value * 1000).toLong().coerceAtLeast(0)
+                    // 首帧到达：起播完成，关掉初始加载月牙（之后的重缓冲交回 paused-for-cache）。
+                    if (!hasStarted && value > 0) { hasStarted = true; isBuffering = false }
+                }
                 "duration" -> durationMs = (value * 1000).toLong().coerceAtLeast(0)
                 "demuxer-cache-time" -> bufferedMs = (value * 1000).toLong().coerceAtLeast(0)
             }
@@ -146,6 +164,10 @@ class MpvPlayerController(
     override fun event(eventId: Int) {
         if (eventId == MPVLib.MpvEvent.MPV_EVENT_END_FILE) main.post {
             if (released) return@post
+            // 旧文件因 replace 停止：吞掉，不算失败（切频道/切集的正常现象）。
+            if (pendingStopEndFiles > 0) { pendingStopEndFiles--; return@post }
+            fileActive = false
+            // 走到这里是「新文件」自己结束：未起播过即视为加载失败（死链/无法解码）。
             if (!hasStarted) error = "mpv: playback failed"
         }
     }
