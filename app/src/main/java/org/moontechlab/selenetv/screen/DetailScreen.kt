@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,8 +88,10 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     // tier2 命中的 doubanId（>=2 相同）；一旦确定即稳定，供独立 effect 拉取豆瓣详情，
     // 避免把网络请求放在随 state.sources 变化而被取消的 effect 里（LeftCompositionCancellation）。
     var tier2Target by remember(entry) { mutableStateOf<String?>(null) }
-    // 已拿到豆瓣详情、且有 original_title 后，待解析 TMDB 剧照的查询。设置后保持加载页直到 TMDB
-    // 结算（见下方 effect），避免新布局在内容露出后才弹入造成跳变。仅豆瓣数据页会触发。
+    // Douban 入口拿到豆瓣详情、且有 original_title 后，待解析 TMDB 剧照的查询（仅 Douban 入口及其重试用）。
+    // 设置后保持加载页直到下方 5C 结算，避免新布局在内容露出后才弹入造成跳变。
+    // 注意：tier2/SearchAggregate 路径不走这里——它在 5B 内联解析 TMDB 并原子落定，
+    // 以规避「5B 连跑两遍 + 命中缓存」时 tmdbTrigger null→Q 抖动被 5C 漏掉、加载页卡死的问题。
     var tmdbTrigger by remember(entry) { mutableStateOf<TmdbArtQuery?>(null) }
 
     DisposableEffect(Unit) {
@@ -216,22 +219,38 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
     }
 
-    // 5B) 拉取 tier2 豆瓣详情：仅依赖稳定的 tier2Target，避免在 state.sources 变化时被取消
-    //    （否则慢速的豆瓣请求会抛 LeftCompositionCancellation → 误判为失败 → 兜底源信息）。
+    // 5B) 拉取 tier2 豆瓣详情，并在同一协程内顺带解析 TMDB 剧照，最后把 details + tmdbArt + detailsLoading=false
+    //    一次性原子落定。仅依赖稳定的 tier2Target（不随 state.sources 变化被取消；tier2 winner 随流式结果
+    //    改判 X→Y 时，本 effect 按新 target 重入，旧协程连同其 TMDB 请求一并取消，无残留写入）。
+    //
+    //    历史教训（务必保留合并结构）：曾把 TMDB 拆成独立的 LaunchedEffect(tmdbTrigger)，并在本 effect 开头
+    //    重置 tmdbTrigger=null。当豆瓣详情命中缓存（同步返回）且本 effect 因上游 5A 抖动连跑两遍时，
+    //    tmdbTrigger 会在一个重组窗口内 null→Q→null→Q 抖动，LaunchedEffect(tmdbTrigger) 只观察到中间的
+    //    null 便提前返回，最终的 Q 不再触发它 → TMDB 那步永不执行 → detailsLoading 永远为 true → 加载页
+    //    卡死（仅「第二次打开、豆瓣已缓存」时复现）。合并为单协程后，detailsLoading=false 必随每次 5B 末尾
+    //    原子落定，最后一次写入即终态；且 tmdbArt 与 details 同帧写入，避免「先露豆瓣布局、后弹 TMDB 布局」
+    //    的跳变与焦点丢失。
     LaunchedEffect(tier2Target) {
         val id = tier2Target ?: return@LaunchedEffect
-        // tier2 winner 取「出现次数最多」，随流式结果可能改判（X→Y）。本 effect 按 tier2Target 重入，
-        // 重入即作废上一目标遗留的 tmdbTrigger：否则旧目标的 5C 仍在后台跑，而本次若走 q==null/失败
-        // 分支会先把 detailsLoading 置 false 撤掉加载页（此刻 tmdbArt 仍空→旧布局、焦点已落定），随后
-        // 那个迟到的 5C 再写入 tmdbArt → useHeroV2 翻转 → hero 子树替换 → 布局跳变且焦点丢失。
-        // 置空即取消旧 5C，保证「撤加载页时布局已是终态」这一不变式（detailsLoading=false ⟹ 无待结算 TMDB）。
-        tmdbTrigger = null
-        when (val resp = doubanService.getDoubanDetails(id)) {
+        val resp = doubanService.getDoubanDetails(id)
+        // tier2Target 改判/离开组合会取消本协程，但 getDoubanDetails 的 catch(Exception) 会把
+        // CancellationException 吞成 ApiResponse.Error。若不显式校验，被取消的旧协程会继续走下面的
+        // 分支抢写 state（提前撤加载页、details=null），紧接着胜出的新协程再写真数据 → 布局跳变 + 焦点丢失。
+        // 故在写 state 前断言协程仍存活，被取消则在此抛出 CancellationException 干净退出、绝不写 state。
+        ensureActive()
+        when (resp) {
             is ApiResponse.Success -> {
                 val q = tmdbQueryTitle(resp.data.originalTitle, resp.data.title)
                 if (q != null) {
-                    state = state.copy(details = resp.data) // 保持加载页，等 TMDB 结算
-                    tmdbTrigger = TmdbArtQuery(q, resp.data.year)
+                    // 加载页背后解析 TMDB 剧照（成功/失败/超时/未配 key 都接受），与豆瓣详情同帧落定
+                    val key = AppDataService.getTmdbApiKey()
+                    val art = if (key.isNotBlank()) {
+                        kotlinx.coroutines.withTimeoutOrNull(4000) {
+                            TmdbService.resolveArt(q, resp.data.year, key, doubanCacheService)
+                        }
+                    } else null
+                    ensureActive()
+                    state = state.copy(details = resp.data, tmdbArt = art, detailsLoading = false)
                 } else {
                     state = state.copy(details = resp.data, detailsLoading = false)
                 }
@@ -240,9 +259,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
     }
 
-    // 5C) 解析 TMDB 剧照/ logo（仅豆瓣数据页、且有 original_title 时触发）。
+    // 5C) 解析 TMDB 剧照/logo —— 仅服务 Douban 入口（及其重试）设置的 tmdbTrigger。
     //    在加载页背后完成：拿到结果（成功/失败/超时/未配 key）才撤加载页，故新旧布局一次性落定，无跳变。
-    //    依赖稳定的 tmdbTrigger，不随 state.sources 变化被取消。失败一律回退旧布局。缓存见 TmdbService。
+    //    Douban 入口 effect 按稳定的 entry 单次运行、不重置 tmdbTrigger，故无 tier2 路径那种抖动竞态。
     LaunchedEffect(tmdbTrigger) {
         val q = tmdbTrigger ?: return@LaunchedEffect
         val key = AppDataService.getTmdbApiKey()
