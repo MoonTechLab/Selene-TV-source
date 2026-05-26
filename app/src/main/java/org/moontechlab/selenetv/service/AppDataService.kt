@@ -26,6 +26,8 @@ object AppDataService {
     private const val KEY_M3U8_PROXY_URL = "m3u8_proxy_url"
     private const val KEY_TMDB_API_KEY = "tmdb_api_key"
     private const val KEY_SESSION_TOKEN = "session_token"
+    private const val KEY_PLAYER_TYPE = "player_type"
+    private const val KEY_DECODE_MODE = "decode_mode"
 
     private lateinit var prefs: SharedPreferences
     
@@ -214,6 +216,30 @@ object AppDataService {
         }
     }
 
+    /** 播放器后端 */
+    enum class PlayerType(val key: String, val displayName: String) {
+        EXOPLAYER("exoplayer", "ExoPlayer"),
+        MPV("mpv", "MPV");
+
+        companion object {
+            fun fromKey(key: String): PlayerType = entries.find { it.key == key } ?: EXOPLAYER
+            fun fromDisplayName(displayName: String): PlayerType =
+                entries.find { it.displayName == displayName } ?: EXOPLAYER
+        }
+    }
+
+    /** 解码方式 */
+    enum class DecodeMode(val key: String, val displayName: String) {
+        HARDWARE("hardware", "硬解"),
+        SOFTWARE("software", "软解");
+
+        companion object {
+            fun fromKey(key: String): DecodeMode = entries.find { it.key == key } ?: HARDWARE
+            fun fromDisplayName(displayName: String): DecodeMode =
+                entries.find { it.displayName == displayName } ?: HARDWARE
+        }
+    }
+
     /**
      * 保存豆瓣数据源设置（通过显示名称）
      */
@@ -371,4 +397,24 @@ object AppDataService {
     fun getDoubanImageSourceKeySync(): String =
         prefs.getString(KEY_DOUBAN_IMAGE_SOURCE, DoubanImageSource.DIRECT.key)
             ?: DoubanImageSource.DIRECT.key
+
+    // ---- 播放器 ----
+    suspend fun savePlayerType(displayName: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_PLAYER_TYPE, PlayerType.fromDisplayName(displayName).key).apply()
+    }
+    suspend fun getPlayerTypeDisplayName(): String = withContext(Dispatchers.IO) {
+        PlayerType.fromKey(prefs.getString(KEY_PLAYER_TYPE, PlayerType.EXOPLAYER.key) ?: PlayerType.EXOPLAYER.key).displayName
+    }
+    fun getPlayerTypeSync(): PlayerType =
+        PlayerType.fromKey(prefs.getString(KEY_PLAYER_TYPE, PlayerType.EXOPLAYER.key) ?: PlayerType.EXOPLAYER.key)
+
+    // ---- 解码 ----
+    suspend fun saveDecodeMode(displayName: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_DECODE_MODE, DecodeMode.fromDisplayName(displayName).key).apply()
+    }
+    suspend fun getDecodeModeDisplayName(): String = withContext(Dispatchers.IO) {
+        DecodeMode.fromKey(prefs.getString(KEY_DECODE_MODE, DecodeMode.HARDWARE.key) ?: DecodeMode.HARDWARE.key).displayName
+    }
+    fun getDecodeModeSync(): DecodeMode =
+        DecodeMode.fromKey(prefs.getString(KEY_DECODE_MODE, DecodeMode.HARDWARE.key) ?: DecodeMode.HARDWARE.key)
 }
