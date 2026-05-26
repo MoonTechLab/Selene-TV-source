@@ -473,10 +473,9 @@ fun VideoCard(
                 }
             }
 
-            // 来源标签
-            if ((from == VideoCardSource.PLAYRECORD || 
-                 from == VideoCardSource.FAVORITE || 
-                 from == VideoCardSource.SOURCE) && 
+            // 来源标签（SOURCE 卡片的主标题已是源名，无需重复渲染来源 chip）
+            if ((from == VideoCardSource.PLAYRECORD ||
+                 from == VideoCardSource.FAVORITE) &&
                 videoInfo.sourceName.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Box(
