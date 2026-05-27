@@ -199,10 +199,10 @@ object SpeedTestService {
     }
 
     /** 测速结果:平均下载速度 + 首分片采样字节(供分辨率兜底,可能为 null)。 */
-    private data class SpeedSample(val speedKbps: Double, val firstSegmentBytes: ByteArray?)
+    private class SpeedSample(val speedKbps: Double, val firstSegmentBytes: ByteArray?)
 
     /** 单分片采样结果:采样到的字节数 + 仅首分片留住的字节内容。 */
-    private data class SegmentSample(val bytes: Int, val captured: ByteArray? = null)
+    private class SegmentSample(val bytes: Int, val captured: ByteArray? = null)
 
     /** 并发采样前 [SEGMENT_SAMPLE] 个分片,总采样字节 / 总耗时 = KB/s;首分片字节留作兜底。 */
     private suspend fun measureDownloadSpeed(segments: List<String>): SpeedSample = coroutineScope {
@@ -213,6 +213,7 @@ object SpeedTestService {
         }.awaitAll()
         val elapsedMs = System.currentTimeMillis() - start
         val totalBytes = results.sumOf { it.bytes }
+        // awaitAll 保持列表顺序,results[0] 即首个分片
         val firstSegmentBytes = results.firstOrNull()?.captured
         val speedKbps =
             if (totalBytes <= 0 || elapsedMs <= 0) 0.0
