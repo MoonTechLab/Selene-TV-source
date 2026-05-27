@@ -94,8 +94,14 @@ object SpeedTestService {
 
         val declaredWidth = parseResolutionWidth(content)
         val sample = measureDownloadSpeed(segments)
-        // m3u8 未声明分辨率时,从已采样的首分片 TS 字节兜底解析
-        val widthPx = chooseWidth(declaredWidth, sample.firstSegmentBytes, TsResolutionProbe::parseWidth)
+        // m3u8 未声明分辨率时,从首分片 TS 字节兜底解析;加密 HLS 先解密再探测
+        val widthPx = if (declaredWidth > 0) {
+            declaredWidth
+        } else {
+            val cipher = sample.firstSegmentBytes
+            val plain = if (cipher == null) null else decryptFirstSegmentIfNeeded(content, streamUrl, cipher)
+            chooseWidth(0, plain, TsResolutionProbe::parseWidth)
+        }
         SourceSpeed(
             state = SpeedTestState.DONE,
             widthPx = widthPx,
@@ -119,6 +125,16 @@ object SpeedTestService {
         if (declaredWidth > 0) return declaredWidth
         val bytes = captured ?: return 0
         return probe(bytes)
+    }
+
+    /** 加密 HLS:解密首分片密文为明文 TS;非加密 / 不支持 / 失败 → 原样返回(探针随后得 0)。 */
+    private suspend fun decryptFirstSegmentIfNeeded(content: String, baseUrl: String, cipher: ByteArray): ByteArray {
+        val tag = HlsDecryptor.parseKeyTag(content, baseUrl) ?: return cipher
+        if (tag.method != HlsDecryptor.Method.AES_128 || tag.keyUri == null) return cipher
+        val key = getBytes(tag.keyUri) ?: return cipher
+        if (key.size != 16) return cipher
+        val iv = HlsDecryptor.resolveIv(tag.ivHex, tag.mediaSequence)
+        return runCatching { HlsDecryptor.decryptCbc(cipher, key, iv) }.getOrDefault(cipher)
     }
 
     /** 本批有效下载速度的最大值，作为速度评分的线性映射基准。 */
@@ -246,6 +262,11 @@ object SpeedTestService {
     private suspend fun getText(url: String): String? {
         val resp = execute(request(url)) ?: return null
         return resp.use { if (it.isSuccessful) it.body?.string() else null }
+    }
+
+    private suspend fun getBytes(url: String): ByteArray? {
+        val resp = execute(request(url)) ?: return null
+        return resp.use { if (it.isSuccessful) it.body?.bytes() else null }
     }
 
     /**
