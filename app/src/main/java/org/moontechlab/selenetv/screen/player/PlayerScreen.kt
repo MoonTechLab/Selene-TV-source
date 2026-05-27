@@ -95,6 +95,19 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val controller: VideoPlayer = remember { PlayerFactory.create(context) }
     val reporter = remember { PlayProgressReporter() }
 
+    // 播放页处于独立 Dialog 窗口（见 DetailScreen 用 Dialog 隔离焦点域）。Compose Dialog 在
+    // usePlatformDefaultWidth=false 下只把窗口宽度设为 MATCH_PARENT，高度仍按内容测量——真机上该高度会
+    // 短于屏幕（窗口顶对齐），底部留出一条空隙，透出下层详情页内容（模拟器恰好把窗口测满，故难复现）。
+    // 这里把 Dialog 窗口高度强制为 MATCH_PARENT，让其铺满整屏、消除底部空隙，从根上杜绝漏出。
+    val dialogView = LocalView.current
+    DisposableEffect(dialogView) {
+        (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.setLayout(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        onDispose {}
+    }
+
     var controlsVisible by remember { mutableStateOf(true) }
     var currentEpisode by remember { mutableIntStateOf(launch.episodeIndex) }
     var currentSourceKey by remember { mutableStateOf(launch.selectedSourceKey) }
