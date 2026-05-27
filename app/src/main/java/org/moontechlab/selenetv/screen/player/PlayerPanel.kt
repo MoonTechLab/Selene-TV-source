@@ -71,8 +71,12 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import org.moontechlab.selenetv.model.SearchResult
+import org.moontechlab.selenetv.model.SourceSpeed
+import org.moontechlab.selenetv.model.SpeedTestState
 import org.moontechlab.selenetv.screen.detail.HeroInfo
 import org.moontechlab.selenetv.screen.detail.sourceKey
+import org.moontechlab.selenetv.service.SpeedTestService
+import org.moontechlab.selenetv.ui.SpeedTestPill
 import org.moontechlab.selenetv.util.getImageUrlSync
 
 enum class PanelTab { Detail, Episodes, Sources }
@@ -109,7 +113,7 @@ fun PlayerPanel(
     scrubberFocus: FocusRequester,
     activeTabFocus: FocusRequester,
     onContentExitUp: () -> Unit,
-    speedResults: Map<String, org.moontechlab.selenetv.model.SourceSpeed> = emptyMap(),
+    speedResults: Map<String, SourceSpeed> = emptyMap(),
     speedTesting: Boolean = false,
     onSpeedTest: () -> Unit = {},
     onStopSpeedTest: () -> Unit = {},
@@ -466,7 +470,7 @@ private fun SourcesTabContent(
     contentHeight: Dp,
     firstFocus: FocusRequester,
     onExitUp: () -> Unit,
-    speedResults: Map<String, org.moontechlab.selenetv.model.SourceSpeed> = emptyMap(),
+    speedResults: Map<String, SourceSpeed> = emptyMap(),
     speedTesting: Boolean = false,
     onSpeedTest: () -> Unit = {},
     onStopSpeedTest: () -> Unit = {},
@@ -479,9 +483,9 @@ private fun SourcesTabContent(
         modifier = Modifier.fillMaxWidth().height(contentHeight),
     ) {
         item(key = "__speedtest__") {
-            org.moontechlab.selenetv.ui.SpeedTestPill(
+            SpeedTestPill(
                 testing = speedTesting,
-                testedCount = speedResults.count { it.value.state != org.moontechlab.selenetv.model.SpeedTestState.TESTING },
+                testedCount = speedResults.count { it.value.state != SpeedTestState.TESTING },
                 totalCount = speedResults.size,
                 onClick = { if (speedTesting) onStopSpeedTest() else onSpeedTest() },
                 width = 124.dp,
@@ -500,7 +504,7 @@ private fun SourcesTabContent(
                 current = key == currentSourceKey,
                 heightDp = contentHeight,
                 speed = speed,
-                dimmed = speedTesting && (speed == null || speed.state == org.moontechlab.selenetv.model.SpeedTestState.TESTING),
+                dimmed = speedTesting && (speed == null || speed.state == SpeedTestState.TESTING),
                 onClick = { if (!speedTesting) onPick(key) },
                 onExitUp = onExitUp,
                 focusRequester = if (index == selectedIndex) firstFocus else null,
@@ -600,7 +604,7 @@ private fun SourceTile(
     onClick: () -> Unit,
     onExitUp: () -> Unit,
     focusRequester: FocusRequester?,
-    speed: org.moontechlab.selenetv.model.SourceSpeed? = null,
+    speed: SourceSpeed? = null,
     dimmed: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -675,11 +679,11 @@ private fun SourceTile(
                 }
             }
             if (speed != null) {
-                val txt = org.moontechlab.selenetv.service.SpeedTestService.badgeLabel(speed)
+                val txt = SpeedTestService.badgeLabel(speed)
                 val txtColor = when (speed.state) {
-                    org.moontechlab.selenetv.model.SpeedTestState.FAILED -> Color(0xFFE57373)
-                    org.moontechlab.selenetv.model.SpeedTestState.TESTING -> Color.White.copy(alpha = 0.75f)
-                    org.moontechlab.selenetv.model.SpeedTestState.DONE -> Color.White
+                    SpeedTestState.FAILED -> Color(0xFFE57373)
+                    SpeedTestState.TESTING -> Color.White.copy(alpha = 0.75f)
+                    SpeedTestState.DONE -> Color.White
                 }
                 Box(
                     modifier = Modifier
