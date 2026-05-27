@@ -70,11 +70,15 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
     val context = LocalContext.current
     val controller: VideoPlayer = remember { PlayerFactory.create(context, launch.source.ua) }
 
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var currentChannel by remember { mutableStateOf(launch.channel) }
     var controlsVisible by remember { mutableStateOf(true) }
     var panelOpen by remember { mutableStateOf(false) }
     var stalled by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
+    // 频道网格（LazyHorizontalGrid）困焦：网格内向上 requestFocus 回标签栏恒失败，需清焦解困后
+    // 从网格外回交焦点。详见 PlayerScreen 的同名处理（与点播选集/换源同一根因）。
+    var routeContentUpToTab by remember { mutableStateOf(false) }
 
     val osdFocus = remember { FocusRequester() }
     val panelTabFocus = remember { FocusRequester() }
@@ -171,6 +175,18 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
             try { osdFocus.requestFocus() } catch (_: Exception) {}
             delay(40)
         }
+    }
+
+    // 频道网格按「上」回标签栏：清焦已让焦点离开 Lazy 容器，期间抑制 OSD「收面板」；
+    // 从容器外把焦点重试交回标签栏，落定后解除抑制。
+    LaunchedEffect(routeContentUpToTab) {
+        if (!routeContentUpToTab) return@LaunchedEffect
+        var landed = false
+        repeat(5) {
+            delay(16)
+            if (!landed && runCatching { panelTabFocus.requestFocus() }.getOrDefault(false)) landed = true
+        }
+        routeContentUpToTab = false
     }
 
     // BACK 优先级（互斥）：① 面板开 → 收面板；② 控制条可见 → 仅隐藏控制条；
@@ -298,7 +314,8 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
                         channelName = currentChannel.name,
                         controlsVisible = controlsVisible,
                         focusRequester = osdFocus,
-                        onFocused = { panelOpen = false },
+                        // 频道网格「上」回标签栏的中转期间，OSD 可能短暂获焦——此时不收面板。
+                        onFocused = { if (!routeContentUpToTab) panelOpen = false },
                         onWake = { wake() },
                         onToggle = { togglePlay() },
                         onOpenPanel = { openPanel() },
@@ -331,6 +348,11 @@ fun LivePlayerScreen(launch: LiveLaunch, onExit: () -> Unit, modifier: Modifier 
                     onPickChannel = ::pickChannel,
                     osdFocus = osdFocus,
                     activeTabFocus = panelTabFocus,
+                    onContentExitUp = {
+                        // 顺序要紧：先置抑制标志再清焦（clearFocus 同步把焦点丢给 OSD 并触发 onFocused）
+                        routeContentUpToTab = true
+                        focusManager.clearFocus(force = true)
+                    },
                 )
             }
         }

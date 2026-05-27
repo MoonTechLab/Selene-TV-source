@@ -107,6 +107,7 @@ fun PlayerPanel(
     onPickSource: (String) -> Unit,
     scrubberFocus: FocusRequester,
     activeTabFocus: FocusRequester,
+    onContentExitUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tabs = remember(epCount, sources.size) {
@@ -193,11 +194,11 @@ fun PlayerPanel(
                     )
                     PanelTab.Episodes -> EpisodesTabContent(
                         episodes = episodes, episodesTitles = episodesTitles, currentEpisode = currentEpisode,
-                        onPick = onPickEpisode, contentHeight = ch, firstFocus = epFocus, tabFocus = activeTabFocus,
+                        onPick = onPickEpisode, contentHeight = ch, firstFocus = epFocus, onExitUp = onContentExitUp,
                     )
                     PanelTab.Sources -> SourcesTabContent(
                         sources = sources, currentSourceKey = currentSourceKey, onPick = onPickSource,
-                        contentHeight = ch, firstFocus = srcFocus, tabFocus = activeTabFocus,
+                        contentHeight = ch, firstFocus = srcFocus, onExitUp = onContentExitUp,
                     )
                 }
             }
@@ -416,7 +417,7 @@ private fun EpisodesTabContent(
     onPick: (Int) -> Unit,
     contentHeight: Dp,
     firstFocus: FocusRequester,
-    tabFocus: FocusRequester,
+    onExitUp: () -> Unit,
 ) {
     // 2 行密排横滚网格：填满内容区高度且不显空。列序：偶数 index = 上行、奇数 = 下行。
     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = (currentEpisode - currentEpisode % 2).coerceAtLeast(0))
@@ -442,7 +443,7 @@ private fun EpisodesTabContent(
                 topRow = index % 2 == 0,
                 heightDp = chipH,
                 onClick = { onPick(index) },
-                tabFocus = tabFocus,
+                onExitUp = onExitUp,
                 focusRequester = if (index == currentEpisode.coerceIn(0, episodes.lastIndex.coerceAtLeast(0))) firstFocus else null,
             )
         }
@@ -456,7 +457,7 @@ private fun SourcesTabContent(
     onPick: (String) -> Unit,
     contentHeight: Dp,
     firstFocus: FocusRequester,
-    tabFocus: FocusRequester,
+    onExitUp: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val selectedIndex = sources.indexOfFirst { sourceKey(it) == currentSourceKey }.coerceAtLeast(0)
@@ -474,7 +475,7 @@ private fun SourcesTabContent(
                 current = key == currentSourceKey,
                 heightDp = contentHeight,
                 onClick = { onPick(key) },
-                upTarget = tabFocus,
+                onExitUp = onExitUp,
                 focusRequester = if (index == selectedIndex) firstFocus else null,
             )
         }
@@ -490,7 +491,7 @@ private fun EpisodeChip(
     topRow: Boolean,
     heightDp: Dp,
     onClick: () -> Unit,
-    tabFocus: FocusRequester,
+    onExitUp: () -> Unit,
     focusRequester: FocusRequester?,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -508,7 +509,14 @@ private fun EpisodeChip(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .focusProperties { if (topRow) up = tabFocus else down = FocusRequester.Cancel }
+            // 上行按「上」→ 离开网格回标签栏（Lazy 容器困焦，交给 onExitUp 走清焦+回交流程）；
+            // 下行按「上」→ 走默认几何搜索上移到本列上行；下行按「下」→ 锁住（网格下方无目标）。
+            .onKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp && topRow) {
+                    onExitUp(); true
+                } else false
+            }
+            .focusProperties { if (!topRow) down = FocusRequester.Cancel }
             .width(124.dp)
             .height(heightDp),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
@@ -562,7 +570,7 @@ private fun SourceTile(
     current: Boolean,
     heightDp: Dp,
     onClick: () -> Unit,
-    upTarget: FocusRequester,
+    onExitUp: () -> Unit,
     focusRequester: FocusRequester?,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -578,7 +586,11 @@ private fun SourceTile(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .focusProperties { up = upTarget; down = FocusRequester.Cancel }
+            // 换源是 LazyRow，同样困焦：按「上」交给 onExitUp 走清焦+回交标签栏流程；「下」锁住。
+            .onKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) { onExitUp(); true } else false
+            }
+            .focusProperties { down = FocusRequester.Cancel }
             .width(124.dp)
             .height(heightDp),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),

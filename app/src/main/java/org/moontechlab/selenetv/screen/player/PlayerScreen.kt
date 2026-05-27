@@ -86,6 +86,7 @@ private const val BACK_EXIT_WINDOW_MS = 2_000L
 fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val controller: VideoPlayer = remember { PlayerFactory.create(context) }
     val reporter = remember { PlayProgressReporter() }
 
@@ -94,6 +95,11 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var currentSourceKey by remember { mutableStateOf(launch.selectedSourceKey) }
     var panelOpen by remember { mutableStateOf(false) }
     var panelTab by remember { mutableStateOf(PanelTab.Detail) }
+    // 选集/换源 内容区按「上」回标签栏的中转标志。选集网格 = LazyHorizontalGrid、换源 = LazyRow，
+    // Lazy 容器会困住其子项的焦点：子项内 requestFocus / moveFocus / focusProperties(up,exit) 一律失败
+    // （向外的 requestFocus 恒返回 false），唯独 clearFocus 能解困、但会让焦点回落到进度条而收起面板。
+    // 故：清焦解困 → 期间抑制进度条的「收起面板」→ 再从网格外把焦点确定交回标签栏（与面板首次打开同理）。
+    var routeContentUpToTab by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var flashTick by remember { mutableIntStateOf(0) }
     var flashVisible by remember { mutableStateOf(false) }
@@ -263,6 +269,18 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
     }
 
+    // 选集/换源 内容区按「上」：清焦已让焦点离开 Lazy 容器（落到进度条），此时进度条「收面板」被抑制；
+    // 从容器外把焦点交回标签栏（重试以越过 clearFocus 的延迟清焦），落定后解除抑制。
+    LaunchedEffect(routeContentUpToTab) {
+        if (!routeContentUpToTab) return@LaunchedEffect
+        var landed = false
+        repeat(5) {
+            kotlinx.coroutines.delay(16)
+            if (!landed && runCatching { panelTabFocus.requestFocus() }.getOrDefault(false)) landed = true
+        }
+        routeContentUpToTab = false
+    }
+
     // BACK 优先级（互斥）：① 面板开 → 收面板；② 控制条可见 → 仅隐藏控制条；
     // ③ 控制条已隐藏 → 二次确认退出（首按弹自绘提示，窗口内再按才退出）。
     var backExitArmed by remember { mutableStateOf(false) }
@@ -395,7 +413,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         onToggle = { togglePlay() },
                         onWake = { wake() },
                         onOpenPanel = { openPanel() },
-                        onFocused = { panelOpen = false },
+                        // 内容区「上」回标签栏的中转期间，进度条可能短暂获焦——此时不收面板。
+                        onFocused = { if (!routeContentUpToTab) panelOpen = false },
                         focusRequester = scrubberFocus,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -478,6 +497,12 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     },
                     scrubberFocus = scrubberFocus,
                     activeTabFocus = panelTabFocus,
+                    onContentExitUp = {
+                        // 顺序要紧：先抬起抑制标志，再清焦。clearFocus 会同步把焦点丢给进度条并触发其
+                        // onFocused，若此时标志未置位，进度条会立刻收起面板。置位在前 → onFocused 读到 true → 不收。
+                        routeContentUpToTab = true
+                        focusManager.clearFocus(force = true)
+                    },
                 )
             }
         }

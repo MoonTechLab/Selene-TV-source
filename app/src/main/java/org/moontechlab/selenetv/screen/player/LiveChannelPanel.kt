@@ -92,6 +92,7 @@ fun LiveChannelPanel(
     onPickChannel: (LiveChannel) -> Unit,
     osdFocus: FocusRequester,
     activeTabFocus: FocusRequester,
+    onContentExitUp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tabs = remember(groups) { listOf(AllTab) + groups.map { it.name } }
@@ -157,7 +158,7 @@ fun LiveChannelPanel(
                     onPickChannel = onPickChannel,
                     contentHeight = contentHeight,
                     firstFocus = if (tab == selectedTab) contentFocus else null,
-                    tabFocus = activeTabFocus,
+                    onExitUp = onContentExitUp,
                 )
             }
         }
@@ -236,7 +237,7 @@ private fun LiveChannelGrid(
     onPickChannel: (LiveChannel) -> Unit,
     contentHeight: Dp,
     firstFocus: FocusRequester?,
-    tabFocus: FocusRequester,
+    onExitUp: () -> Unit,
 ) {
     val currentIndex = channels.indexOfFirst { it.id == currentChannelId }.coerceAtLeast(0)
     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = currentIndex - currentIndex % 2)
@@ -265,7 +266,7 @@ private fun LiveChannelGrid(
                 heightDp = tileHeight,
                 userAgent = userAgent,
                 onClick = { onPickChannel(channel) },
-                tabFocus = tabFocus,
+                onExitUp = onExitUp,
                 focusRequester = if (index == currentIndex) firstFocus else null,
             )
         }
@@ -281,7 +282,7 @@ private fun LiveChannelTile(
     heightDp: Dp,
     userAgent: String,
     onClick: () -> Unit,
-    tabFocus: FocusRequester,
+    onExitUp: () -> Unit,
     focusRequester: FocusRequester?,
 ) {
     val context = LocalContext.current
@@ -318,9 +319,14 @@ private fun LiveChannelTile(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .focusProperties {
-                if (topRow) up = tabFocus else down = FocusRequester.Cancel
+            // 上行按「上」→ 离开网格回标签栏（Lazy 困焦，交 onExitUp 走清焦+回交流程）；
+            // 下行按「上」→ 默认几何上移到本列上行；下行按「下」→ 锁住（网格下方无目标）。
+            .onKeyEvent { e ->
+                if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp && topRow) {
+                    onExitUp(); true
+                } else false
             }
+            .focusProperties { if (!topRow) down = FocusRequester.Cancel }
             .width(logoBoxWidth)
             .height(heightDp),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
