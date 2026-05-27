@@ -46,19 +46,20 @@ object HlsDecryptor {
     /** 有 IV 属性用之（0x + 32 hex）；否则用媒体序号的 128-bit 大端。 */
     fun resolveIv(ivHex: String?, mediaSequence: Long): ByteArray {
         if (ivHex != null) {
-            val hex = ivHex.removePrefix("0x").removePrefix("0X")
+            val hex = ivHex.removePrefix("0x").removePrefix("0X").padStart(32, '0').takeLast(32)
             val out = ByteArray(16)
-            // 右对齐填充：不足 32 个 hex 时高位补 0
-            val padded = hex.padStart(32, '0').takeLast(32)
             for (i in 0 until 16) {
-                out[i] = ((Character.digit(padded[i * 2], 16) shl 4) or
-                    Character.digit(padded[i * 2 + 1], 16)).toByte()
+                val hi = Character.digit(hex[i * 2], 16)
+                val lo = Character.digit(hex[i * 2 + 1], 16)
+                if (hi < 0 || lo < 0) return resolveIv(null, mediaSequence)  // 非法 IV → 退回媒体序号
+                out[i] = ((hi shl 4) or lo).toByte()
             }
             return out
         }
         val out = ByteArray(16)
         var v = mediaSequence
-        for (i in 15 downTo 8) {  // 低 8 字节写序号（大端），高 8 字节 0
+        // 字节 8–15 写媒体序号（大端最低有效位在 [15]），字节 0–7 补 0；Long 不超过 64 bit
+        for (i in 15 downTo 8) {
             out[i] = (v and 0xFF).toByte()
             v = v ushr 8
         }

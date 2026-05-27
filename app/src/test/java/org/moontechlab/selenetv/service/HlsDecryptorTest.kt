@@ -78,4 +78,22 @@ class HlsDecryptorTest {
         expected[15] = 5
         assertArrayEquals(expected, iv)
     }
+
+    @Test
+    fun resolveIv_fromMediaSequence_multiByte() {
+        // 256 = 0x0100 → big-endian: byte[14]=1, byte[15]=0
+        val iv = HlsDecryptor.resolveIv(null, 256)
+        val expected = ByteArray(16)
+        expected[14] = 1
+        assertArrayEquals(expected, iv)
+    }
+
+    @Test
+    fun resolveIv_malformedHexFallsBackToSequence() {
+        // 非法 16 进制 → 退回媒体序号派生的 IV（不抛异常）
+        val iv = HlsDecryptor.resolveIv("0xZZ", 5)
+        val expected = ByteArray(16)
+        expected[15] = 5
+        assertArrayEquals(expected, iv)
+    }
 }
