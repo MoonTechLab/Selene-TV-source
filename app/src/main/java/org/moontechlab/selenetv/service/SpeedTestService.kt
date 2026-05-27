@@ -92,14 +92,16 @@ object SpeedTestService {
         val segments = parseSegments(content, streamUrl)
         if (segments.isEmpty()) return@withContext SourceSpeed(state = SpeedTestState.FAILED)
 
-        val widthPx = parseResolutionWidth(content)
-        val speedKbps = measureDownloadSpeed(segments)
+        val declaredWidth = parseResolutionWidth(content)
+        val sample = measureDownloadSpeed(segments)
+        // m3u8 未声明分辨率时,从已采样的首分片 TS 字节兜底解析
+        val widthPx = chooseWidth(declaredWidth, sample.firstSegmentBytes, TsResolutionProbe::parseWidth)
         SourceSpeed(
             state = SpeedTestState.DONE,
             widthPx = widthPx,
-            speedKbps = speedKbps,
+            speedKbps = sample.speedKbps,
             quality = qualityLabel(widthPx),
-            speedLabel = speedLabel(speedKbps),
+            speedLabel = speedLabel(sample.speedKbps),
         )
     }
 
@@ -196,33 +198,47 @@ object SpeedTestService {
         }
     }
 
-    /** 并发采样前 [SEGMENT_SAMPLE] 个分片，总采样字节 / 总耗时 = KB/s。 */
-    private suspend fun measureDownloadSpeed(segments: List<String>): Double = coroutineScope {
+    /** 测速结果:平均下载速度 + 首分片采样字节(供分辨率兜底,可能为 null)。 */
+    private data class SpeedSample(val speedKbps: Double, val firstSegmentBytes: ByteArray?)
+
+    /** 单分片采样结果:采样到的字节数 + 仅首分片留住的字节内容。 */
+    private data class SegmentSample(val bytes: Int, val captured: ByteArray? = null)
+
+    /** 并发采样前 [SEGMENT_SAMPLE] 个分片,总采样字节 / 总耗时 = KB/s;首分片字节留作兜底。 */
+    private suspend fun measureDownloadSpeed(segments: List<String>): SpeedSample = coroutineScope {
         val sample = segments.take(SEGMENT_SAMPLE)
         val start = System.currentTimeMillis()
-        val sizes = sample.map { url ->
-            async(Dispatchers.IO) { sampleSegmentBytes(url) }
+        val results = sample.mapIndexed { index, url ->
+            async(Dispatchers.IO) { sampleSegmentBytes(url, capture = index == 0) }
         }.awaitAll()
         val elapsedMs = System.currentTimeMillis() - start
-        val totalBytes = sizes.sum()
-        if (totalBytes <= 0 || elapsedMs <= 0) return@coroutineScope 0.0
-        (totalBytes / 1024.0) / (elapsedMs / 1000.0)
+        val totalBytes = results.sumOf { it.bytes }
+        val firstSegmentBytes = results.firstOrNull()?.captured
+        val speedKbps =
+            if (totalBytes <= 0 || elapsedMs <= 0) 0.0
+            else (totalBytes / 1024.0) / (elapsedMs / 1000.0)
+        SpeedSample(speedKbps, firstSegmentBytes)
     }
 
-    /** 流式读取分片，至多 [SEGMENT_BYTE_BUDGET] 字节即停（关闭 body 中断剩余下载）。 */
-    private suspend fun sampleSegmentBytes(url: String): Int {
-        val resp = execute(request(url)) ?: return 0
+    /**
+     * 流式读取分片,至多 [SEGMENT_BYTE_BUDGET] 字节即停(关闭 body 中断剩余下载)。
+     * [capture] 为 true 时(仅首分片)同时把读到的字节留存,供分辨率兜底解析。
+     */
+    private suspend fun sampleSegmentBytes(url: String, capture: Boolean): SegmentSample {
+        val resp = execute(request(url)) ?: return SegmentSample(0)
         return resp.use {
-            if (!it.isSuccessful) return@use 0
-            val stream = it.body?.byteStream() ?: return@use 0
+            if (!it.isSuccessful) return@use SegmentSample(0)
+            val stream = it.body?.byteStream() ?: return@use SegmentSample(0)
             val buf = ByteArray(16 * 1024)
+            val sink = if (capture) java.io.ByteArrayOutputStream(SEGMENT_BYTE_BUDGET) else null
             var total = 0
             while (total < SEGMENT_BYTE_BUDGET) {
                 val n = stream.read(buf)
                 if (n < 0) break
+                sink?.write(buf, 0, n)
                 total += n
             }
-            total
+            SegmentSample(total, sink?.toByteArray())
         }
     }
 
