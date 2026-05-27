@@ -491,7 +491,13 @@ private fun SourcesTabContent(
                 width = 124.dp,
                 height = contentHeight,
                 idleSubtitle = "测速并排序",
-                modifier = Modifier.animateItem(),
+                // 与 SourceTile 一致:LazyRow 困焦,按「上」交给 onExitUp 走清焦+回交标签栏;「下」锁住。
+                modifier = Modifier
+                    .animateItem()
+                    .onKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) { onExitUp(); true } else false
+                    }
+                    .focusProperties { down = FocusRequester.Cancel },
             )
         }
         itemsIndexed(sources, key = { _, s -> sourceKey(s) }) { index, source ->
