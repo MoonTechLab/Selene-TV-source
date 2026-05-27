@@ -1,6 +1,5 @@
 package org.moontechlab.selenetv.screen.detail
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,12 +14,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -32,8 +26,9 @@ import coil.compose.AsyncImage
 import org.moontechlab.selenetv.screen.DetailEntry
 
 /**
- * Apple TV 式详情 hero：全幅剧照(backdrop) + 底部/左侧渐变压暗 + 左下信息栈。
- * 仅在拿到 TMDB 剧照时启用（[HeroInfo.backdrop] 非空）；否则用 [DetailHero] 旧布局。
+ * Apple TV 式详情 hero（前景信息栈）。剧照背景已抽到 DetailScreen 的 [PinnedBackdrop] 固定层，
+ * 本组件只负责左下信息栈，且整体透明——随页面滚动浮在固定剧照之上。
+ * 仅在拿到 TMDB 剧照时启用（[DetailUiState.useHeroV2]）；否则用 [DetailHero] 旧布局。
  *
  * 标题用 TMDB logo 艺术字（[HeroInfo.logo]），缺失时回退文字标题。
  * 简介/评分/类型等均来自豆瓣，与旧布局一致；简介块复用 [SummaryBlock]，焦点行为不变。
@@ -49,10 +44,9 @@ fun DetailHeroV2(
     onSummaryClick: () -> Unit = {},
 ) {
     val title = info?.title?.takeIf { it.isNotBlank() } ?: entry.title
-    val backdrop = info?.backdrop
     val logo = info?.logo
 
-    // hero 取屏高的 ~94%，底部仅露出「播放源」极窄一条，提示可下滑。
+    // hero 占满屏高，信息栈落在首屏底部，「播放源」恰在折线之下；剧照不在本组件，由固定层铺满整屏。
     // 注意：MainActivity.adjustDensity() 把全局 density 重写为「画布固定 1080dp 宽」，但
     // config.screenHeightDp 仍以系统原始 density 计量，与本应用其余 dp 不是同一把尺子——
     // 直接乘会在真机(尤其 4K)上把 hero 撑到远超可视高度，底部动作按钮被顶出屏外。
@@ -60,54 +54,24 @@ fun DetailHeroV2(
     // 再以 heightIn(min) 承载：内容更高时自适应增高、随滚动可达，绝不裁切按钮。
     val config = LocalConfiguration.current
     val canvasHeightDp = 1080f * (config.screenHeightDp.toFloat() / config.screenWidthDp.toFloat())
-    val heroMinHeight = (canvasHeightDp * 0.94f).dp
+    val heroMinHeight = canvasHeightDp.dp
+
+    // 信息栈占屏宽 0.62；简介进一步收窄到屏宽 50%（即列内 0.5/0.62），避免长简介铺得过宽。
+    val infoWidthFraction = 0.62f
+    val summaryWidthFraction = (0.5f / infoWidthFraction).coerceAtMost(1f)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = heroMinHeight),
     ) {
-        // 全幅剧照：底部用 DstIn 蒙版把图本身渐隐为透明，露出页面背景渐变，
-        // 与下方「播放源」同底无缝衔接（不压成纯黑，避免与源列表背景出现段差）。
-        if (backdrop != null) {
-            AsyncImage(
-                model = backdrop,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                    .drawWithContent {
-                        drawContent()
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                0.0f to Color.Black,
-                                0.5f to Color.Black,
-                                1.0f to Color.Transparent,
-                            ),
-                            blendMode = BlendMode.DstIn,
-                        )
-                    },
-            )
-        }
-        // 左侧渐变：保证左下文字/ logo 可读
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0.0f to Color(0xCC0A0A0A),
-                        0.5f to Color.Transparent,
-                    ),
-                ),
-        )
-
-        // 左下信息栈
+        // 左下信息栈：透明浮于固定剧照之上。剧照可读性所需的左暗/底暗渐变在 [PinnedBackdrop]（视口锚定），
+        // 故本栈不再自绘任何背景蒙版。
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .fillMaxWidth(0.62f)
-                .padding(start = 58.dp, end = 36.dp, bottom = 40.dp),
+                .fillMaxWidth(infoWidthFraction)
+                .padding(start = 58.dp, end = 36.dp, bottom = 76.dp),
         ) {
             if (logo != null) {
                 AsyncImage(
@@ -172,7 +136,9 @@ fun DetailHeroV2(
                         text = summary,
                         onClick = onSummaryClick,
                         focusRequester = summaryFocusRequester,
-                        modifier = Modifier.offset(x = (-12).dp),
+                        modifier = Modifier
+                            .fillMaxWidth(summaryWidthFraction)
+                            .offset(x = (-12).dp),
                     )
                 } else {
                     Text(
@@ -182,6 +148,7 @@ fun DetailHeroV2(
                         lineHeight = 22.sp,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(summaryWidthFraction),
                     )
                 }
             }

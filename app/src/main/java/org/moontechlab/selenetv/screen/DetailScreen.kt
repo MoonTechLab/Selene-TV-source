@@ -2,8 +2,11 @@ package org.moontechlab.selenetv.screen
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -12,12 +15,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +36,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -405,6 +411,18 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     // 被内容 Column 自身的 exit=Cancel 留住，不再回到捕获器。
     val rootFocus = remember { FocusRequester() }
     val scrollState = rememberScrollState()
+    // 向下指示器透明度：顶部满显，下滑前 ~160px 内线性淡出，过此完全隐藏（不与「播放源」重叠）。
+    // 用 derivedStateOf 局部订阅 scrollState，避免每帧滚动牵动整页重组。
+    val scrollDownHintAlpha by remember {
+        derivedStateOf { (1f - scrollState.value / 160f).coerceIn(0f, 1f) }
+    }
+    // 焦点是否落在「播放源」区域：驱动 V2 固定剧照层的高斯模糊。焦点回到上方动作按钮即归零。
+    var sourcesFocused by remember { mutableStateOf(false) }
+    val backdropBlur by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (sourcesFocused) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(250),
+        label = "backdrop_blur",
+    )
 
     // 入场抓焦：覆盖层随滑入动画挂载，requester 可能尚未就位，重试数帧直到成功。
     LaunchedEffect(Unit) {
@@ -696,6 +714,17 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         // 零尺寸不参与方向键的 2D 焦点搜索，故不干扰内容出现后的正常导航。
         Box(modifier = Modifier.focusRequester(rootFocus).focusable())
 
+        // V2(Apple TV 式)布局的固定剧照层：铺满整屏、不随内容滚动，信息栈/播放源浮于其上。
+        // 焦点进入播放源时整层渐进高斯模糊+压暗（backdropBlur）。仅内容就绪且确有剧照时绘制。
+        state.heroInfo?.backdrop?.let { backdrop ->
+            if (state.useHeroV2 && !state.detailsLoading) {
+                org.moontechlab.selenetv.screen.detail.PinnedBackdrop(
+                    backdrop = backdrop,
+                    blur = backdropBlur,
+                )
+            }
+        }
+
         androidx.compose.animation.AnimatedVisibility(
             visible = !state.detailsLoading,
             // 内容从 0.96 轻微放大并淡入「落定」。数据就绪后这段动画先在加载 overlay 之下跑完
@@ -815,6 +844,8 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                     }
                     Box(
                         modifier = Modifier.onFocusChanged {
+                            // 焦点进入播放源 → 固定剧照层模糊；同时把列表滚到底露出全部源
+                            sourcesFocused = it.hasFocus
                             if (it.hasFocus) scope.launch { scrollState.animateScrollTo(scrollState.maxValue) }
                         },
                     ) {
@@ -852,6 +883,15 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 ),
         ) {
             org.moontechlab.selenetv.screen.detail.MoonLoadingOverlay(title = state.entry.title)
+        }
+
+        // 向下指示器：hero 占满屏高、底部无内容外露时，钉在视口底部居中提示「下滑看播放源」。
+        // 仅 V2(Apple TV 式)布局、内容就绪后出现；随下滑淡出，避免悬在「播放源」之上。
+        if (state.useHeroV2 && !state.detailsLoading && !showMoonOverlay && state.heroInfo != null) {
+            ScrollDownHint(
+                alpha = scrollDownHintAlpha,
+                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+            )
         }
 
         state.selectedSource?.let { source ->
@@ -928,6 +968,47 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 PlayerScreen(launch = l, onExit = { playerLaunch = null })
             }
         }
+    }
+}
+
+/**
+ * 向下指示器：参照 vod 播放页的下拉提示（KeyboardArrowDown + 极淡文字，居中）。
+ * hero 占满屏高、底部不再露出「播放源」，故用一个缓慢上下浮动的箭头暗示「可下滑」；
+ * [alpha] 由滚动位置驱动，顶部满显、下滑即淡出。alpha≈0 时整体不渲染（连带停掉无限动画）。
+ */
+@Composable
+private fun ScrollDownHint(alpha: Float, modifier: Modifier = Modifier) {
+    if (alpha <= 0.01f) return
+    val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "scroll_hint")
+    val bob by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(1200, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "scroll_hint_bob",
+    )
+    androidx.compose.foundation.layout.Column(
+        modifier = modifier
+            .padding(bottom = 14.dp)
+            .graphicsLayer {
+                this.alpha = alpha
+                translationY = bob * 4.dp.toPx() // 向下浮动 ~4dp，暗示「往下」
+            },
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+    ) {
+        androidx.tv.material3.Icon(
+            imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.35f),
+            modifier = Modifier.size(16.dp),
+        )
+        androidx.tv.material3.Text(
+            text = "播放源",
+            color = Color.White.copy(alpha = 0.35f),
+            fontSize = 11.sp,
+        )
     }
 }
 
