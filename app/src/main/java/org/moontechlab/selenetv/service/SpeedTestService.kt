@@ -109,6 +109,16 @@ object SpeedTestService {
         return qualityScore(s.widthPx) * 0.5 + speedScore(s.speedKbps, maxSpeed) * 0.5
     }
 
+    /**
+     * 决定最终采用的宽度:m3u8 已声明(>0)直接用;否则用 [probe] 解析采样到的首分片字节;
+     * 无字节则 0。[probe] 注入便于单测(实参为 [TsResolutionProbe.parseWidth]）。
+     */
+    internal fun chooseWidth(declaredWidth: Int, captured: ByteArray?, probe: (ByteArray) -> Int): Int {
+        if (declaredWidth > 0) return declaredWidth
+        val bytes = captured ?: return 0
+        return probe(bytes)
+    }
+
     /** 本批有效下载速度的最大值，作为速度评分的线性映射基准。 */
     fun maxSpeed(results: Collection<SourceSpeed>): Double =
         results.filter { it.state == SpeedTestState.DONE && it.speedKbps > 0 }
