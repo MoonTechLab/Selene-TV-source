@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,6 +83,9 @@ fun DetailActionButtons(
     upTarget: FocusRequester? = null,
     continueEpisode: Int? = null,
     continueProgress: Float = 0f,
+    // 当前源无播放记录、但其他源有可迁移记录时显示「迁移记录」。点击打开记录选择弹窗。
+    showMigrate: Boolean = false,
+    onMigrate: () -> Unit = {},
     // 详情 hero 已出但播放源仍在解析：无任何动作按钮可承接焦点。此时在主按钮槽位放一个等高的
     // 加载占位胶囊（承接 primaryFocus），既给焦点落点/明确反馈，又预留行高，源就绪后原位替换、零跳变。
     sourcesLoading: Boolean = false,
@@ -115,6 +119,14 @@ fun DetailActionButtons(
                 text = if (showContinue) "从头播放" else "播放",
                 onClick = onPlay,
                 modifier = if (showContinue) Modifier else Modifier.focusRequester(primaryFocusRequester),
+            )
+        }
+        if (showMigrate) {
+            // 无记录时占位于「播放」之后；播放按钮仍承接 primaryFocus，本按钮为次级动作
+            PillActionButton(
+                text = "迁移记录",
+                icon = Icons.Default.SwapHoriz,
+                onClick = onMigrate,
             )
         }
         if (showDelete) {
@@ -228,7 +240,12 @@ internal fun MoonCrescentSpinner(modifier: Modifier = Modifier, color: Color = C
 }
 
 @Composable
-private fun PillActionButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PillActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.PlayArrow,
+) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue = if (focused) 1.05f else 1f,
@@ -255,7 +272,7 @@ private fun PillActionButton(text: String, onClick: () -> Unit, modifier: Modifi
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
-                imageVector = Icons.Default.PlayArrow,
+                imageVector = icon,
                 contentDescription = null,
                 tint = fg,
                 modifier = Modifier.size(20.dp),

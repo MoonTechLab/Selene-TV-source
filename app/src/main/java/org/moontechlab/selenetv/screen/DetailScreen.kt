@@ -41,6 +41,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.moontechlab.selenetv.model.PlayRecord
 import org.moontechlab.selenetv.model.SearchResult
 import org.moontechlab.selenetv.model.SourceSpeed
 import org.moontechlab.selenetv.model.SpeedTestState
@@ -568,6 +569,112 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
     }
 
+    // ==================== 迁移播放记录 ====================
+    // 候选 = 本片其他源（来自 state.sources，而非全局记录表）中有记录、且记录集号在当前源也存在的那些。
+    // 仅当前源无记录时才提供迁移；候选为空则不出现「迁移记录」按钮。
+    val migrateTarget = state.selectedSource
+    val migrateCandidates: List<PlayRecord> =
+        if (migrateTarget != null && state.selectedPlayRecord == null) {
+            val targetKey = sourceKey(migrateTarget)
+            val targetEpCount = migrateTarget.episodes.size.coerceAtLeast(1)
+            state.sources
+                .filter { sourceKey(it) != targetKey }
+                .mapNotNull { src -> state.playRecords[sourceKey(src)] }
+                .filter { rec -> rec.index in 1..targetEpCount } // 集号在当前源不存在则剔除
+                .distinctBy { "${it.source}+${it.id}" }
+                .sortedByDescending { it.saveTime }
+        } else emptyList()
+
+    var migratePickerVisible by remember { mutableStateOf(false) }
+    var migratePickerEverOpened by remember { mutableStateOf(false) }
+    var migrateDeleteRec by remember { mutableStateOf<PlayRecord?>(null) }
+    var migrateDeleteVisible by remember { mutableStateOf(false) }
+    var migrateDeleteEverOpened by remember { mutableStateOf(false) }
+
+    // 关闭回焦：CardContextMenu/ConfirmDialog 是 focusable Popup，关闭有 ~150ms 收起动画，期间 Popup 仍持
+    // 窗口焦点。必须等动画结束、Popup 移除后再 requestFocus，否则夺焦被吞（与 EpisodePickerDialog 同因，
+    // 只是它用立即移除的 Dialog、本处用带动画的 Popup，故延迟更长）。用状态驱动而非关闭回调，避免选中分支
+    // 的回焦与随后弹出的删除确认弹窗抢焦。
+    LaunchedEffect(migratePickerVisible) {
+        if (!migratePickerVisible && migratePickerEverOpened) {
+            kotlinx.coroutines.delay(220)
+            // 仅「取消选择」才手动回焦（仍无记录、也没要弹删除确认）；选中迁移由 onMigrateSelect 自行把焦点
+            // 交给「继续」并随后打开删除确认弹窗，此处放手以免抢焦。
+            if (state.selectedPlayRecord == null && !migrateDeleteVisible) {
+                try { primaryFocus.requestFocus() } catch (_: Exception) {}
+            }
+        }
+    }
+    LaunchedEffect(migrateDeleteVisible) {
+        if (!migrateDeleteVisible && migrateDeleteEverOpened) {
+            kotlinx.coroutines.delay(220)
+            // 删除确认关闭时当前源已有迁移记录，primaryFocus 已挂到「继续」按钮，回焦到它即可。
+            try { primaryFocus.requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    // 选中某条记录 → 立即写入当前源（乐观更新，使「继续」按钮与播放源列表即刻刷新）→ 落库成功后再问是否删原记录
+    val onMigrateSelect: (PlayRecord) -> Unit = lam@{ rec ->
+        val target = state.selectedSource ?: return@lam
+        val targetKey = sourceKey(target)
+        val migrated = PlayRecord(
+            id = target.id,
+            source = target.source,
+            title = state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: rec.title,
+            sourceName = target.sourceName,
+            year = target.year.ifBlank { rec.year },
+            cover = target.poster.ifBlank { rec.cover },
+            index = rec.index.coerceIn(1, target.episodes.size.coerceAtLeast(1)),
+            totalEpisodes = target.episodes.size.coerceAtLeast(1),
+            playTime = rec.playTime,
+            totalTime = rec.totalTime,
+            saveTime = System.currentTimeMillis(),
+            searchTitle = state.heroInfo?.title?.takeIf { it.isNotBlank() } ?: rec.searchTitle,
+        )
+        state = state.copy(playRecords = state.playRecords + (targetKey to migrated))
+        // 迁移后当前源有记录 →「迁移记录」消失、「继续」接管 primaryFocus，重组稳定后把焦点改派给它
+        scope.launch {
+            repeat(8) {
+                kotlinx.coroutines.delay(30)
+                try { primaryFocus.requestFocus(); return@launch } catch (_: Exception) {}
+            }
+        }
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiService.savePlayRecord(migrated) }
+            } catch (e: Exception) {
+                // 回滚乐观记录会让承接焦点的「继续」按钮卸载；改派回主按钮槽位（此时复原为「播放/迁移」）
+                state = state.copy(playRecords = state.playRecords - targetKey)
+                showToast("迁移失败：${e.message ?: "未知错误"}")
+                repeat(8) {
+                    kotlinx.coroutines.delay(30)
+                    try { primaryFocus.requestFocus(); return@launch } catch (_: Exception) {}
+                }
+                return@launch
+            }
+            showToast("已迁移播放记录")
+            // 落库成功才追问是否删除原记录（失败时不应再诱导删源，避免数据双失）
+            migrateDeleteRec = rec
+            migrateDeleteEverOpened = true
+            migrateDeleteVisible = true
+        }
+    }
+
+    val onDeleteOriginalRecord: (PlayRecord) -> Unit = lam@{ rec ->
+        val key = "${rec.source}+${rec.id}"
+        val backup = state.playRecords[key] ?: return@lam
+        state = state.copy(playRecords = state.playRecords - key)
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(rec.source, rec.id) }
+                showToast("已删除原记录")
+            } catch (e: Exception) {
+                state = state.copy(playRecords = state.playRecords + (key to backup))
+                showToast("删除原记录失败：${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
     val gradientBrush = Brush.verticalGradient(
         0.0f to Color(0xFF0a0a0a),
         0.4f to Color(0xFF1a1a1a),
@@ -681,6 +788,9 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                                 continueEpisode = if (record != null && epCount > 1 && record.index > 0) record.index else null,
                                 continueProgress = if (record != null && record.totalTime > 0L)
                                     (record.playTime.toFloat() / record.totalTime.toFloat()).coerceIn(0f, 1f) else 0f,
+                                // 当前源无记录、且本片其他源有可迁移记录时显示「迁移记录」
+                                showMigrate = hasSource && !hasRecord && migrateCandidates.isNotEmpty(),
+                                onMigrate = { migratePickerEverOpened = true; migratePickerVisible = true },
                             )
                             }
                     }
@@ -772,6 +882,35 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             onDismiss = { summaryDialogVisible = false },
         )
 
+        // 迁移记录·第一步：选择要从哪条记录迁移（每行：源名 · 第 N 集 · 已看时长/总时长）
+        org.moontechlab.selenetv.ui.CardContextMenu(
+            visible = migratePickerVisible,
+            title = "选择要迁移的记录",
+            items = migrateCandidates.map { rec ->
+                val epPart = if (rec.totalEpisodes > 1) "第 ${rec.index} 集 · " else ""
+                val timePart = if (rec.totalTime > 0L)
+                    "${formatClock(rec.playTime)}/${formatClock(rec.totalTime)}" else formatClock(rec.playTime)
+                org.moontechlab.selenetv.ui.CardMenuItem(label = "${rec.sourceName} · $epPart$timePart") {
+                    onMigrateSelect(rec)
+                }
+            },
+            // 回焦由上方 LaunchedEffect(migratePickerVisible) 统一处理（需等 Popup 收起动画结束）
+            onClose = { migratePickerVisible = false },
+        )
+
+        // 迁移记录·第二步：迁移已完成，确认是否删除原记录（保留=两源各留一条；删除=真正「移动」）
+        org.moontechlab.selenetv.ui.ConfirmDialog(
+            visible = migrateDeleteVisible,
+            title = "迁移完成",
+            message = "已迁移到当前源。是否删除原「${migrateDeleteRec?.sourceName ?: ""}」的播放记录？",
+            confirmLabel = "删除原记录",
+            cancelLabel = "保留原记录",
+            isDestructive = true,
+            onConfirm = { migrateDeleteRec?.let { onDeleteOriginalRecord(it) } },
+            // 回焦由上方 LaunchedEffect(migrateDeleteVisible) 统一处理
+            onCancel = { migrateDeleteVisible = false },
+        )
+
         // 播放页覆盖层：用 Dialog 建立独立焦点域（与 EpisodePickerDialog / SummaryDialog 同理）。
         // 详情根 Box 是 focusGroup(exit=Cancel)，作为兄弟节点的播放页无法被跨焦点组的 requestFocus
         // 夺焦（焦点进不去 → 方向键全失效）；Dialog 是独立窗口，焦点天然隔离，进度条 requestFocus 即生效。
@@ -790,6 +929,15 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             }
         }
     }
+}
+
+// 秒 → 时钟文案：<1h 显示 m:ss，≥1h 显示 h:mm:ss（迁移记录候选行的已看/总时长）
+private fun formatClock(seconds: Long): String {
+    val s = seconds.coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 @Composable
