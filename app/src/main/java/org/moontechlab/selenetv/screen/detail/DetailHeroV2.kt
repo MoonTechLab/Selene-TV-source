@@ -52,7 +52,7 @@ fun DetailHeroV2(
     val backdrop = info?.backdrop
     val logo = info?.logo
 
-    // hero 取屏高的 ~92%，底部仅露出「播放源」极窄一条，提示可下滑。
+    // hero 取屏高的 ~94%，底部仅露出「播放源」极窄一条，提示可下滑。
     // 注意：MainActivity.adjustDensity() 把全局 density 重写为「画布固定 1080dp 宽」，但
     // config.screenHeightDp 仍以系统原始 density 计量，与本应用其余 dp 不是同一把尺子——
     // 直接乘会在真机(尤其 4K)上把 hero 撑到远超可视高度，底部动作按钮被顶出屏外。
@@ -60,7 +60,7 @@ fun DetailHeroV2(
     // 再以 heightIn(min) 承载：内容更高时自适应增高、随滚动可达，绝不裁切按钮。
     val config = LocalConfiguration.current
     val canvasHeightDp = 1080f * (config.screenHeightDp.toFloat() / config.screenWidthDp.toFloat())
-    val heroMinHeight = (canvasHeightDp * 0.92f).dp
+    val heroMinHeight = (canvasHeightDp * 0.94f).dp
 
     Box(
         modifier = modifier
