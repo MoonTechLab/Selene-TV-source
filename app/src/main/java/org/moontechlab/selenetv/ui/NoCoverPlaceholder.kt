@@ -16,11 +16,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,27 +45,30 @@ fun NoCoverPlaceholder(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Selene 月牙(与品牌 MoonCrescentSpinner 同形:外半圆被内椭圆挖出),静态、不旋转。
         Canvas(modifier = Modifier.size(34.dp)) {
             val w = size.width
             val h = size.height
-            val outerR = w * 0.45f
-            val innerRx = w * 0.32f
-            val innerRy = h * 0.45f
-            val cx = w / 2f
-            val cy = h / 2f
-            val crescent = Path().apply {
-                arcTo(
-                    rect = Rect(Offset(cx - outerR, cy - outerR), Size(outerR * 2, outerR * 2)),
-                    startAngleDegrees = -90f, sweepAngleDegrees = 180f, forceMoveTo = true,
-                )
-                arcTo(
-                    rect = Rect(Offset(cx - innerRx, cy - innerRy), Size(innerRx * 2, innerRy * 2)),
-                    startAngleDegrees = 90f, sweepAngleDegrees = -180f, forceMoveTo = false,
-                )
+            val sw = w * 0.06f
+            // 外框圆角矩形
+            drawRoundRect(
+                color = tint,
+                topLeft = Offset(sw, sw),
+                size = Size(w - 2 * sw, h - 2 * sw),
+                cornerRadius = CornerRadius(w * 0.12f),
+                style = Stroke(width = sw),
+            )
+            // 太阳(小圆)
+            drawCircle(color = tint, radius = w * 0.10f, center = Offset(w * 0.34f, h * 0.36f))
+            // 山(折线三角)
+            val mountain = Path().apply {
+                moveTo(w * 0.20f, h * 0.74f)
+                lineTo(w * 0.46f, h * 0.50f)
+                lineTo(w * 0.62f, h * 0.66f)
+                lineTo(w * 0.80f, h * 0.46f)
+                lineTo(w * 0.80f, h * 0.74f)
                 close()
             }
-            drawPath(crescent, color = tint)
+            drawPath(mountain, color = tint)
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "暂无封面", color = tint, fontSize = 12.sp, fontWeight = FontWeight.W500)
