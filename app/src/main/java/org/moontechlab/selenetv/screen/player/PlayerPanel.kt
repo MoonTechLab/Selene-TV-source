@@ -675,9 +675,24 @@ private fun SourceTile(
                 ),
             )
             Column(modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(10.dp)) {
+                // 元数据行(名称上方):测速后显示分辨率·速率(取代集数),否则显示集数(单集省略)。
+                // 124dp 窄卡放不下「集数 + 分辨率 + 速率」一行,故测速后用结果取代集数,始终单行。
+                val metaText: String? = when {
+                    speed != null -> SpeedTestService.badgeLabel(speed)
+                    episodeCount > 1 -> "$episodeCount 集"
+                    else -> null
+                }
+                if (metaText != null) {
+                    val metaColor = when (speed?.state) {
+                        SpeedTestState.FAILED -> Color(0xFFE57373)
+                        SpeedTestState.TESTING -> Color.White.copy(alpha = 0.6f)
+                        SpeedTestState.DONE -> Color.White
+                        else -> Color.White.copy(alpha = 0.7f) // 集数
+                    }
+                    Text(text = metaText, color = metaColor, fontSize = 11.sp, fontWeight = FontWeight.W600, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(modifier = Modifier.height(3.dp))
+                }
                 Text(text = name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.W700, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(text = "$episodeCount 集", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
             }
             if (current) {
                 Box(
@@ -689,24 +704,6 @@ private fun SourceTile(
                         .padding(horizontal = 7.dp, vertical = 3.dp),
                 ) {
                     Text(text = "在用", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.W700)
-                }
-            }
-            if (speed != null) {
-                val txt = SpeedTestService.badgeLabel(speed)
-                val txtColor = when (speed.state) {
-                    SpeedTestState.FAILED -> Color(0xFFE57373)
-                    SpeedTestState.TESTING -> Color.White.copy(alpha = 0.75f)
-                    SpeedTestState.DONE -> Color.White
-                }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.62f))
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                ) {
-                    Text(text = txt, color = txtColor, fontSize = 10.sp, fontWeight = FontWeight.W700, maxLines = 1)
                 }
             }
             if (dimmed) {
