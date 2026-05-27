@@ -77,12 +77,14 @@ class SeleneApplication : Application(), ImageLoaderFactory {
             return OkHttpClient.Builder()
                 .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
                 .hostnameVerifier { _, _ -> true }
+                .callTimeout(5, java.util.concurrent.TimeUnit.SECONDS) // 图片整体加载上限,超时即落「暂无封面」
                 .addInterceptor(ImageHeaderInterceptor())
                 .addInterceptor(ImageLoggingInterceptor())
                 .build()
         } catch (e: Exception) {
             Log.e("SeleneApplication", "Failed to create unsafe OkHttpClient", e)
             return OkHttpClient.Builder()
+                .callTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                 .addInterceptor(ImageHeaderInterceptor())
                 .addInterceptor(ImageLoggingInterceptor())
                 .build()
