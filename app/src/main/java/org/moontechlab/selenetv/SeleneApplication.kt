@@ -126,7 +126,7 @@ class SeleneApplication : Application(), ImageLoaderFactory {
      */
     private class ImageEventListener : EventListener {
         override fun onError(request: ImageRequest, result: ErrorResult) {
-            
+            Log.w("CoilImg", "图片加载失败 data=${request.data} cause=${result.throwable}")
         }
     }
 }
