@@ -480,6 +480,8 @@ private fun SourcesTabContent(
     LazyRow(
         state = listState,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        // 首/尾项贴边时聚焦放大(1.05x)会越过 LazyRow 裁剪边被切;留出横向 contentPadding 给放大留余量。
+        contentPadding = PaddingValues(horizontal = 8.dp),
         modifier = Modifier.fillMaxWidth().height(contentHeight),
     ) {
         item(key = "__speedtest__") {
