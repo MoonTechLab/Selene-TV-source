@@ -27,7 +27,7 @@ object HlsDecryptor {
         for (raw in content.lineSequence()) {
             val line = raw.trim()
             when {
-                line.startsWith("#EXT-X-KEY:") -> keyLine = line.removePrefix("#EXT-X-KEY:")
+                line.startsWith("#EXT-X-KEY:") -> if (keyLine == null) keyLine = line.removePrefix("#EXT-X-KEY:")
                 line.startsWith("#EXT-X-MEDIA-SEQUENCE:") ->
                     mediaSequence = line.removePrefix("#EXT-X-MEDIA-SEQUENCE:").trim().toLongOrNull() ?: 0L
             }

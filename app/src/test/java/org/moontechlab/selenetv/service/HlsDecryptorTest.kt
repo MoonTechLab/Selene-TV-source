@@ -96,4 +96,19 @@ class HlsDecryptorTest {
         expected[15] = 5
         assertArrayEquals(expected, iv)
     }
+
+    @Test
+    fun parseKeyTag_keyRotation_firstKeyWins() {
+        val content = """
+            #EXTM3U
+            #EXT-X-KEY:METHOD=AES-128,URI="first.key"
+            #EXTINF:6.0,
+            seg0.ts
+            #EXT-X-KEY:METHOD=AES-128,URI="second.key"
+            #EXTINF:6.0,
+            seg1.ts
+        """.trimIndent()
+        val tag = HlsDecryptor.parseKeyTag(content, "https://h.example.com/a/index.m3u8")!!
+        assertEquals("https://h.example.com/a/first.key", tag.keyUri)
+    }
 }

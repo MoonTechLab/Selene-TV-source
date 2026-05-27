@@ -98,8 +98,8 @@ object SpeedTestService {
         val widthPx = if (declaredWidth > 0) {
             declaredWidth
         } else {
-            val cipher = sample.firstSegmentBytes
-            val plain = if (cipher == null) null else decryptFirstSegmentIfNeeded(content, streamUrl, cipher)
+            val segmentBytes = sample.firstSegmentBytes
+            val plain = if (segmentBytes == null) null else decryptFirstSegmentIfNeeded(content, streamUrl, segmentBytes)
             chooseWidth(0, plain, TsResolutionProbe::parseWidth)
         }
         SourceSpeed(
