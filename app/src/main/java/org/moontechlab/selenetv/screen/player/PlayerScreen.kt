@@ -413,8 +413,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         onToggle = { togglePlay() },
                         onWake = { wake() },
                         onOpenPanel = { openPanel() },
-                        // 内容区「上」回标签栏的中转期间，进度条可能短暂获焦——此时不收面板。
+                        // 内容区「上」回标签栏的中转期间，进度条可能短暂获焦——此时不收面板，
+                        // 且抑制进度条自身的「绽放」高亮，避免焦点在交回标签栏前肉眼可见地闪过进度条。
                         onFocused = { if (!routeContentUpToTab) panelOpen = false },
+                        suppressActive = routeContentUpToTab,
                         focusRequester = scrubberFocus,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -580,9 +582,11 @@ private fun PlayerScrubber(
     onFocused: () -> Unit,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
+    suppressActive: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val active = focused && controlsVisible
+    // suppressActive：内容区按「上」回标签栏的中转期间进度条会短暂获焦，此时不绽放高亮（见 onFocused 注释）。
+    val active = focused && controlsVisible && !suppressActive
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val trackH by animateDpAsState(if (active) 6.dp else 4.dp, tween(160), label = "track_h")
     val knob by animateDpAsState(if (active) 18.dp else 0.dp, spring(dampingRatio = 0.55f, stiffness = 420f), label = "knob")
