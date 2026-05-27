@@ -107,3 +107,39 @@ object TsResolutionProbe {
 - 单测:对一段已知分辨率的 H.264 TS 字节、一段 HEVC TS 字节,`parseWidth` 返回正确宽度;
   对随机 / 非 TS 字节返回 0。
 - 设备:找一个不声明 RESOLUTION 的真实源,确认优选测速能给出分辨率档位(此前为空)。
+
+## 附录:AES-128 加密 HLS 支持(2026-05-27 追加)
+
+实测用户的「不声明分辨率」源多为 **AES-128 加密 HLS**:分片首字节非 `0x47`、前 64KB
+熵≈7.997 bits/byte、文件大小为 16 的整数倍而非 188 的整数倍 —— 典型 AES-CBC 密文。
+测速阶段下载到的是密文,直接喂 `TsExtractor` 必然失败(`looksLikeTs` 判否 → 0)。
+ExoPlayer 播放时透明解密,本探针需自行解密。
+
+### 行为
+
+- 仅当 `declaredWidth == 0`(走兜底)时,才解析加密信息并解密;声明了 RESOLUTION 不受影响。
+- 解析媒体播放列表中的 `#EXT-X-KEY:METHOD=AES-128,URI="...",IV=0x...`:
+  - `METHOD=NONE` 或无该标签 → 视为明文,首分片字节原样交给探针。
+  - `METHOD=AES-128` → 拉取密钥(16 字节,经 [MediaHttp.httpClient],**多一次密钥请求**),
+    按 RFC 8216 确定 IV:有 `IV` 属性用之(16 字节十六进制);无则用首分片的媒体序号
+    (`#EXT-X-MEDIA-SEQUENCE`,缺省 0)的 128-bit 大端表示。
+  - 对采样到的首分片密文做 **AES-128-CBC**(`AES/CBC/NoPadding`)解密:仅解密整 16 字节块
+    (`floor(len/16)*16`),丢弃尾部不足一块的部分;SPS 远在分片开头,无需处理 PKCS7 尾块填充。
+  - 其他 METHOD(如 `SAMPLE-AES`)不支持 → 原样返回密文(结果 0,无回退)。
+  - 任意环节失败(密钥拉取失败、长度非 16、解密异常)→ 原样返回密文 → 探针得 0,不崩。
+
+### 新增/改动
+
+- 新增 `service/HlsDecryptor.kt`(`object`):`parseKeyTag(content, baseUrl)` 解析 EXT-X-KEY +
+  媒体序号(纯函数);`resolveIv(ivHex?, mediaSequence)` 派生 IV(纯函数);
+  `decryptCbc(cipher, key, iv)` AES-128-CBC 解密(`javax.crypto`,纯 JVM 可测)。
+- `SpeedTestService`:新增 `getBytes(url)` 拉密钥;`probe()` 兜底分支在 `parseWidth` 前先解密。
+
+### 测试
+
+- JVM 单测(`javax.crypto` 在普通 JUnit 下可运行):
+  - `decryptCbc` 往返:已知明文加密后解密 == 原文;前缀(整块)解密正确。
+  - `parseKeyTag`:含 EXT-X-KEY 的 m3u8 → 正确 method/解析后 URI/IV;无标签 → null;`METHOD=NONE`。
+  - `resolveIv`:有 IV 属性用属性值;无则媒体序号大端 16 字节。
+- 设备 instrumented:用解密后得到的明文 TS 验证 `TsExtractor` 取到正确宽度
+  (需要密钥/IV 才能离线解密生成明文样本)。
