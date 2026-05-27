@@ -79,7 +79,8 @@ enum class PanelTab { Detail, Episodes, Sources }
 
 private val Accent = Color(0xFF4CAF50)
 // 面板高度：约屏高 47%（密度下 1dp≈1.77px）。越矮其顶边越靠下，进度条贴在上方也随之到屏幕中线附近。
-private val PanelHeight = 256.dp
+// internal：PlayerScreen 的开合揭示容器需按此高度伸缩（替代 animateContentSize），故同包可见。
+internal val PanelHeight = 256.dp
 
 /**
  * 进度条下方上拉的标签面板（详情 / 选集 / 换源）。由进度条按「下」唤出、默认进入「详情」；

@@ -1,7 +1,6 @@
 package org.moontechlab.selenetv.screen.player
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -46,6 +45,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -57,6 +57,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,6 +88,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // 播放页现处于独立 Dialog 窗口（DetailScreen 用 Dialog 隔离焦点域，见 a54b86b），其按键不经
+    // MainActivity.dispatchKeyEvent，故 5021ed4 的 Activity 级 BACK 自管对这里失效。BackHandler 绑定的是
+    // Dialog 自身的 onBackPressedDispatcher，下方 root 直接拦截 BACK 手动驱动它（见 onPreviewKeyEvent 注释）。
+    val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val controller: VideoPlayer = remember { PlayerFactory.create(context) }
     val reporter = remember { PlayProgressReporter() }
 
@@ -301,10 +306,46 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
     }
 
+    // 面板开合 / 控制条淡入淡出 / 压暗：全部改用手动 Animatable，并在 scaleFactor=1 的 MotionDurationScale 下驱动。
+    // 原因：本页处于独立 Dialog 窗口（DetailScreen 用 Dialog 隔离焦点域，见 a54b86b），真机上该 Dialog 窗口会把
+    // Compose 动画时长整体拉伸（同款 animateContentSize/tween 在 Activity 窗口的直播页正常、在本页极慢，暂停亦然），
+    // 而默认动画走的是窗口自带的 MotionDurationScale。强制套用 scaleFactor=1 即可绕开拉伸，让开合恢复 280ms。
+    val fixedMotionScale = remember {
+        object : androidx.compose.ui.MotionDurationScale { override val scaleFactor: Float get() = 1f }
+    }
+    val panelReveal = remember { androidx.compose.animation.core.Animatable(0f) } // 0=收起 1=展开，替代 animateContentSize
+    val dimAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+    val ctrlAlphaAnim = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(panelOpen) {
+        kotlinx.coroutines.withContext(fixedMotionScale) {
+            kotlinx.coroutines.coroutineScope {
+                launch { panelReveal.animateTo(if (panelOpen) 1f else 0f, tween(280)) }
+                launch { dimAnim.animateTo(if (panelOpen) 0.5f else 0f, tween(280)) }
+            }
+        }
+    }
+    LaunchedEffect(controlsVisible) {
+        kotlinx.coroutines.withContext(fixedMotionScale) {
+            ctrlAlphaAnim.animateTo(if (controlsVisible) 1f else 0f, tween(if (controlsVisible) 220 else 280))
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            // 返回键自管（修复真机播放页 Dialog 返回失效，复刻 5021ed4 的 Activity 级方案）：
+            // 真机上播放页 Compose 子树会吞掉 BACK 的 ACTION_DOWN，致 Dialog 窗口未 startTracking、
+            // 抬起不触发 onBackPressed → 三个 BackHandler 全收不到（模拟器分发不同，复现不了）。
+            // 故在此直接拦截：吞掉 DOWN，UP 时手动调 Dialog 的 onBackPressedDispatcher，仍由下方分层
+            // BackHandler（收面板/隐控制条/二次确认退出）调度——绕开对 startTracking 的依赖。
+            .onPreviewKeyEvent { e ->
+                if (e.key != Key.Back) return@onPreviewKeyEvent false
+                if (e.type == KeyEventType.KeyUp && !e.nativeKeyEvent.isCanceled) {
+                    backDispatcher?.onBackPressed()
+                }
+                true
+            }
             .focusGroup()
             // 焦点陷阱：禁止任何方向把焦点带出播放页覆盖层、穿透到下层详情内容
             .focusProperties { exit = { FocusRequester.Cancel } },
@@ -312,8 +353,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
         controller.VideoSurface(Modifier.fillMaxSize())
 
-        // 面板打开时压暗画面
-        val dim by animateFloatAsState(if (panelOpen) 0.5f else 0f, tween(280), label = "dim")
+        // 面板打开时压暗画面（手动 Animatable，scale=1，见上方说明）
+        val dim = dimAnim.value
         if (dim > 0f) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)))
 
         PlayPauseFlash(visible = flashVisible, isPlaying = isPlaying)
@@ -369,16 +410,13 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
 
         // ── 底部：控制条 + 上拉面板。面板出现时整列变高、底部对齐 → 把控制条上顶。 ──
-        val ctrlAlpha by animateFloatAsState(
-            targetValue = if (controlsVisible) 1f else 0f,
-            animationSpec = tween(if (controlsVisible) 220 else 280),
-            label = "ctrl_alpha",
-        )
+        // ctrlAlpha：手动 Animatable，scale=1（见上方说明）。整列不再用 animateContentSize，
+        // 改由面板容器高度按 panelReveal 逐帧伸缩，底部对齐使控制条随之上顶——同样走 scale=1 的驱动。
+        val ctrlAlpha = ctrlAlphaAnim.value
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(280)),
+                .fillMaxWidth(),
         ) {
             Box(
                 modifier = Modifier
@@ -392,8 +430,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                             1f to Color(0xCC000000),
                         ),
                     )
-                    // 折叠态底距更小，让控制条整体下沉、指示文案更贴近底部
-                    .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = if (panelOpen) 2.dp else 10.dp),
+                    // 折叠态底距更小，让控制条整体下沉、指示文案更贴近底部。
+                    // 底距随 panelReveal 连续插值（开 2dp → 收 10dp），避免在动画端点处突跳。
+                    .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = 2.dp + 8.dp * (1f - panelReveal.value)),
             ) {
                 Column {
                     Text(
@@ -433,10 +472,19 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(text = "-${formatTime(remaining)}", color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp, fontWeight = FontWeight.W600)
                     }
-                    // 下拉提示（面板未开时）
-                    if (!panelOpen) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    // 下拉提示：高度随面板收起进度反向伸缩（reveal 1→0 时 0→满高 22dp），与收起动画严格同步、
+                    // 自顶向下裁剪揭示，不在动画末尾突然撑高控制条造成跳变。控制条整体已套 ctrlAlpha 淡入淡出。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(22.dp * (1f - panelReveal.value))
+                            .clipToBounds(),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -450,7 +498,15 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 }
             }
 
-            if (panelOpen) {
+            // 收起动画期间仍需保留面板以便高度从满高平滑收到 0；故 panelOpen 或 reveal 未归零时都渲染。
+            // 容器高度 = 满高 × reveal 并裁剪，顶部对齐 → 自顶向下揭示，与原 animateContentSize 的裁剪方向一致。
+            if (panelOpen || panelReveal.value > 0.001f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(PanelHeight * panelReveal.value)
+                        .clipToBounds(),
+                ) {
                 PlayerPanel(
                     title = launch.title,
                     heroInfo = launch.heroInfo,
@@ -506,6 +562,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         focusManager.clearFocus(force = true)
                     },
                 )
+                }
             }
         }
 
