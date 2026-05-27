@@ -11,6 +11,7 @@ import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.TrackOutput
+import androidx.media3.extractor.text.SubtitleParser
 import androidx.media3.extractor.ts.TsExtractor
 import java.io.EOFException
 
@@ -41,7 +42,6 @@ object TsResolutionProbe {
         if (bytes == null || bytes.size < TS_PACKET_SIZE * 2) return false
         for (start in 0 until TS_PACKET_SIZE) {
             val next = start + TS_PACKET_SIZE
-            if (next >= bytes.size) break
             if (bytes[start] == 0x47.toByte() && bytes[next] == 0x47.toByte()) return true
         }
         return false
@@ -57,7 +57,7 @@ object TsResolutionProbe {
             override fun endTracks() {}
             override fun seekMap(seekMap: SeekMap) {}
         }
-        val extractor = TsExtractor()
+        val extractor = TsExtractor(SubtitleParser.Factory.UNSUPPORTED)
         extractor.init(output)
         val positionHolder = PositionHolder()
         var input = DefaultExtractorInput(ByteArrayDataReader(bytes), 0, bytes.size.toLong())
