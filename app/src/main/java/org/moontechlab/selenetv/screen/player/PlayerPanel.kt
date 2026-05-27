@@ -71,6 +71,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import org.moontechlab.selenetv.model.SearchResult
 import org.moontechlab.selenetv.model.SourceSpeed
@@ -658,12 +659,15 @@ private fun SourceTile(
         ),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (poster.isNotEmpty()) {
-                AsyncImage(
+            if (poster.isBlank()) {
+                org.moontechlab.selenetv.ui.NoCoverPlaceholder(Modifier.fillMaxSize())
+            } else {
+                SubcomposeAsyncImage(
                     model = getImageUrlSync(poster),
                     contentDescription = name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
+                    error = { org.moontechlab.selenetv.ui.NoCoverPlaceholder(Modifier.fillMaxSize()) },
                 )
             }
             // 底部压暗确保文字可读

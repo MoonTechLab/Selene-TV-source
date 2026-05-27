@@ -38,7 +38,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import kotlinx.coroutines.delay
 import org.moontechlab.selenetv.model.SourceSpeed
 import org.moontechlab.selenetv.model.SpeedTestState
@@ -291,15 +291,23 @@ fun VideoCard(
                             } else Modifier
                         )
                 ) {
-                    AsyncImage(
-                        model = getImageUrlSync(videoInfo.cover),
-                        contentDescription = videoInfo.title,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(if (isFocused) 2.dp else 0.dp)
-                            .clip(RoundedCornerShape(if (isFocused) innerCornerRadius else cornerRadius)),
-                        contentScale = ContentScale.Crop
-                    )
+                    val cover = getImageUrlSync(videoInfo.cover)
+                    val imgModifier = Modifier
+                        .fillMaxSize()
+                        .padding(if (isFocused) 2.dp else 0.dp)
+                        .clip(RoundedCornerShape(if (isFocused) innerCornerRadius else cornerRadius))
+                    if (cover.isBlank()) {
+                        // 无封面 URL:直接兜底
+                        NoCoverPlaceholder(imgModifier)
+                    } else {
+                        SubcomposeAsyncImage(
+                            model = cover,
+                            contentDescription = videoInfo.title,
+                            modifier = imgModifier,
+                            contentScale = ContentScale.Crop,
+                            error = { NoCoverPlaceholder(Modifier.fillMaxSize()) }, // 加载失败兜底
+                        )
+                    }
                 }
 
                 // 选中状态指示器
