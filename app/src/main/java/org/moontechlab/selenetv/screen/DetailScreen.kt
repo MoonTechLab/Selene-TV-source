@@ -1062,8 +1062,5 @@ private fun HeroErrorState(message: String, onRetry: () -> Unit, modifier: Modif
  * 测速排序键（越大越靠前）：已完成→综合分(0~100)；测速中/未测→ -1（沉到已完成之后、保持原序）；
  * 失败→ -2（最底）。实时重排与最终定稿共用，保证两阶段排序口径一致。
  */
-private fun speedRank(result: SourceSpeed?, maxSpeed: Double): Double = when {
-    result == null || result.state == SpeedTestState.TESTING -> -1.0
-    result.state == SpeedTestState.FAILED -> -2.0
-    else -> SpeedTestService.score(result, maxSpeed)
-}
+private fun speedRank(result: SourceSpeed?, maxSpeed: Double): Double =
+    SpeedTestService.rank(result, maxSpeed)

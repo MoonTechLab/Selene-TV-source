@@ -117,6 +117,21 @@ object SpeedTestService {
         return qualityScore(s.widthPx) * 0.5 + speedScore(s.speedKbps, maxSpeed) * 0.5
     }
 
+    /** 排序键:DONE=score(0..100)、TESTING/null=-1、FAILED=-2。详情页/播放页统一重排用。 */
+    fun rank(result: SourceSpeed?, maxSpeed: Double): Double = when {
+        result == null || result.state == SpeedTestState.TESTING -> -1.0
+        result.state == SpeedTestState.FAILED -> -2.0
+        else -> score(result, maxSpeed)
+    }
+
+    /** 角标文案:TESTING→「测速中」、FAILED→「超时」、DONE→「quality · speedLabel」(皆空→「未知」)。 */
+    fun badgeLabel(speed: SourceSpeed): String = when (speed.state) {
+        SpeedTestState.TESTING -> "测速中"
+        SpeedTestState.FAILED -> "超时"
+        SpeedTestState.DONE ->
+            listOf(speed.quality, speed.speedLabel).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { "未知" }
+    }
+
     /**
      * 决定最终采用的宽度:m3u8 已声明(>0)直接用;否则用 [probe] 解析采样到的首分片字节;
      * 无字节则 0。[probe] 注入便于单测(实参为 [TsResolutionProbe.parseWidth]）。

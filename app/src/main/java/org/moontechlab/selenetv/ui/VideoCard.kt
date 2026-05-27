@@ -325,14 +325,7 @@ fun VideoCard(
 
                 // 测速角标（封面底部条）：测速中 → 「测速中」；DONE → 「1080p · 2.1MB/s」；FAILED → 「超时」
                 if (speed != null) {
-                    val label = when (speed.state) {
-                        SpeedTestState.TESTING -> "测速中"
-                        SpeedTestState.FAILED -> "超时"
-                        SpeedTestState.DONE -> listOf(speed.quality, speed.speedLabel)
-                            .filter { it.isNotEmpty() }
-                            .joinToString(" · ")
-                            .ifEmpty { "未知" }
-                    }
+                    val label = org.moontechlab.selenetv.service.SpeedTestService.badgeLabel(speed)
                     val labelColor = when (speed.state) {
                         SpeedTestState.FAILED -> Color(0xFFE57373)
                         SpeedTestState.TESTING -> Color.White.copy(alpha = 0.7f)
