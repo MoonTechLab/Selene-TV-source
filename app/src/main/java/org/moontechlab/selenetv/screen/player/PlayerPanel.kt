@@ -109,6 +109,10 @@ fun PlayerPanel(
     scrubberFocus: FocusRequester,
     activeTabFocus: FocusRequester,
     onContentExitUp: () -> Unit,
+    speedResults: Map<String, org.moontechlab.selenetv.model.SourceSpeed> = emptyMap(),
+    speedTesting: Boolean = false,
+    onSpeedTest: () -> Unit = {},
+    onStopSpeedTest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val tabs = remember(epCount, sources.size) {
@@ -200,6 +204,8 @@ fun PlayerPanel(
                     PanelTab.Sources -> SourcesTabContent(
                         sources = sources, currentSourceKey = currentSourceKey, onPick = onPickSource,
                         contentHeight = ch, firstFocus = srcFocus, onExitUp = onContentExitUp,
+                        speedResults = speedResults, speedTesting = speedTesting,
+                        onSpeedTest = onSpeedTest, onStopSpeedTest = onStopSpeedTest,
                     )
                 }
             }
@@ -451,6 +457,7 @@ private fun EpisodesTabContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SourcesTabContent(
     sources: List<SearchResult>,
@@ -459,6 +466,10 @@ private fun SourcesTabContent(
     contentHeight: Dp,
     firstFocus: FocusRequester,
     onExitUp: () -> Unit,
+    speedResults: Map<String, org.moontechlab.selenetv.model.SourceSpeed> = emptyMap(),
+    speedTesting: Boolean = false,
+    onSpeedTest: () -> Unit = {},
+    onStopSpeedTest: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val selectedIndex = sources.indexOfFirst { sourceKey(it) == currentSourceKey }.coerceAtLeast(0)
@@ -467,17 +478,33 @@ private fun SourcesTabContent(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth().height(contentHeight),
     ) {
+        item(key = "__speedtest__") {
+            org.moontechlab.selenetv.ui.SpeedTestPill(
+                testing = speedTesting,
+                testedCount = speedResults.count { it.value.state != org.moontechlab.selenetv.model.SpeedTestState.TESTING },
+                totalCount = speedResults.size,
+                onClick = { if (speedTesting) onStopSpeedTest() else onSpeedTest() },
+                width = 124.dp,
+                height = contentHeight,
+                idleSubtitle = "测速并排序",
+                modifier = Modifier.animateItem(),
+            )
+        }
         itemsIndexed(sources, key = { _, s -> sourceKey(s) }) { index, source ->
             val key = sourceKey(source)
+            val speed = speedResults[key]
             SourceTile(
                 name = source.sourceName,
                 episodeCount = source.episodes.size.coerceAtLeast(1),
                 poster = source.poster,
                 current = key == currentSourceKey,
                 heightDp = contentHeight,
-                onClick = { onPick(key) },
+                speed = speed,
+                dimmed = speedTesting && (speed == null || speed.state == org.moontechlab.selenetv.model.SpeedTestState.TESTING),
+                onClick = { if (!speedTesting) onPick(key) },
                 onExitUp = onExitUp,
                 focusRequester = if (index == selectedIndex) firstFocus else null,
+                modifier = Modifier.animateItem(),
             )
         }
     }
@@ -573,6 +600,9 @@ private fun SourceTile(
     onClick: () -> Unit,
     onExitUp: () -> Unit,
     focusRequester: FocusRequester?,
+    speed: org.moontechlab.selenetv.model.SourceSpeed? = null,
+    dimmed: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -583,7 +613,7 @@ private fun SourceTile(
     val shape = RoundedCornerShape(12.dp)
     Surface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer { scaleX = scale; scaleY = scale }
@@ -643,6 +673,27 @@ private fun SourceTile(
                 ) {
                     Text(text = "在用", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.W700)
                 }
+            }
+            if (speed != null) {
+                val txt = org.moontechlab.selenetv.service.SpeedTestService.badgeLabel(speed)
+                val txtColor = when (speed.state) {
+                    org.moontechlab.selenetv.model.SpeedTestState.FAILED -> Color(0xFFE57373)
+                    org.moontechlab.selenetv.model.SpeedTestState.TESTING -> Color.White.copy(alpha = 0.75f)
+                    org.moontechlab.selenetv.model.SpeedTestState.DONE -> Color.White
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                ) {
+                    Text(text = txt, color = txtColor, fontSize = 10.sp, fontWeight = FontWeight.W700, maxLines = 1)
+                }
+            }
+            if (dimmed) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)))
             }
         }
     }
