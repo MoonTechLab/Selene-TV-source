@@ -111,4 +111,18 @@ class HlsDecryptorTest {
         val tag = HlsDecryptor.parseKeyTag(content, "https://h.example.com/a/index.m3u8")!!
         assertEquals("https://h.example.com/a/first.key", tag.keyUri)
     }
+
+    @Test
+    fun parseKeyTag_keyAfterFirstSegment_ignored() {
+        // seg0 is plaintext (no key before it); the key only applies to seg1 onward → null for segment 0
+        val content = """
+            #EXTM3U
+            #EXTINF:6.0,
+            seg0.ts
+            #EXT-X-KEY:METHOD=AES-128,URI="late.key"
+            #EXTINF:6.0,
+            seg1.ts
+        """.trimIndent()
+        assertNull(HlsDecryptor.parseKeyTag(content, "https://h.example.com/a/index.m3u8"))
+    }
 }

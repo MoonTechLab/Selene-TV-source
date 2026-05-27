@@ -24,12 +24,15 @@ object HlsDecryptor {
     fun parseKeyTag(content: String, baseUrl: String): KeyTag? {
         var keyLine: String? = null
         var mediaSequence = 0L
+        var seenSegment = false
         for (raw in content.lineSequence()) {
             val line = raw.trim()
             when {
-                line.startsWith("#EXT-X-KEY:") -> if (keyLine == null) keyLine = line.removePrefix("#EXT-X-KEY:")
+                line.isEmpty() -> {}
+                line.startsWith("#EXT-X-KEY:") -> if (!seenSegment) keyLine = line.removePrefix("#EXT-X-KEY:")
                 line.startsWith("#EXT-X-MEDIA-SEQUENCE:") ->
                     mediaSequence = line.removePrefix("#EXT-X-MEDIA-SEQUENCE:").trim().toLongOrNull() ?: 0L
+                !line.startsWith("#") -> seenSegment = true
             }
         }
         val attrs = keyLine ?: return null
