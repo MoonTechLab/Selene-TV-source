@@ -59,6 +59,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -70,6 +71,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import org.moontechlab.selenetv.model.SearchResult
 import org.moontechlab.selenetv.model.SourceSpeed
 import org.moontechlab.selenetv.model.SpeedTestState
@@ -296,8 +298,14 @@ private fun DetailTabContent(
                 .background(Color(0xFF222222)),
         ) {
             if (poster != null) {
+                // 面板展开动画期间外层高度从 0 渐变,会把内容约束压到极小;若让 AsyncImage 按布局约束
+                // 定解码尺寸,首帧会解出极小图(上采样=模糊)且展开后不再重取。显式固定解码尺寸,
+                // 与动画中的瞬时约束解耦,首次即按清晰度加载。
                 AsyncImage(
-                    model = getImageUrlSync(poster),
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(getImageUrlSync(poster))
+                        .size(512)
+                        .build(),
                     contentDescription = displayTitle,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
