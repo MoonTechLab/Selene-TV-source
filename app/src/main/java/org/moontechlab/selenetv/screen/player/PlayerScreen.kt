@@ -121,6 +121,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var interactionTick by remember { mutableIntStateOf(0) }
     var flashTick by remember { mutableIntStateOf(0) }
     var flashVisible by remember { mutableStateOf(false) }
+    var sources by remember { mutableStateOf(launch.sources) }
+    var speedTesting by remember { mutableStateOf(false) }
+    var speedResults by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.SourceSpeed>>(emptyMap()) }
+    var speedTestJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // 播放状态全部来自播放器后端（VideoPlayer）
     val isPlaying = controller.isPlaying
@@ -148,6 +152,46 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         controller.togglePlay(); flashTick++; wake()
     }
     fun openPanel() { controlsVisible = true; panelTab = PanelTab.Detail; panelOpen = true }
+
+    // 优选测速:并发测速 → 实时按分重排面板 sources → 每源出分;完成「只重排不切源」(不动 currentSourceKey)。
+    val startSpeedTest: () -> Unit = handler@{
+        if (speedTesting) return@handler
+        val testable = sources.filter { org.moontechlab.selenetv.service.SpeedTestService.testUrl(it) != null }
+        if (testable.isEmpty()) return@handler
+        val seed = testable.associate {
+            sourceKey(it) to org.moontechlab.selenetv.model.SourceSpeed(org.moontechlab.selenetv.model.SpeedTestState.TESTING)
+        }
+        speedResults = seed
+        speedTesting = true
+        speedTestJob = scope.launch {
+            val jobScope = this
+            val acc = java.util.concurrent.ConcurrentHashMap(seed)
+            try {
+                org.moontechlab.selenetv.service.SpeedTestService.testAll(testable) { key, result ->
+                    acc[key] = result
+                    jobScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                        val snap = HashMap(acc)
+                        val maxSpeed = org.moontechlab.selenetv.service.SpeedTestService.maxSpeed(snap.values)
+                        sources = sources.sortedByDescending {
+                            org.moontechlab.selenetv.service.SpeedTestService.rank(snap[sourceKey(it)], maxSpeed)
+                        }
+                        speedResults = snap
+                    }
+                }
+                val maxSpeed = org.moontechlab.selenetv.service.SpeedTestService.maxSpeed(acc.values)
+                sources = sources.sortedByDescending {
+                    org.moontechlab.selenetv.service.SpeedTestService.rank(acc[sourceKey(it)], maxSpeed)
+                }
+                speedResults = HashMap(acc)
+                speedTesting = false
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                speedResults = HashMap(acc.filterValues { it.state != org.moontechlab.selenetv.model.SpeedTestState.TESTING })
+                speedTesting = false
+                throw e
+            }
+        }
+    }
+    val stopSpeedTest: () -> Unit = { speedTestJob?.cancel() }
 
     // 该 source+id 的播放记录（用于逐集续看：记录的 index 与目标集吻合时恢复其位置）
     var sourceRecord by remember { mutableStateOf<org.moontechlab.selenetv.model.PlayRecord?>(null) }
@@ -527,7 +571,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     episodes = episodes,
                     episodesTitles = episodesTitles,
                     currentEpisode = currentEpisode,
-                    sources = launch.sources,
+                    sources = sources,
                     currentSourceKey = currentSourceKey,
                     hasNext = hasNext,
                     tab = panelTab,
@@ -574,6 +618,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         routeContentUpToTab = true
                         focusManager.clearFocus(force = true)
                     },
+                    speedResults = speedResults,
+                    speedTesting = speedTesting,
+                    onSpeedTest = startSpeedTest,
+                    onStopSpeedTest = stopSpeedTest,
                 )
                 }
             }
