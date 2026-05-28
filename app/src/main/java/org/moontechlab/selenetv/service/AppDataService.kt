@@ -23,6 +23,8 @@ object AppDataService {
     private const val KEY_HAS_LOGIN = "has_login"
     private const val KEY_DOUBAN_DATA_SOURCE = "douban_data_source"
     private const val KEY_DOUBAN_IMAGE_SOURCE = "douban_image_source"
+    private const val KEY_BANGUMI_DATA_SOURCE = "bangumi_data_source"
+    private const val KEY_BANGUMI_IMAGE_SOURCE = "bangumi_image_source"
     private const val KEY_M3U8_PROXY_URL = "m3u8_proxy_url"
     private const val KEY_TMDB_API_KEY = "tmdb_api_key"
     private const val KEY_SESSION_TOKEN = "session_token"
@@ -226,6 +228,7 @@ object AppDataService {
      */
     enum class DoubanImageSource(val key: String, val displayName: String) {
         DIRECT("direct", "直连"),
+        SERVER_PROXY("server_proxy", "服务器代理"),
         OFFICIAL_CDN("official_cdn", "豆瓣官方精品 CDN"),
         CDN_TENCENT("cdn_tencent", "豆瓣 CDN By CMLiussss（腾讯云）"),
         CDN_ALIYUN("cdn_aliyun", "豆瓣 CDN By CMLiussss（阿里云）");
@@ -235,6 +238,40 @@ object AppDataService {
                 entries.find { it.key == key } ?: DIRECT
 
             fun fromDisplayName(displayName: String): DoubanImageSource =
+                entries.find { it.displayName == displayName } ?: DIRECT
+        }
+    }
+
+    /**
+     * Bangumi 数据源枚举：除 DIRECT 外，其余在请求 bgm API 时将 host 整体替换。
+     */
+    enum class BangumiDataSource(val key: String, val displayName: String) {
+        DIRECT("direct", "直连"),
+        CDN_TENCENT("cdn_tencent", "Bangumi CDN By CMLiussss（腾讯云）"),
+        CDN_ALIYUN("cdn_aliyun", "Bangumi CDN By CMLiussss（阿里云）"),
+        CDN_SHINYA("cdn_shinya", "Bangumi CDN By Shinya（CF 优选）");
+
+        companion object {
+            fun fromKey(key: String): BangumiDataSource =
+                entries.find { it.key == key } ?: DIRECT
+
+            fun fromDisplayName(displayName: String): BangumiDataSource =
+                entries.find { it.displayName == displayName } ?: DIRECT
+        }
+    }
+
+    /**
+     * Bangumi 图片源枚举。SERVER_PROXY 走自托管 /api/image-proxy，本地模式不可用。
+     */
+    enum class BangumiImageSource(val key: String, val displayName: String) {
+        DIRECT("direct", "直连"),
+        SERVER_PROXY("server_proxy", "服务器代理");
+
+        companion object {
+            fun fromKey(key: String): BangumiImageSource =
+                entries.find { it.key == key } ?: DIRECT
+
+            fun fromDisplayName(displayName: String): BangumiImageSource =
                 entries.find { it.displayName == displayName } ?: DIRECT
         }
     }
@@ -323,6 +360,34 @@ object AppDataService {
         val key = prefs.getString(KEY_DOUBAN_IMAGE_SOURCE, DoubanImageSource.DIRECT.key)
             ?: DoubanImageSource.DIRECT.key
         DoubanImageSource.fromKey(key).displayName
+    }
+
+    /**
+     * 保存 Bangumi 数据源（通过显示名称）
+     */
+    suspend fun saveBangumiDataSource(displayName: String) = withContext(Dispatchers.IO) {
+        val source = BangumiDataSource.fromDisplayName(displayName)
+        prefs.edit().putString(KEY_BANGUMI_DATA_SOURCE, source.key).apply()
+    }
+
+    suspend fun getBangumiDataSourceDisplayName(): String = withContext(Dispatchers.IO) {
+        val key = prefs.getString(KEY_BANGUMI_DATA_SOURCE, BangumiDataSource.DIRECT.key)
+            ?: BangumiDataSource.DIRECT.key
+        BangumiDataSource.fromKey(key).displayName
+    }
+
+    /**
+     * 保存 Bangumi 图片源（通过显示名称）
+     */
+    suspend fun saveBangumiImageSource(displayName: String) = withContext(Dispatchers.IO) {
+        val source = BangumiImageSource.fromDisplayName(displayName)
+        prefs.edit().putString(KEY_BANGUMI_IMAGE_SOURCE, source.key).apply()
+    }
+
+    suspend fun getBangumiImageSourceDisplayName(): String = withContext(Dispatchers.IO) {
+        val key = prefs.getString(KEY_BANGUMI_IMAGE_SOURCE, BangumiImageSource.DIRECT.key)
+            ?: BangumiImageSource.DIRECT.key
+        BangumiImageSource.fromKey(key).displayName
     }
 
 
@@ -427,11 +492,34 @@ object AppDataService {
             ?: DoubanDataSource.DIRECT.key
 
     /**
-     * 同步获取豆瓣图片源 Key
+     * 同步获取豆瓣图片源 Key。
+     * 本地模式无服务端，若用户先前选过 SERVER_PROXY，运行时兜底回落为 DIRECT。
      */
-    fun getDoubanImageSourceKeySync(): String =
-        prefs.getString(KEY_DOUBAN_IMAGE_SOURCE, DoubanImageSource.DIRECT.key)
+    fun getDoubanImageSourceKeySync(): String {
+        val raw = prefs.getString(KEY_DOUBAN_IMAGE_SOURCE, DoubanImageSource.DIRECT.key)
             ?: DoubanImageSource.DIRECT.key
+        return if (isLocalModeCache && raw == DoubanImageSource.SERVER_PROXY.key)
+            DoubanImageSource.DIRECT.key
+        else raw
+    }
+
+    /**
+     * 同步获取 Bangumi 数据源 Key
+     */
+    fun getBangumiDataSourceKeySync(): String =
+        prefs.getString(KEY_BANGUMI_DATA_SOURCE, BangumiDataSource.DIRECT.key)
+            ?: BangumiDataSource.DIRECT.key
+
+    /**
+     * 同步获取 Bangumi 图片源 Key。本地模式兜底同 douban。
+     */
+    fun getBangumiImageSourceKeySync(): String {
+        val raw = prefs.getString(KEY_BANGUMI_IMAGE_SOURCE, BangumiImageSource.DIRECT.key)
+            ?: BangumiImageSource.DIRECT.key
+        return if (isLocalModeCache && raw == BangumiImageSource.SERVER_PROXY.key)
+            BangumiImageSource.DIRECT.key
+        else raw
+    }
 
     // ---- 播放器 ----
     suspend fun savePlayerType(displayName: String) = withContext(Dispatchers.IO) {

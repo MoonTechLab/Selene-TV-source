@@ -11,6 +11,7 @@ import coil.ImageLoaderFactory
 import coil.request.CachePolicy
 import coil.request.ErrorResult
 import coil.request.ImageRequest
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -112,17 +113,26 @@ class SeleneApplication : Application(), ImageLoaderFactory {
     
     /**
      * 图片请求头拦截器
-     * 添加 User-Agent 和 Referer 用于豆瓣图片防盗链
+     * - 默认注入 PC UA + 豆瓣 Referer，绕过豆瓣防盗链
+     * - 若请求 host 命中已登录的自托管服务（/api/image-proxy 等），追加 Cookie 用于鉴权
      */
     private class ImageHeaderInterceptor : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val originalRequest = chain.request()
-            val newRequest = originalRequest.newBuilder()
+            val builder = originalRequest.newBuilder()
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
                 .header("Referer", "https://movie.douban.com/")
-                .build()
-            
-            return chain.proceed(newRequest)
+
+            val serverHost = AppDataService.getServerUrlSync()
+                ?.toHttpUrlOrNull()
+                ?.host
+            if (serverHost != null && originalRequest.url.host == serverHost) {
+                AppDataService.getCookiesSync()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { builder.header("Cookie", it) }
+            }
+
+            return chain.proceed(builder.build())
         }
     }
     

@@ -119,6 +119,8 @@ fun SettingsTab(
     // 设置项状态
     var doubanDataSource by remember { mutableStateOf("") }
     var doubanImageSource by remember { mutableStateOf("") }
+    var bangumiDataSource by remember { mutableStateOf("") }
+    var bangumiImageSource by remember { mutableStateOf("") }
     var tmdbApiKey by remember { mutableStateOf("") }
     var m3u8ProxyUrl by remember { mutableStateOf("") }
     var playerType by remember { mutableStateOf("") }
@@ -135,6 +137,8 @@ fun SettingsTab(
     // 豆瓣源选择弹框状态
     var showDoubanDataSourceDialog by remember { mutableStateOf(false) }
     var showDoubanImageSourceDialog by remember { mutableStateOf(false) }
+    var showBangumiDataSourceDialog by remember { mutableStateOf(false) }
+    var showBangumiImageSourceDialog by remember { mutableStateOf(false) }
     var showPlayerTypeDialog by remember { mutableStateOf(false) }
     var showDecodeModeDialog by remember { mutableStateOf(false) }
     var showSearchOriginDialog by remember { mutableStateOf(false) }
@@ -156,6 +160,8 @@ fun SettingsTab(
     val decodeModeFocusRequester = remember { FocusRequester() }
     val searchOriginFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
+    val bangumiDataSourceFocusRequester = remember { FocusRequester() }
+    val bangumiImageSourceFocusRequester = remember { FocusRequester() }
     val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
 
@@ -199,6 +205,8 @@ fun SettingsTab(
         userRole = AppDataService.parseRoleFromCookies(cookies)
         doubanDataSource = AppDataService.getDoubanDataSourceDisplayName()
         doubanImageSource = AppDataService.getDoubanImageSourceDisplayName()
+        bangumiDataSource = AppDataService.getBangumiDataSourceDisplayName()
+        bangumiImageSource = AppDataService.getBangumiImageSourceDisplayName()
         tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
         playerType = AppDataService.getPlayerTypeDisplayName()
@@ -341,6 +349,18 @@ fun SettingsTab(
                     onClick = { showDoubanImageSourceDialog = true },
                     modifier = Modifier.focusRequester(doubanImageSourceFocusRequester)
                 )
+                SettingRow(
+                    label = "Bangumi 数据源",
+                    value = bangumiDataSource.ifEmpty { "直连" },
+                    onClick = { showBangumiDataSourceDialog = true },
+                    modifier = Modifier.focusRequester(bangumiDataSourceFocusRequester)
+                )
+                SettingRow(
+                    label = "Bangumi 图片源",
+                    value = bangumiImageSource.ifEmpty { "直连" },
+                    onClick = { showBangumiImageSourceDialog = true },
+                    modifier = Modifier.focusRequester(bangumiImageSourceFocusRequester)
+                )
                 // TMDB API Key（填写后详情页可拉取剧照/ logo 渲染 Apple TV 式 hero）
                 SettingRow(
                     label = "TMDB API Key",
@@ -459,12 +479,59 @@ fun SettingsTab(
     ) { onClose ->
         SourceSelectDialogContent(
             title = "选择豆瓣图片源",
-            options = AppDataService.DoubanImageSource.entries.map { it.displayName },
+            // 本地模式无服务端，过滤掉「服务器代理」选项
+            options = AppDataService.DoubanImageSource.entries
+                .filter { !isLocalMode || it != AppDataService.DoubanImageSource.SERVER_PROXY }
+                .map { it.displayName },
             currentValue = doubanImageSource,
             onSelected = { displayName ->
                 coroutineScope.launch {
                     AppDataService.saveDoubanImageSource(displayName)
                     doubanImageSource = displayName
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // Bangumi 数据源选择弹框
+    AnimatedSelectDialog(
+        visible = showBangumiDataSourceDialog,
+        onDismiss = { showBangumiDataSourceDialog = false },
+        onClosed = { bangumiDataSourceFocusRequester.requestFocus() }
+    ) { onClose ->
+        SourceSelectDialogContent(
+            title = "选择 Bangumi 数据源",
+            options = AppDataService.BangumiDataSource.entries.map { it.displayName },
+            currentValue = bangumiDataSource,
+            onSelected = { displayName ->
+                coroutineScope.launch {
+                    AppDataService.saveBangumiDataSource(displayName)
+                    bangumiDataSource = displayName
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // Bangumi 图片源选择弹框（本地模式过滤「服务器代理」）
+    AnimatedSelectDialog(
+        visible = showBangumiImageSourceDialog,
+        onDismiss = { showBangumiImageSourceDialog = false },
+        onClosed = { bangumiImageSourceFocusRequester.requestFocus() }
+    ) { onClose ->
+        SourceSelectDialogContent(
+            title = "选择 Bangumi 图片源",
+            options = AppDataService.BangumiImageSource.entries
+                .filter { !isLocalMode || it != AppDataService.BangumiImageSource.SERVER_PROXY }
+                .map { it.displayName },
+            currentValue = bangumiImageSource,
+            onSelected = { displayName ->
+                coroutineScope.launch {
+                    AppDataService.saveBangumiImageSource(displayName)
+                    bangumiImageSource = displayName
                 }
                 onClose()
             },

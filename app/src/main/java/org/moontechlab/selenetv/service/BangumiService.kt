@@ -29,7 +29,6 @@ class BangumiService private constructor(private val context: Context) {
             }
         }
         
-        private const val API_URL = "https://api.bgm.tv/calendar"
         private const val USER_AGENT = "moontechlab/selene/1.0.0 (Android) (http://github.com/moontechlab/selene)"
         private const val TIMEOUT_MS = 30000
         private const val TAG = "BangumiService"
@@ -43,6 +42,16 @@ class BangumiService private constructor(private val context: Context) {
         ignoreUnknownKeys = true
         isLenient = true
         coerceInputValues = true
+    }
+
+    /**
+     * 按数据源解析 Bangumi API host；缓存键不带 host，切源后旧缓存仍可命中。
+     */
+    private fun bangumiHost(): String = when (AppDataService.getBangumiDataSourceKeySync()) {
+        "cdn_tencent" -> "img.doubanio.cmliussss.net"
+        "cdn_aliyun"  -> "img.doubanio.cmliussss.com"
+        "cdn_shinya"  -> "api-bgm-tv.shinya.click"
+        else          -> "api.bgm.tv"
     }
 
     /**
@@ -142,7 +151,7 @@ class BangumiService private constructor(private val context: Context) {
                 "Accept" to "application/json"
             )
             
-            val (statusCode, responseBody) = httpGet(API_URL, headers)
+            val (statusCode, responseBody) = httpGet("https://${bangumiHost()}/calendar", headers)
             
             if (statusCode == HttpURLConnection.HTTP_OK) {
                 try {
@@ -205,7 +214,7 @@ class BangumiService private constructor(private val context: Context) {
         }
         
         return try {
-            val apiUrl = "https://api.bgm.tv/v0/subjects/$bangumiId"
+            val apiUrl = "https://${bangumiHost()}/v0/subjects/$bangumiId"
             val headers = mapOf(
                 "User-Agent" to USER_AGENT,
                 "Accept" to "application/json"
