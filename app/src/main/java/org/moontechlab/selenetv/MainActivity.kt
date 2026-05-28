@@ -17,8 +17,7 @@ import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.screen.AppNavHost
 import org.moontechlab.selenetv.server.RemoteControlServer
 import org.moontechlab.selenetv.service.AppDataService
-import java.net.HttpURLConnection
-import java.net.URL
+import org.moontechlab.selenetv.service.AuthHelper
 
 private const val TAG = "MainActivity"
 
@@ -130,64 +129,34 @@ class MainActivity : ComponentActivity() {
     }
     
     /**
-     * 刷新登录 cookie
+     * 刷新登录 cookie。
+     * POST /api/login 由 [AuthHelper] 接管，会手动跟随 3xx 重定向（含跨 http/https），
+     * 重定向后的真实 baseUrl 会被回写到 [AppDataService]，下次起所有请求直接打到真实地址。
      */
     private suspend fun refreshLoginCookie() {
         try {
             val serverUrl = AppDataService.getServerUrl() ?: return
             val username = AppDataService.getUsername() ?: return
             val password = AppDataService.getPassword() ?: return
-            
-            val loginUrl = "$serverUrl/api/login"
-            
+
             val result = withContext(Dispatchers.IO) {
-                val url = URL(loginUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json")
-                connection.doOutput = true
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-
-                val jsonBody = """{"username":"$username","password":"$password"}"""
-                connection.outputStream.use { os ->
-                    os.write(jsonBody.toByteArray())
-                }
-
-                val responseCode = connection.responseCode
-                val cookies = parseCookies(connection)
-                
-                Pair(responseCode, cookies)
+                AuthHelper.postLogin(serverUrl, username, password)
             }
-            
-            if (result.first == 200 && result.second.isNotEmpty()) {
+
+            if (result.responseCode == 200 && result.cookies.isNotEmpty()) {
                 AppDataService.saveUserData(
-                    serverUrl = serverUrl,
+                    serverUrl = result.baseUrl,
                     username = username,
                     password = password,
-                    cookies = result.second
+                    cookies = result.cookies,
                 )
-                Log.d(TAG, "Login cookie refreshed successfully")
+                Log.d(TAG, "Login cookie refreshed successfully (baseUrl=${result.baseUrl})")
             } else {
-                Log.w(TAG, "Failed to refresh login cookie, response code: ${result.first}")
+                Log.w(TAG, "Failed to refresh login cookie, response code: ${result.responseCode}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error refreshing login cookie: ${e.message}")
         }
-    }
-    
-    /**
-     * 解析响应中的 Cookies
-     */
-    private fun parseCookies(connection: HttpURLConnection): String {
-        val cookies = mutableListOf<String>()
-        connection.headerFields["Set-Cookie"]?.forEach { cookie ->
-            val cookiePart = cookie.split(";").firstOrNull()
-            if (cookiePart != null) {
-                cookies.add(cookiePart)
-            }
-        }
-        return cookies.joinToString("; ")
     }
     
     /**

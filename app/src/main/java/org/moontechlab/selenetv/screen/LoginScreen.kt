@@ -46,14 +46,11 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import org.json.JSONArray
-import org.json.JSONObject
 import org.moontechlab.selenetv.server.RemoteControlServer
 import org.moontechlab.selenetv.service.AppDataService
+import org.moontechlab.selenetv.service.AuthHelper
 import qrcode.QRCode
-import java.net.HttpURLConnection
 import java.net.NetworkInterface
-import java.net.URL
 import android.util.Log
 import org.moontechlab.selenetv.service.SubscriptionService
 import org.moontechlab.selenetv.ui.AnimatedSelectDialog
@@ -197,19 +194,6 @@ private fun LoginScreenContent(
         return processed
     }
 
-    // 解析 Cookies
-    fun parseCookies(connection: HttpURLConnection): String {
-        val cookies = mutableListOf<String>()
-        connection.headerFields["Set-Cookie"]?.forEach { cookie ->
-            // 只取 cookie 的 name=value 部分
-            val cookiePart = cookie.split(";").firstOrNull()
-            if (cookiePart != null) {
-                cookies.add(cookiePart)
-            }
-        }
-        return cookies.joinToString("; ")
-    }
-
     // 登录处理
     fun handleLogin() {
         if (!isFormValid()) {
@@ -221,45 +205,23 @@ private fun LoginScreenContent(
 
         coroutineScope.launch {
             try {
-                val baseUrl = processUrl(serverUrl)
-                val loginUrl = "$baseUrl/api/login"
+                val initialBase = processUrl(serverUrl)
 
                 val result = withContext(Dispatchers.IO) {
-                    val url = URL(loginUrl)
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.requestMethod = "POST"
-                    connection.setRequestProperty("Content-Type", "application/json")
-                    connection.doOutput = true
-                    connection.connectTimeout = 10000
-                    connection.readTimeout = 10000
-
-                    val jsonBody = """{"username":"${username.trim()}","password":"${password.trim()}"}"""
-                    connection.outputStream.use { os ->
-                        os.write(jsonBody.toByteArray())
-                    }
-
-                    val responseCode = connection.responseCode
-                    val cookies = parseCookies(connection)
-
-                    Triple(responseCode, cookies, baseUrl)
+                    AuthHelper.postLogin(initialBase, username.trim(), password.trim())
                 }
 
                 isLoading = false
 
-                when (result.first) {
+                when (result.responseCode) {
                     200 -> {
-                        val cookies = result.second
-                        val baseUrl = result.third
-
-                        // 保存用户数据
+                        // 保存用户数据；baseUrl 可能因 3xx 重定向被覆盖为真实地址（HTTPS 升级等）
                         AppDataService.saveUserData(
-                            serverUrl = baseUrl,
+                            serverUrl = result.baseUrl,
                             username = username.trim(),
                             password = password.trim(),
-                            cookies = cookies
+                            cookies = result.cookies,
                         )
-
-                        // 直接关闭
                         onLeave()
                     }
                     401 -> {
@@ -269,7 +231,7 @@ private fun LoginScreenContent(
                         showToast("登录失败：服务器错误")
                     }
                     else -> {
-                        showToast("登录失败：网络异常 (${result.first})")
+                        showToast("登录失败：网络异常 (${result.responseCode})")
                     }
                 }
             } catch (e: Exception) {
