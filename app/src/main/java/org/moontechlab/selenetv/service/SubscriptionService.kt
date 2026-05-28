@@ -70,4 +70,69 @@ object SubscriptionService {
 
         return ParsedSubscription(searchResources, liveSources)
     }
+
+    /**
+     * 同步阻塞：HTTP GET 订阅 URL → Base58 解码 → JSON 解析 → 可达性校验。失败抛 SubscriptionException。
+     * 必须在 Dispatchers.IO 调用。
+     */
+    fun fetchAndParse(url: String): ParsedSubscription {
+        val body = httpGet(url)
+        val decoded = try {
+            org.moontechlab.selenetv.util.Base58.decode(body)
+        } catch (e: Exception) {
+            throw SubscriptionException("订阅内容格式无效: Base58 解码失败 (${e.message})")
+        }
+        val text = String(decoded, Charsets.UTF_8)
+        return parseSubscriptionJson(text)
+    }
+
+    /**
+     * 后台刷新：使用已存订阅 URL 重新拉取并仅覆盖 sources（不动用户数据、不动订阅 URL）。
+     * 返回 true=成功，false=失败（已记录日志）。
+     */
+    suspend fun refreshAndPersist(): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val url = org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl() ?: return@withContext false
+        runCatching { fetchAndParse(url) }.fold(
+            onSuccess = { parsed ->
+                org.moontechlab.selenetv.data.local.LocalStore.saveSearchSources(parsed.searchResources)
+                org.moontechlab.selenetv.data.local.LocalStore.saveLiveSources(parsed.liveSources)
+                true
+            },
+            onFailure = {
+                Log.w(TAG, "刷新订阅失败: ${it.message}")
+                false
+            },
+        )
+    }
+
+    private fun httpGet(url: String): String {
+        val u = java.net.URL(url)
+        val conn = u.openConnection() as java.net.HttpURLConnection
+        // 自签证书：沿用项目约定，HTTPS 时信任所有 + 跳过 hostname 校验
+        if (conn is javax.net.ssl.HttpsURLConnection) {
+            conn.sslSocketFactory = trustAllSslSocketFactory()
+            conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+        }
+        conn.requestMethod = "GET"
+        conn.connectTimeout = 10000
+        conn.readTimeout = 10000
+        try {
+            val code = conn.responseCode
+            if (code != 200) throw SubscriptionException("获取订阅内容失败 ($code)")
+            return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().trim() }
+        } finally {
+            try { conn.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    private fun trustAllSslSocketFactory(): javax.net.ssl.SSLSocketFactory {
+        val tm = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+        })
+        val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+        ctx.init(null, tm, java.security.SecureRandom())
+        return ctx.socketFactory
+    }
 }
