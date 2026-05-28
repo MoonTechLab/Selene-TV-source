@@ -1,8 +1,11 @@
 package org.moontechlab.selenetv.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +21,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -29,6 +38,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -132,6 +142,8 @@ private fun LoginScreenContent(
     val usernameFocusRequester = remember { FocusRequester() }
     val passwordFocusRequester = remember { FocusRequester() }
     val loginButtonFocusRequester = remember { FocusRequester() }
+    // 「品牌点」隐秘焦点：登录按钮 down 进入；长按 OK 3 秒触发隐藏模式
+    val brandDotFocusRequester = remember { FocusRequester() }
 
     // 初始聚焦
     LaunchedEffect(Unit) {
@@ -253,7 +265,12 @@ private fun LoginScreenContent(
         LoginQrCodeSection(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
+                .fillMaxHeight(),
+            brandDotFocusRequester = brandDotFocusRequester,
+            brandDotUpFocusRequester = loginButtonFocusRequester,
+            onSecretActivate = {
+                org.moontechlab.selenetv.ui.MoonToast.show("已进入隐藏模式")
+            }
         )
 
         // 右侧表单区域
@@ -318,7 +335,9 @@ private fun LoginScreenContent(
                 enabled = !isLoading,
                 onClick = { handleLogin() },
                 modifier = Modifier.focusRequester(loginButtonFocusRequester),
-                upFocusRequester = passwordFocusRequester
+                upFocusRequester = passwordFocusRequester,
+                // 暗门：登录按钮 ← 跳到左下角的品牌点（按钮在右、点在左，方向语义匹配）
+                leftFocusRequester = brandDotFocusRequester
             )
         }
     }
@@ -407,7 +426,9 @@ private fun LoginButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    upFocusRequester: FocusRequester? = null
+    upFocusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
+    leftFocusRequester: FocusRequester? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -423,8 +444,10 @@ private fun LoginButton(
             .fillMaxWidth()
             .focusProperties {
                 if (upFocusRequester != null) up = upFocusRequester
-                // 禁用左右方向键导航
-                left = FocusRequester.Cancel
+                if (downFocusRequester != null) down = downFocusRequester
+                // 暗门：登录按钮 left → 左下角的品牌点（相对布局上确实在左边）
+                if (leftFocusRequester != null) left = leftFocusRequester
+                else left = FocusRequester.Cancel
                 right = FocusRequester.Cancel
             }
             .onFocusChanged { isFocused = it.isFocused },
@@ -475,7 +498,10 @@ private fun getAllIpAddresses(): List<String> {
  */
 @Composable
 private fun LoginQrCodeSection(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    brandDotFocusRequester: FocusRequester? = null,
+    brandDotUpFocusRequester: FocusRequester? = null,
+    onSecretActivate: (() -> Unit)? = null
 ) {
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var remoteUrl by remember { mutableStateOf("") }
@@ -550,7 +576,11 @@ private fun LoginQrCodeSection(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        VersionColophon()
+        VersionColophon(
+            dotFocusRequester = brandDotFocusRequester,
+            dotUpFocusRequester = brandDotUpFocusRequester,
+            onSecretActivate = onSecretActivate
+        )
     }
 }
 
@@ -561,7 +591,10 @@ private fun LoginQrCodeSection(
  */
 @Composable
 private fun VersionColophon(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dotFocusRequester: FocusRequester? = null,
+    dotUpFocusRequester: FocusRequester? = null,
+    onSecretActivate: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val versionName = remember {
@@ -589,12 +622,11 @@ private fun VersionColophon(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 绿色品牌点（唯一点缀色）
-            Box(
-                modifier = Modifier
-                    .size(5.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF4CAF50))
+            // 绿色品牌点（唯一点缀色，同时是隐藏模式的暗门）
+            BrandDotTrigger(
+                focusRequester = dotFocusRequester,
+                upFocusRequester = dotUpFocusRequester,
+                onActivate = onSecretActivate
             )
             Text(
                 text = "SELENE TV",
@@ -611,4 +643,118 @@ private fun VersionColophon(
             )
         }
     }
+}
+
+/**
+ * 品牌点 · 隐藏模式暗门。
+ *
+ * 焦点路径：登录按钮 down → 此处；up → 登录按钮。
+ * 视觉：仅在聚焦时缩放到 1.2x（约 6dp）作为微弱提示；按住 OK 在 3 秒内
+ * 平滑增长到 2.2x（约 11dp），到达即触发 [onActivate]、短暂闪烁到 2.8x 后回弹；
+ * 中途松手则回到聚焦态 1.2x。缩放走 graphicsLayer，不影响 Row 的实际布局。
+ *
+ * 当未传入 [focusRequester] 或 [onActivate] 时退化成纯展示用 5dp 静态圆点，
+ * 保持与历史调用点兼容。
+ */
+@Composable
+private fun BrandDotTrigger(
+    focusRequester: FocusRequester?,
+    upFocusRequester: FocusRequester?,
+    onActivate: (() -> Unit)?
+) {
+    if (focusRequester == null || onActivate == null) {
+        Box(
+            modifier = Modifier
+                .size(5.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF4CAF50))
+        )
+        return
+    }
+
+    val scope = rememberCoroutineScope()
+    var isFocused by remember { mutableStateOf(false) }
+    var keyDown by remember { mutableStateOf(false) }
+    var holdJob by remember { mutableStateOf<Job?>(null) }
+    val scale = remember { Animatable(1f) }
+
+    Box(
+        modifier = Modifier
+            .size(5.dp)
+            .focusRequester(focusRequester)
+            .focusable()
+            .focusProperties {
+                // 退出路径走相对布局：← 进来，→ 出去（同时保留 ↑ 作为冗余出口）
+                if (upFocusRequester != null) {
+                    up = upFocusRequester
+                    right = upFocusRequester
+                } else {
+                    right = FocusRequester.Cancel
+                }
+                down = FocusRequester.Cancel
+                left = FocusRequester.Cancel
+            }
+            .onFocusChanged { state ->
+                isFocused = state.isFocused
+                holdJob?.cancel()
+                holdJob = null
+                keyDown = false
+                scope.launch {
+                    scale.animateTo(if (state.isFocused) 1.2f else 1f, tween(180))
+                }
+            }
+            .onKeyEvent { event ->
+                if (event.key != Key.DirectionCenter &&
+                    event.key != Key.Enter &&
+                    event.key != Key.NumPadEnter
+                ) return@onKeyEvent false
+
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        if (!keyDown) {
+                            keyDown = true
+                            holdJob = scope.launch {
+                                try {
+                                    scale.animateTo(2.2f, tween(3000))
+                                    // 3 秒整满 → 激活
+                                    scale.animateTo(2.8f, tween(140))
+                                    onActivate()
+                                    scale.animateTo(
+                                        if (isFocused) 1.2f else 1f,
+                                        tween(280)
+                                    )
+                                } catch (_: kotlinx.coroutines.CancellationException) {
+                                    // 中途松手或失焦 → 由对应处理器收尾
+                                }
+                            }
+                        }
+                        true
+                    }
+                    KeyEventType.KeyUp -> {
+                        if (keyDown) {
+                            keyDown = false
+                            val wasHolding = holdJob?.isActive == true
+                            holdJob?.cancel()
+                            holdJob = null
+                            if (wasHolding) {
+                                scope.launch {
+                                    scale.animateTo(
+                                        if (isFocused) 1.2f else 1f,
+                                        tween(220)
+                                    )
+                                }
+                            }
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+            }
+            .clip(CircleShape)
+            .background(Color(0xFF4CAF50))
+    )
 }
