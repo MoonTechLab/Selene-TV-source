@@ -3,6 +3,7 @@ package org.moontechlab.selenetv
 import android.app.Application
 import android.util.Log
 import coil.EventListener
+import org.moontechlab.selenetv.data.local.LocalStore
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.server.RemoteControlServer
 import coil.ImageLoader
@@ -28,6 +29,7 @@ class SeleneApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         // 初始化 AppDataService
         AppDataService.init(this)
+        LocalStore.init(this)
         Log.d("SeleneApplication", "Application initialized")
         
         // 启动遥控器 Web 服务器
