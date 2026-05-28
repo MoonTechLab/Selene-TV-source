@@ -178,6 +178,7 @@ fun SettingsTab(
     var showSubscriptionUrlDialog by remember { mutableStateOf(false) }
     var showExitLocalModeDialog by remember { mutableStateOf(false) }
     var showExitLocalModeConfirmDialog by remember { mutableStateOf(false) }
+    var isRefreshingSubscription by remember { mutableStateOf(false) }
     var exitLocalModeChainToConfirm by remember { mutableStateOf(false) }
     var exitLocalModeConfirmed by remember { mutableStateOf(false) }
 
@@ -269,13 +270,17 @@ fun SettingsTab(
                             .focusRequester(focusRequester),
                     )
                     SettingRow(
-                        label = "立即刷新订阅",
+                        label = if (isRefreshingSubscription) "刷新中..." else "立即刷新订阅",
                         onClick = {
-                            coroutineScope.launch {
-                                val ok = SubscriptionService.refreshAndPersist()
-                                org.moontechlab.selenetv.ui.MoonToast.show(
-                                    if (ok) "订阅已刷新" else "订阅刷新失败"
-                                )
+                            if (!isRefreshingSubscription) {
+                                isRefreshingSubscription = true
+                                coroutineScope.launch {
+                                    val ok = SubscriptionService.refreshAndPersist()
+                                    isRefreshingSubscription = false
+                                    org.moontechlab.selenetv.ui.MoonToast.show(
+                                        if (ok) "订阅已刷新" else "订阅刷新失败"
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier.focusRequester(refreshSubscriptionFocusRequester),
@@ -704,6 +709,7 @@ fun SettingsTab(
                         if (shouldClearAll) LocalStore.clearAll()
                         LocalStore.saveSubscriptionUrl(trimmed)
                         LocalStore.saveSubscriptionSources(parsed.searchResources, parsed.liveSources)
+                        org.moontechlab.selenetv.service.LiveService.clearAllCache()
                     }
                     subscriptionUrl = trimmed
                     org.moontechlab.selenetv.ui.MoonToast.show(
@@ -765,6 +771,7 @@ fun SettingsTab(
                     withContext(Dispatchers.IO) {
                         LocalStore.clearAll()
                         AppDataService.saveIsLocalMode(false)
+                        org.moontechlab.selenetv.service.LiveService.clearAllCache()
                     }
                 }
                 onShowLoginScreen()

@@ -128,6 +128,7 @@ private fun LoginScreenContent(
     var pendingParsed by remember { mutableStateOf<SubscriptionService.ParsedSubscription?>(null) }
     var pendingUrl by remember { mutableStateOf("") }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var fetchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     LaunchedEffect(Unit) {
         serverUrl = AppDataService.getServerUrl() ?: ""
@@ -165,6 +166,8 @@ private fun LoginScreenContent(
     BackHandler {
         when {
             isLocalMode -> {
+                fetchJob?.cancel()
+                fetchJob = null
                 isLocalMode = false
                 isLoading = false
             }
@@ -299,7 +302,7 @@ private fun LoginScreenContent(
         }
 
         isLoading = true
-        coroutineScope.launch {
+        fetchJob = coroutineScope.launch {
             val parsed = try {
                 withContext(Dispatchers.IO) { SubscriptionService.fetchAndParse(url) }
             } catch (e: SubscriptionService.SubscriptionException) {
@@ -342,6 +345,9 @@ private fun LoginScreenContent(
             // 上键目标随当前表单切换：账号表单 → 登录按钮；本地模式 → 进入本地模式按钮
             brandDotUpFocusRequester = if (isLocalMode) localLoginButtonFocusRequester else loginButtonFocusRequester,
             onSecretActivate = {
+                // 切换表单前先取消任何在飞的订阅校验，避免用户取消后仍被提交到 home
+                fetchJob?.cancel()
+                fetchJob = null
                 isLocalMode = !isLocalMode
                 isLoading = false  // 重置加载态：避免切表单后看到对方的「登录中...」/「校验中...」
                 org.moontechlab.selenetv.ui.MoonToast.show(

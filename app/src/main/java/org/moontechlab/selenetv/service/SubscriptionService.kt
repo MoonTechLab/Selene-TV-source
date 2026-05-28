@@ -98,6 +98,7 @@ object SubscriptionService {
                     parsed.searchResources,
                     parsed.liveSources,
                 )
+                LiveService.clearAllCache()
                 true
             },
             onFailure = {

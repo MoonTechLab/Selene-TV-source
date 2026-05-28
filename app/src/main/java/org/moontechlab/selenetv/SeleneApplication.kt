@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.service.SubscriptionService
 import org.moontechlab.selenetv.ui.MoonToast
 
@@ -47,7 +48,7 @@ class SeleneApplication : Application(), ImageLoaderFactory {
         if (AppDataService.isLocalModeSync()) {
             applicationScope.launch {
                 val ok = SubscriptionService.refreshAndPersist()
-                if (!ok) MoonToast.show("订阅刷新失败")
+                if (!ok) withContext(Dispatchers.Main) { MoonToast.show("订阅刷新失败") }
             }
         }
     }
