@@ -19,12 +19,20 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import kotlin.concurrent.thread
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.moontechlab.selenetv.service.SubscriptionService
+import org.moontechlab.selenetv.ui.MoonToast
 
 /**
  * 自定义 Application 类，用于配置 Coil 图片加载
  */
 class SeleneApplication : Application(), ImageLoaderFactory {
-    
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         // 初始化 AppDataService
@@ -34,6 +42,14 @@ class SeleneApplication : Application(), ImageLoaderFactory {
         
         // 启动遥控器 Web 服务器
         startRemoteControlServer()
+
+        // 本地模式启动后台刷新订阅：不阻塞 onCreate，失败仅 toast
+        if (AppDataService.isLocalModeSync()) {
+            applicationScope.launch {
+                val ok = SubscriptionService.refreshAndPersist()
+                if (!ok) MoonToast.show("订阅刷新失败")
+            }
+        }
     }
     
     private fun startRemoteControlServer() {
