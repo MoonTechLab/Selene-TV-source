@@ -107,6 +107,8 @@ object LocalStore {
         val map = favorites.associateBy { "${it.source}+${it.id}" }
         prefs.edit().putString(KEY_FAVORITES, json.encodeToString(map)).apply()
         favoritesCache = favorites
+            .filter { it.origin != "live" }
+            .sortedByDescending { it.saveTime }
     }
 
     // ==================== 搜索历史 ====================
