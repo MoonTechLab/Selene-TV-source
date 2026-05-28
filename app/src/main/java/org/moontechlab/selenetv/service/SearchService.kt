@@ -115,7 +115,7 @@ object SearchService {
     private suspend fun localSearch(query: String) = coroutineScope {
         try {
             // 获取搜索资源列表
-            val allResources = ApiService.getSearchResources()
+            val allResources = org.moontechlab.selenetv.data.Repositories.sources().getSearchResources()
             val resources = allResources.filter { !it.disabled }
 
             if (resources.isEmpty()) {

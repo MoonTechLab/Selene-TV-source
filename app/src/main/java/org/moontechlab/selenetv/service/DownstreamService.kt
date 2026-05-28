@@ -329,7 +329,7 @@ object DownstreamService {
     suspend fun getDetailBySourceId(source: String, id: String): SearchResult? =
         withContext(Dispatchers.IO) {
             try {
-                val resource = ApiService.getSearchResources()
+                val resource = org.moontechlab.selenetv.data.Repositories.sources().getSearchResources()
                     .firstOrNull { it.key == source }
                 if (resource == null) {
                     Log.w(TAG, "getDetailBySourceId: 未找到源 key=$source")

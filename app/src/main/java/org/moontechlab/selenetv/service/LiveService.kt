@@ -52,7 +52,7 @@ object LiveService {
         }
 
         return try {
-            val sources = ApiService.getLiveSources()
+            val sources = org.moontechlab.selenetv.data.Repositories.sources().getLiveSources()
             sourcesCache = CacheItem(sources)
             sources
         } catch (e: Exception) {
