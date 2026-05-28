@@ -40,7 +40,11 @@ internal object AuthHelper {
     fun postLogin(initialBaseUrl: String, username: String, password: String): LoginResult {
         var loginUrl = initialBaseUrl.trimEnd('/') + LOGIN_PATH
         var baseUrl = initialBaseUrl.trimEnd('/')
-        val jsonBody = """{"username":"$username","password":"$password"}"""
+        // 用 JSONObject 序列化，避免用户名/密码里的 " \ 等特殊字符破坏 JSON 结构
+        val jsonBody = org.json.JSONObject()
+            .put("username", username)
+            .put("password", password)
+            .toString()
         val accumulatedCookies = LinkedHashMap<String, String>()
         var lastCode = 0
         var hops = 0
@@ -115,9 +119,12 @@ internal object AuthHelper {
      * 把 Location header 解析为新的 (loginUrl, baseUrl) 对。
      * - 相对地址按 [currentLoginUrl] 解析。
      * - 仅允许 http/https。
+     * - **同主机校验**：拒绝跨 host 重定向，防止恶意服务端把凭据 POST 到攻击者的 host
+     *   并把 baseUrl 永久篡改到攻击者地址。允许端口变化（兼容 80↔443 的 HTTP/HTTPS 升级）。
+     * - **拒绝 HTTPS→HTTP 降级**：上来就是 HTTPS 的请求被引向明文 HTTP，凭据会以明文重发。
      * - 若 location 仍指向 /api/login（可能带尾斜杠），剥离该后缀作为新 baseUrl；
      *   否则保守用 scheme://authority 作为 baseUrl，loginUrl 用 location 全路径。
-     * - location 为 null/空 / 非 http(s) / 不可解析 → 返回 null。
+     * - location 为 null/空 / 非 http(s) / 跨 host / HTTPS→HTTP 降级 / 不可解析 → 返回 null。
      */
     internal fun resolveLoginRedirect(currentLoginUrl: String, locationHeader: String?): RedirectTarget? {
         if (locationHeader.isNullOrBlank()) return null
@@ -125,6 +132,12 @@ internal object AuthHelper {
         val resolved = try { URL(current, locationHeader) } catch (_: Exception) { return null }
         val scheme = resolved.protocol?.lowercase()
         if (scheme != "http" && scheme != "https") return null
+
+        // 拒绝跨 host：用 host（不含端口）做比较，允许 80↔443 隐式端口变更
+        if (!resolved.host.equals(current.host, ignoreCase = true)) return null
+
+        // 拒绝 HTTPS→HTTP 降级（攻击者注入 301 到明文 HTTP 即可裸眼读取凭据）
+        if (current.protocol.equals("https", ignoreCase = true) && scheme == "http") return null
 
         val auth = "${resolved.protocol}://${resolved.authority}"
         val rawPath = resolved.path.orEmpty()
