@@ -64,6 +64,7 @@ class LocalUserDataRepositoryHelpersTest {
         assertEquals("c.jpg", item.cover)
         assertEquals(12, item.totalEpisodes)
         assertEquals(999L, item.saveTime)
+        assertEquals("", item.origin)
     }
 
     private fun fav(source: String, id: String, saveTime: Long = 0L, title: String = "t") =
