@@ -29,17 +29,23 @@ object AppDataService {
     private const val KEY_PLAYER_TYPE = "player_type"
     private const val KEY_DECODE_MODE = "decode_mode"
     private const val KEY_SEARCH_ORIGIN = "search_origin"
+    private const val KEY_IS_LOCAL_MODE = "is_local_mode"
 
     private lateinit var prefs: SharedPreferences
-    
+
     // 当前会话的 token（每次启动重新生成）
     private var sessionToken: String = ""
+
+    // 本地模式缓存（同步读，零阻塞）
+    @Volatile
+    private var isLocalModeCache: Boolean = false
 
     /**
      * 初始化服务，需要在 Application 中调用
      */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
         // 每次启动生成新的 session token
         generateSessionToken()
     }
@@ -178,6 +184,22 @@ object AppDataService {
         !serverUrl.isNullOrBlank() && !username.isNullOrBlank() && !password.isNullOrBlank()
     }
 
+    // ==================== 本地模式 ====================
+
+    /**
+     * 保存本地模式开关；同步更新内存缓存。
+     */
+    suspend fun saveIsLocalMode(isLocalMode: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit().putBoolean(KEY_IS_LOCAL_MODE, isLocalMode).apply()
+        isLocalModeCache = isLocalMode
+    }
+
+    suspend fun isLocalMode(): Boolean = withContext(Dispatchers.IO) {
+        prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
+    }
+
+    /** 同步读，零阻塞；`init()` 时预热缓存。 */
+    fun isLocalModeSync(): Boolean = isLocalModeCache
 
     // ==================== 豆瓣数据源设置 ====================
 
@@ -438,6 +460,8 @@ object AppDataService {
     suspend fun getSearchOriginDisplayName(): String = withContext(Dispatchers.IO) {
         SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key).displayName
     }
-    fun getSearchOriginSync(): SearchOrigin =
-        SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key)
+    fun getSearchOriginSync(): SearchOrigin {
+        if (isLocalModeCache) return SearchOrigin.TV_DIRECT
+        return SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key)
+    }
 }
