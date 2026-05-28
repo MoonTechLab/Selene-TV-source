@@ -561,7 +561,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 showToast("已删除播放记录")
             } catch (e: Exception) {
                 state = state.copy(playRecords = state.playRecords + (key to backup))
-                showToast("删除失败：${e.message ?: "未知错误"}")
+                showToast("删除播放记录失败：${e.message ?: "未知错误"}")
             }
         }
     }
@@ -663,7 +663,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             } catch (e: Exception) {
                 // 回滚乐观记录会让承接焦点的「继续」按钮卸载；改派回主按钮槽位（此时复原为「播放/迁移」）
                 state = state.copy(playRecords = state.playRecords - targetKey)
-                showToast("迁移失败：${e.message ?: "未知错误"}")
+                showToast("迁移播放记录失败：${e.message ?: "未知错误"}")
                 repeat(8) {
                     kotlinx.coroutines.delay(30)
                     try { primaryFocus.requestFocus(); return@launch } catch (_: Exception) {}
@@ -688,7 +688,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 showToast("已删除原记录")
             } catch (e: Exception) {
                 state = state.copy(playRecords = state.playRecords + (key to backup))
-                showToast("删除原记录失败：${e.message ?: "未知错误"}")
+                showToast("删除原播放记录失败：${e.message ?: "未知错误"}")
             }
         }
     }

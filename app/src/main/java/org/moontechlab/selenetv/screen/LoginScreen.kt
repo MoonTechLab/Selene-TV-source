@@ -266,15 +266,15 @@ private fun LoginScreenContent(
                         showToast("用户名或密码错误")
                     }
                     500 -> {
-                        showToast("服务器错误")
+                        showToast("登录失败：服务器错误")
                     }
                     else -> {
-                        showToast("网络异常 (${result.first})")
+                        showToast("登录失败：网络异常 (${result.first})")
                     }
                 }
             } catch (e: Exception) {
                 isLoading = false
-                showToast("网络异常: ${e.message ?: "未知错误"}")
+                showToast("登录失败：网络异常: ${e.message ?: "未知错误"}")
             }
         }
     }
@@ -314,7 +314,7 @@ private fun LoginScreenContent(
                 throw e
             } catch (e: Exception) {
                 isLoading = false
-                showToast("网络异常: ${e.message ?: "未知错误"}")
+                showToast("订阅校验失败：网络异常: ${e.message ?: "未知错误"}")
                 return@launch
             }
             isLoading = false

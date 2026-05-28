@@ -700,7 +700,7 @@ fun SettingsTab(
                         org.moontechlab.selenetv.ui.MoonToast.show(e.message ?: "订阅校验失败")
                         return@launch
                     } catch (e: Exception) {
-                        org.moontechlab.selenetv.ui.MoonToast.show("网络异常: ${e.message}")
+                        org.moontechlab.selenetv.ui.MoonToast.show("订阅校验失败：网络异常: ${e.message}")
                         return@launch
                     }
                     val existing = withContext(Dispatchers.IO) { LocalStore.getSubscriptionUrl() }
