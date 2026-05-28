@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.VideoInfo
 import org.moontechlab.selenetv.model.toVideoInfo
+import org.moontechlab.selenetv.data.Repositories
 import org.moontechlab.selenetv.service.ApiResponse
 import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.AppDataService
@@ -84,7 +85,7 @@ fun HomeTab(
 
     // 登录态：未登录时隐藏「继续观看」「我的收藏」并跳过其加载。
     // 随 homeRefreshKey 重新读取（登录后从其他页返回会刷新）。
-    val isLoggedIn = remember(homeRefreshKey) { AppDataService.isLoggedInSync() }
+    val isLoggedIn = remember(homeRefreshKey) { AppDataService.isLoggedInSync() || AppDataService.isLocalModeSync() }
 
     // 用于匹配的播放记录 Map（收藏夹需要）
     var playRecordsMap by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.PlayRecord>>(emptyMap()) }
@@ -112,7 +113,7 @@ fun HomeTab(
         playRecords = playRecords.filterNot { it.source == video.source && it.id == video.id }
         coroutineScope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(video.source, video.id) }
+                withContext(Dispatchers.IO) { Repositories.userData().deletePlayRecord(video.source, video.id) }
             } catch (e: Exception) {
                 playRecords = prev
                 android.util.Log.e("HomeTab", "删除播放记录失败: ${e.message}")
@@ -129,7 +130,7 @@ fun HomeTab(
         coroutineScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    ApiService.addFavorite(
+                    Repositories.userData().addFavorite(
                         video.source,
                         video.id,
                         mapOf(
@@ -155,7 +156,7 @@ fun HomeTab(
         favorites = favorites.filterNot { it.source == video.source && it.id == video.id }
         coroutineScope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiService.unfavorite(video.source, video.id) }
+                withContext(Dispatchers.IO) { Repositories.userData().unfavorite(video.source, video.id) }
             } catch (e: Exception) {
                 favorites = prev
                 android.util.Log.e("HomeTab", "取消收藏失败: ${e.message}")
@@ -174,7 +175,7 @@ fun HomeTab(
     // 加载播放历史 + 收藏夹（收藏夹依赖播放历史的 index）
     fun loadPlayRecordsAndFavorites() {
         // 未登录：不请求（会抛「未登录」异常），直接清空并置为非加载态，区块由 isLoggedIn 隐藏
-        if (!AppDataService.isLoggedInSync()) {
+        if (!(AppDataService.isLoggedInSync() || AppDataService.isLocalModeSync())) {
             playRecords = emptyList()
             favorites = emptyList()
             isLoadingPlayRecords = false
@@ -193,7 +194,7 @@ fun HomeTab(
 
             try {
                 val records = withContext(Dispatchers.IO) {
-                    ApiService.getPlayRecords()
+                    Repositories.userData().getPlayRecords()
                 }
                 playRecordsMap = records
                 val newRecords = records.values
@@ -211,7 +212,7 @@ fun HomeTab(
 
             try {
                 val favList = withContext(Dispatchers.IO) {
-                    ApiService.getFavorites()
+                    Repositories.userData().getFavorites()
                 }
                 val newFavs = favList.map { fav ->
                     val key = "${fav.source}+${fav.id}"
