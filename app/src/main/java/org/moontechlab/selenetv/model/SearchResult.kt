@@ -8,18 +8,22 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SearchResult(
-    val id: String,
-    val title: String,
-    val poster: String,
-    val episodes: List<String>,
-    val episodesTitles: List<String>,
-    val source: String,
-    val sourceName: String,
+    val id: String = "",
+    val title: String = "",
+    val poster: String = "",
+    val episodes: List<String> = emptyList(),
+    @SerialName("episodes_titles")
+    val episodesTitles: List<String> = emptyList(),
+    val source: String = "",
+    @SerialName("source_name")
+    val sourceName: String = "",
     @SerialName("class")
     val classType: String? = null,
-    val year: String,
+    val year: String = "",
     val desc: String? = null,
+    @SerialName("type_name")
     val typeName: String? = null,
+    @SerialName("douban_id")
     val doubanId: Long? = null
 )
 

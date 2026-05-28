@@ -28,6 +28,7 @@ object AppDataService {
     private const val KEY_SESSION_TOKEN = "session_token"
     private const val KEY_PLAYER_TYPE = "player_type"
     private const val KEY_DECODE_MODE = "decode_mode"
+    private const val KEY_SEARCH_ORIGIN = "search_origin"
 
     private lateinit var prefs: SharedPreferences
     
@@ -240,6 +241,18 @@ object AppDataService {
         }
     }
 
+    /** 搜索发起方 */
+    enum class SearchOrigin(val key: String, val displayName: String) {
+        TV_DIRECT("tv_direct", "TV 直连源站"),
+        SERVER_AGGREGATED("server", "服务端聚合搜索");
+
+        companion object {
+            fun fromKey(key: String): SearchOrigin = entries.find { it.key == key } ?: TV_DIRECT
+            fun fromDisplayName(displayName: String): SearchOrigin =
+                entries.find { it.displayName == displayName } ?: TV_DIRECT
+        }
+    }
+
     /**
      * 保存豆瓣数据源设置（通过显示名称）
      */
@@ -417,4 +430,14 @@ object AppDataService {
     }
     fun getDecodeModeSync(): DecodeMode =
         DecodeMode.fromKey(prefs.getString(KEY_DECODE_MODE, DecodeMode.HARDWARE.key) ?: DecodeMode.HARDWARE.key)
+
+    // ---- 搜索发起方 ----
+    suspend fun saveSearchOrigin(displayName: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_SEARCH_ORIGIN, SearchOrigin.fromDisplayName(displayName).key).apply()
+    }
+    suspend fun getSearchOriginDisplayName(): String = withContext(Dispatchers.IO) {
+        SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key).displayName
+    }
+    fun getSearchOriginSync(): SearchOrigin =
+        SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key)
 }

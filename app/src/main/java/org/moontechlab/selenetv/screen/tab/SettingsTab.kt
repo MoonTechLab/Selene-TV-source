@@ -122,6 +122,7 @@ fun SettingsTab(
     var m3u8ProxyUrl by remember { mutableStateOf("") }
     var playerType by remember { mutableStateOf("") }
     var decodeMode by remember { mutableStateOf("") }
+    var searchOrigin by remember { mutableStateOf("") }
     val mpvSupported = android.os.Build.VERSION.SDK_INT >= org.moontechlab.selenetv.screen.player.MPV_MIN_SDK
 
     // IP 选择相关状态
@@ -135,6 +136,7 @@ fun SettingsTab(
     var showDoubanImageSourceDialog by remember { mutableStateOf(false) }
     var showPlayerTypeDialog by remember { mutableStateOf(false) }
     var showDecodeModeDialog by remember { mutableStateOf(false) }
+    var showSearchOriginDialog by remember { mutableStateOf(false) }
 
     // 退出登录两步弹框（均由「登录实例」项触发）：
     // A 登录实例弹框（含单个退出登录按钮）→ B 二次确认弹框（取消 / 确认）
@@ -151,6 +153,7 @@ fun SettingsTab(
     val doubanDataSourceFocusRequester = remember { FocusRequester() }
     val playerTypeFocusRequester = remember { FocusRequester() }
     val decodeModeFocusRequester = remember { FocusRequester() }
+    val searchOriginFocusRequester = remember { FocusRequester() }
     val doubanImageSourceFocusRequester = remember { FocusRequester() }
     val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
@@ -183,6 +186,7 @@ fun SettingsTab(
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
         playerType = AppDataService.getPlayerTypeDisplayName()
         decodeMode = AppDataService.getDecodeModeDisplayName()
+        searchOrigin = AppDataService.getSearchOriginDisplayName()
         // 加载可用 IP 列表（网络接口枚举可能阻塞，放到 IO 线程）
         val ips = withContext(Dispatchers.IO) { getAllIpAddresses() }
         availableIps = ips
@@ -298,6 +302,18 @@ fun SettingsTab(
                     showDivider = false,
                     onClick = { showM3u8ProxyDialog = true },
                     modifier = Modifier.focusRequester(m3u8ProxyFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // —— 搜索 ——
+                SectionLabel("搜索")
+                SettingRow(
+                    label = "搜索发起方",
+                    value = searchOrigin.ifEmpty { AppDataService.SearchOrigin.TV_DIRECT.displayName },
+                    showDivider = false,
+                    onClick = { showSearchOriginDialog = true },
+                    modifier = Modifier.focusRequester(searchOriginFocusRequester)
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -439,6 +455,27 @@ fun SettingsTab(
                 coroutineScope.launch {
                     AppDataService.saveDecodeMode(displayName)
                     decodeMode = displayName
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 搜索发起方选择弹框
+    AnimatedSelectDialog(
+        visible = showSearchOriginDialog,
+        onDismiss = { showSearchOriginDialog = false },
+        onClosed = { searchOriginFocusRequester.requestFocus() }
+    ) { onClose ->
+        SourceSelectDialogContent(
+            title = "选择搜索发起方",
+            options = AppDataService.SearchOrigin.entries.map { it.displayName },
+            currentValue = searchOrigin,
+            onSelected = { displayName ->
+                coroutineScope.launch {
+                    AppDataService.saveSearchOrigin(displayName)
+                    searchOrigin = displayName
                 }
                 onClose()
             },
