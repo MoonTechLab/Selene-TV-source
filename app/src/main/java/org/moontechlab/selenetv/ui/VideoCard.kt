@@ -365,13 +365,25 @@ fun VideoCard(
                     }
                 }
 
-                // 集数徽章
-                if ((from == VideoCardSource.PLAYRECORD || 
-                     from == VideoCardSource.FAVORITE || 
-                     from == VideoCardSource.SEARCH ||
-                     from == VideoCardSource.SOURCE ||
-                     from == VideoCardSource.DOUBAN) &&
-                    videoInfo.totalEpisodes > 1) {
+                // 集数 / 单集进度徽章：多集显示 x/y，单集源卡片有播放记录时显示百分比
+                val badgeEligible = from == VideoCardSource.PLAYRECORD ||
+                    from == VideoCardSource.FAVORITE ||
+                    from == VideoCardSource.SEARCH ||
+                    from == VideoCardSource.SOURCE ||
+                    from == VideoCardSource.DOUBAN
+                val hasProgress = videoInfo.playTime > 0L && videoInfo.totalTime > 0L
+                val badgeText: String? = when {
+                    videoInfo.totalEpisodes > 1 ->
+                        if (videoInfo.index == 0) "${videoInfo.totalEpisodes}"
+                        else "${videoInfo.index}/${videoInfo.totalEpisodes}"
+                    from == VideoCardSource.SOURCE && hasProgress -> {
+                        val pct = (videoInfo.playTime.toFloat() / videoInfo.totalTime.toFloat() * 100f)
+                            .toInt().coerceIn(1, 100)
+                        "$pct%"
+                    }
+                    else -> null
+                }
+                if (badgeEligible && badgeText != null) {
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
@@ -381,7 +393,7 @@ fun VideoCard(
                             .align(Alignment.TopEnd)
                     ) {
                         Text(
-                            text = if (videoInfo.index == 0) "${videoInfo.totalEpisodes}" else "${videoInfo.index}/${videoInfo.totalEpisodes}",
+                            text = badgeText,
                             color = Color.White,
                             fontSize = style.episodeFontSize.sp,
                             fontWeight = FontWeight.Bold
