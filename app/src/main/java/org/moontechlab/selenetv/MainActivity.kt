@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
      * 如果已登录，自动刷新 cookie
      */
     private fun refreshLoginCookieIfNeeded() {
+        if (AppDataService.isLocalModeSync()) return  // 本地模式与服务端账号互斥
         activityScope.launch {
             if (AppDataService.isLoggedIn() && AppDataService.hasAutoLoginData()) {
                 Log.d(TAG, "Auto refreshing login cookie...")

@@ -25,7 +25,7 @@ fun AppNavHost() {
 
     // 未登录时直接以登录页作为启动首屏（强制登录），已登录则进首页
     val startDestination = remember {
-        if (AppDataService.isLoggedInSync()) HomeRoute else LoginRoute
+        if (AppDataService.isLoggedInSync() || AppDataService.isLocalModeSync()) HomeRoute else LoginRoute
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
