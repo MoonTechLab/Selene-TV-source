@@ -54,6 +54,11 @@ class MpvPlayerController(
     override var error by mutableStateOf<String?>(null); private set
     override var hasStarted by mutableStateOf(false); private set
     override var onEnded: () -> Unit = {}
+    override var speed: Float = 1f
+        set(value) {
+            field = value
+            if (!released) mpv.setPropertyString("speed", value.toString())
+        }
 
     init {
         mpv.setOptionString("vo", "gpu")

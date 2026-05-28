@@ -19,6 +19,8 @@ interface VideoPlayer {
     val error: String?
     /** 播放自然结束回调，宿主用于自动下一集。 */
     var onEnded: () -> Unit
+    /** 播放倍速（1f=原速）。直播实现可忽略。 */
+    var speed: Float
 
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true)
     fun seekTo(ms: Long)

@@ -125,6 +125,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var speedTesting by remember { mutableStateOf(false) }
     var speedResults by remember { mutableStateOf<Map<String, org.moontechlab.selenetv.model.SourceSpeed>>(emptyMap()) }
     var speedTestJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // 播放倍速 + 唤出弹窗状态。speed 变化 → 推到 controller（ExoPlayer/MPV 各自原生 API）。
+    var playbackSpeed by remember { androidx.compose.runtime.mutableFloatStateOf(1f) }
+    var speedPopupOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(playbackSpeed) { controller.speed = playbackSpeed }
 
     // 播放状态全部来自播放器后端（VideoPlayer）
     val isPlaying = controller.isPlaying
@@ -235,6 +239,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     val scrubberFocus = remember { FocusRequester() }
     val panelTabFocus = remember { FocusRequester() }
+    val speedPillFocus = remember { FocusRequester() }
 
     // 首帧载入起播集（带进入时的续看位置）
     LaunchedEffect(Unit) {
@@ -297,11 +302,13 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         onDispose { keepScreenOnView.keepScreenOn = false }
     }
 
-    // OSD 自动隐藏：播放中、面板未开、静止满 4s 即隐去
-    LaunchedEffect(controlsVisible, isPlaying, panelOpen, interactionTick) {
-        if (controlsVisible && isPlaying && !panelOpen) {
+    // OSD 自动隐藏：播放中、面板未开、倍速弹窗未开、静止满 4s 即隐去
+    // 隐藏时把焦点收回进度条——避免焦点遗留在 pill 等隐藏元素上，下次按键时唤起路径不可预测
+    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, interactionTick) {
+        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen) {
             kotlinx.coroutines.delay(AUTO_HIDE_MS)
             controlsVisible = false
+            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -352,9 +359,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             backExitArmed = false
         }
     }
-    BackHandler(enabled = panelOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen && controlsVisible) { controlsVisible = false }
-    BackHandler(enabled = !panelOpen && !controlsVisible) {
+    // 倍速弹窗自有 dismissOnBackPress（独立 Popup window），这里全线让位
+    BackHandler(enabled = panelOpen && !speedPopupOpen) { panelOpen = false }
+    BackHandler(enabled = !panelOpen && controlsVisible && !speedPopupOpen) { controlsVisible = false }
+    BackHandler(enabled = !panelOpen && !controlsVisible && !speedPopupOpen) {
         if (backExitArmed) {
             saveProgress(force = true)
             onExit()
@@ -492,14 +500,40 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                     .padding(start = 56.dp, end = 56.dp, top = 80.dp, bottom = 2.dp + 8.dp * (1f - panelReveal.value)),
             ) {
                 Column {
-                    Text(
-                        text = launch.title + (if (epCount > 1) "  ·  第 ${currentEpisode + 1} 集" else ""),
-                        color = Color.White,
-                        fontSize = 30.sp,
-                        fontWeight = FontWeight.W700,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    // Alignment.Bottom：中文标题几乎无下伸部，字框底边 ≈ 基线。
+                    // pill 底边对齐字框底边 → 视觉上贴在中文字符的下缘，且 pill 整体下沉。
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = launch.title + (if (epCount > 1) "  ·  第 ${currentEpisode + 1} 集" else ""),
+                            color = Color.White,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.W700,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Box {
+                            SpeedPill(
+                                currentSpeed = playbackSpeed,
+                                onClick = { speedPopupOpen = true; wake() },
+                                focusRequester = speedPillFocus,
+                                scrubberFocus = scrubberFocus,
+                            )
+                            // SpeedPopup 内部用 MutableTransitionState 跟踪进出态，
+                            // 退场动画期间自行续命挂载——不再用外层 if 直接拆装
+                            SpeedPopup(
+                                open = speedPopupOpen,
+                                currentSpeed = playbackSpeed,
+                                onSelect = {
+                                    playbackSpeed = it
+                                    speedPopupOpen = false
+                                    wake()
+                                },
+                                onDismiss = { speedPopupOpen = false },
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(20.dp))
                     PlayerScrubber(
                         positionMs = positionMs,
@@ -514,6 +548,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         onFocused = { if (!routeContentUpToTab) panelOpen = false },
                         suppressActive = routeContentUpToTab,
                         focusRequester = scrubberFocus,
+                        upTarget = speedPillFocus,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -699,6 +734,7 @@ private fun PlayerScrubber(
     onOpenPanel: () -> Unit,
     onFocused: () -> Unit,
     focusRequester: FocusRequester,
+    upTarget: FocusRequester = FocusRequester.Cancel,
     modifier: Modifier = Modifier,
     suppressActive: Boolean = false,
 ) {
@@ -716,7 +752,7 @@ private fun PlayerScrubber(
             .height(28.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
-            .focusProperties { up = FocusRequester.Cancel }
+            .focusProperties { up = upTarget }
             .onKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // 返回键一律交给 BackHandler 处理：不在此唤醒控制条，否则会与「隐藏/退出」逻辑打架

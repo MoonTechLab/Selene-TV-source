@@ -64,6 +64,11 @@ class PlayerController(
     override var error by mutableStateOf<String?>(null); private set
     override var hasStarted by mutableStateOf(false); private set
     override var onEnded: () -> Unit = {}
+    override var speed: Float = 1f
+        set(value) {
+            field = value
+            exo.setPlaybackSpeed(value)
+        }
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
