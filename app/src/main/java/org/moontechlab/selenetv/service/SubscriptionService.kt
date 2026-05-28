@@ -94,19 +94,29 @@ object SubscriptionService {
         val url = org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl() ?: return@withContext false
         runCatching { fetchAndParse(url) }.fold(
             onSuccess = { parsed ->
-                org.moontechlab.selenetv.data.local.LocalStore.saveSearchSources(parsed.searchResources)
-                org.moontechlab.selenetv.data.local.LocalStore.saveLiveSources(parsed.liveSources)
+                org.moontechlab.selenetv.data.local.LocalStore.saveSubscriptionSources(
+                    parsed.searchResources,
+                    parsed.liveSources,
+                )
                 true
             },
             onFailure = {
-                Log.w(TAG, "刷新订阅失败: ${it.message}")
+                Log.w(TAG, "刷新订阅失败: ${it::class.simpleName}: ${it.message}")
                 false
             },
         )
     }
 
     private fun httpGet(url: String): String {
-        val u = java.net.URL(url)
+        val u = try {
+            java.net.URL(url)
+        } catch (e: java.net.MalformedURLException) {
+            throw SubscriptionException("订阅链接格式无效: ${e.message}")
+        }
+        val scheme = u.protocol?.lowercase()
+        if (scheme != "http" && scheme != "https") {
+            throw SubscriptionException("订阅链接协议不支持（仅 http/https）")
+        }
         val conn = u.openConnection() as java.net.HttpURLConnection
         // 自签证书：沿用项目约定，HTTPS 时信任所有 + 跳过 hostname 校验
         if (conn is javax.net.ssl.HttpsURLConnection) {

@@ -75,6 +75,16 @@ object LocalStore {
         prefs.edit().putString(KEY_LIVE_SOURCES, json.encodeToString(sources)).apply()
     }
 
+    /**
+     * 原子写入两类源：合并 search + live 到单次 edit().apply()，避免 SIGKILL 留下部分更新。
+     */
+    fun saveSubscriptionSources(search: List<SearchResource>, live: List<LiveSource>) {
+        prefs.edit()
+            .putString(KEY_SEARCH_SOURCES, json.encodeToString(search))
+            .putString(KEY_LIVE_SOURCES, json.encodeToString(live))
+            .apply()
+    }
+
     // ==================== 播放记录 ====================
     // 序列化形态：Map<key, PlayRecord>，key = "${source}+${id}"。
 
