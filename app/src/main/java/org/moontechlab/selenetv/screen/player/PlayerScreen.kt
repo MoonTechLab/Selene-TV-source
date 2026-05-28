@@ -200,7 +200,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         sourceRecord = if (src != null) {
             try {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    org.moontechlab.selenetv.service.ApiService.getPlayRecords()["${src.source}+${src.id}"]
+                    org.moontechlab.selenetv.data.Repositories.userData().getPlayRecords()["${src.source}+${src.id}"]
                 }
             } catch (_: Exception) { null }
         } else null
@@ -593,7 +593,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                                 scope.launch {
                                     try {
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            org.moontechlab.selenetv.service.ApiService.deletePlayRecord(old.source, old.id)
+                                            org.moontechlab.selenetv.data.Repositories.userData().deletePlayRecord(old.source, old.id)
                                         }
                                     } catch (_: Exception) {}
                                 }

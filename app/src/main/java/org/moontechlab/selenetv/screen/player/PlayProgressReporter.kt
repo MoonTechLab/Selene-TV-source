@@ -4,8 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.moontechlab.selenetv.data.Repositories
 import org.moontechlab.selenetv.model.SearchResult
-import org.moontechlab.selenetv.service.ApiService
 
 /**
  * 播放记录上报：内置节流（见 [PlayProgress.shouldSave]）。
@@ -32,7 +32,7 @@ class PlayProgressReporter {
         val record = PlayProgress.buildRecord(source, title, episodeIndex, positionMs, durationMs, now)
         scope.launch {
             try {
-                ApiService.savePlayRecord(record)
+                Repositories.userData().savePlayRecord(record)
             } catch (_: Exception) {
                 // 进度保存失败不打断播放
             }
