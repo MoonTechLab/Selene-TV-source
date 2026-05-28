@@ -164,7 +164,10 @@ private fun LoginScreenContent(
 
     BackHandler {
         when {
-            isLocalMode -> { isLocalMode = false }
+            isLocalMode -> {
+                isLocalMode = false
+                isLoading = false
+            }
             isGate -> activity?.finish()
             else -> onLeave()
         }
@@ -336,9 +339,11 @@ private fun LoginScreenContent(
                 .weight(1f)
                 .fillMaxHeight(),
             brandDotFocusRequester = brandDotFocusRequester,
-            brandDotUpFocusRequester = loginButtonFocusRequester,
+            // 上键目标随当前表单切换：账号表单 → 登录按钮；本地模式 → 进入本地模式按钮
+            brandDotUpFocusRequester = if (isLocalMode) localLoginButtonFocusRequester else loginButtonFocusRequester,
             onSecretActivate = {
                 isLocalMode = !isLocalMode
+                isLoading = false  // 重置加载态：避免切表单后看到对方的「登录中...」/「校验中...」
                 org.moontechlab.selenetv.ui.MoonToast.show(
                     if (isLocalMode) "已进入本地模式" else "已切回账号登录"
                 )
@@ -447,7 +452,13 @@ private fun LoginScreenContent(
 
     AnimatedSelectDialog(
         visible = showClearConfirmDialog,
-        onDismiss = { showClearConfirmDialog = false },
+        onDismiss = {
+            // 与 ConfirmDialogContent 的「取消」语义一致：保留本地数据，仍保存新订阅（clearAll=false）
+            val p = pendingParsed
+            val u = pendingUrl
+            showClearConfirmDialog = false
+            if (p != null) commitLocalMode(p, u, clearAll = false)
+        },
     ) { onClose ->
         ConfirmDialogContent(
             title = "已存在不同的订阅",
