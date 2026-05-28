@@ -1,8 +1,11 @@
 package org.moontechlab.selenetv.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * 直播源数据模型
  */
+@Serializable
 data class LiveSource(
     val key: String,
     val name: String,
