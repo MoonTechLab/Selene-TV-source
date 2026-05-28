@@ -57,8 +57,8 @@ import org.moontechlab.selenetv.screen.detail.SourceFilter
 import org.moontechlab.selenetv.screen.detail.sourceKey
 import org.moontechlab.selenetv.screen.player.PlayerLaunch
 import org.moontechlab.selenetv.screen.player.PlayerScreen
+import org.moontechlab.selenetv.data.Repositories
 import org.moontechlab.selenetv.service.ApiResponse
-import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.BangumiService
 import org.moontechlab.selenetv.service.ContentFilterService
@@ -305,7 +305,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     // 拉播放记录
     LaunchedEffect(entry) {
         try {
-            val records = withContext(Dispatchers.IO) { ApiService.getPlayRecords() }
+            val records = withContext(Dispatchers.IO) { Repositories.userData().getPlayRecords() }
             state = state.copy(playRecords = records)
         } catch (e: Exception) { android.util.Log.w("DetailScreen", "播放记录加载失败", e) }
     }
@@ -313,7 +313,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
     // 拉收藏列表
     LaunchedEffect(entry) {
         try {
-            val favs = withContext(Dispatchers.IO) { ApiService.getFavorites() }
+            val favs = withContext(Dispatchers.IO) { Repositories.userData().getFavorites() }
             val keys = favs.map { "${it.source}+${it.id}" }.toSet()
             state = state.copy(favoriteKeys = keys)
         } catch (e: Exception) { android.util.Log.w("DetailScreen", "收藏列表加载失败", e) }
@@ -487,7 +487,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             // 故再略等其落库后重拉；整体替换天然覆盖多次换源（新源记录 + 被删旧源记录）。
             kotlinx.coroutines.delay(400)
             try {
-                val records = withContext(Dispatchers.IO) { ApiService.getPlayRecords() }
+                val records = withContext(Dispatchers.IO) { Repositories.userData().getPlayRecords() }
                 state = state.copy(playRecords = records)
             } catch (e: Exception) { android.util.Log.w("DetailScreen", "退出播放页刷新播放记录失败", e) }
         }
@@ -518,7 +518,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             try {
                 withContext(Dispatchers.IO) {
                     if (wasFav) {
-                        ApiService.unfavorite(source.source, source.id)
+                        Repositories.userData().unfavorite(source.source, source.id)
                     } else {
                         val favData = mapOf<String, Any?>(
                             "title" to (state.heroInfo?.title ?: state.entry.title),
@@ -529,7 +529,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             "save_time" to System.currentTimeMillis(),
                             "origin" to "",
                         )
-                        ApiService.addFavorite(source.source, source.id, favData)
+                        Repositories.userData().addFavorite(source.source, source.id, favData)
                     }
                 }
             } catch (e: Exception) {
@@ -557,7 +557,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(source.source, source.id) }
+                withContext(Dispatchers.IO) { Repositories.userData().deletePlayRecord(source.source, source.id) }
                 showToast("已删除播放记录")
             } catch (e: Exception) {
                 state = state.copy(playRecords = state.playRecords + (key to backup))
@@ -659,7 +659,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         }
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiService.savePlayRecord(migrated) }
+                withContext(Dispatchers.IO) { Repositories.userData().savePlayRecord(migrated) }
             } catch (e: Exception) {
                 // 回滚乐观记录会让承接焦点的「继续」按钮卸载；改派回主按钮槽位（此时复原为「播放/迁移」）
                 state = state.copy(playRecords = state.playRecords - targetKey)
@@ -684,7 +684,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         state = state.copy(playRecords = state.playRecords - key)
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiService.deletePlayRecord(rec.source, rec.id) }
+                withContext(Dispatchers.IO) { Repositories.userData().deletePlayRecord(rec.source, rec.id) }
                 showToast("已删除原记录")
             } catch (e: Exception) {
                 state = state.copy(playRecords = state.playRecords + (key to backup))
