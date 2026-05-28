@@ -43,10 +43,12 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.moontechlab.selenetv.data.local.LocalStore
 import org.moontechlab.selenetv.server.RemoteControlServer
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.DoubanCacheService
 import org.moontechlab.selenetv.service.SearchCacheService
+import org.moontechlab.selenetv.service.SubscriptionService
 import qrcode.QRCode
 import java.net.NetworkInterface
 import org.moontechlab.selenetv.ui.AnimatedSelectDialog
@@ -169,6 +171,21 @@ fun SettingsTab(
     val clearDoubanCacheFocusRequester = remember { FocusRequester() }
     val clearSearchCacheFocusRequester = remember { FocusRequester() }
 
+    var isLocalMode by remember { mutableStateOf(AppDataService.isLocalModeSync()) }
+    var subscriptionUrl by remember { mutableStateOf("") }
+
+    // 本地模式分区相关弹框状态
+    var showSubscriptionUrlDialog by remember { mutableStateOf(false) }
+    var showExitLocalModeDialog by remember { mutableStateOf(false) }
+    var showExitLocalModeConfirmDialog by remember { mutableStateOf(false) }
+    var exitLocalModeChainToConfirm by remember { mutableStateOf(false) }
+    var exitLocalModeConfirmed by remember { mutableStateOf(false) }
+
+    // 本地模式分区的 FocusRequester
+    val subscriptionUrlFocusRequester = remember { FocusRequester() }
+    val refreshSubscriptionFocusRequester = remember { FocusRequester() }
+    val exitLocalModeFocusRequester = remember { FocusRequester() }
+
     // 不在组合时自动抢焦点：与其他 Tab 一致，切到设置后焦点应停留在顶部 TabSwitcher，
     // 由 TabSwitcher.onNavigateDown → settingsFocusRequester 在按「下」键时再进入内容。
 
@@ -191,6 +208,10 @@ fun SettingsTab(
         availableIps = ips
         if (selectedIp.isEmpty()) {
             selectedIp = ips.find { it.startsWith("192.168.") } ?: ips.firstOrNull() ?: ""
+        }
+        isLocalMode = AppDataService.isLocalMode()
+        if (isLocalMode) {
+            subscriptionUrl = LocalStore.getSubscriptionUrl().orEmpty()
         }
     }
 
@@ -236,27 +257,54 @@ fun SettingsTab(
                     Spacer(modifier = Modifier.height(20.dp))
                 }
 
-                // —— 账户 ——
-                SectionLabel("账户")
-                if (hasLogin) {
-                    // 登录实例：可点击，弹出仅含「退出登录」的弹框
+                // —— 账户 / 本地模式 ——
+                if (isLocalMode) {
+                    SectionLabel("本地模式")
+                    SettingRow(
+                        label = "订阅链接",
+                        value = subscriptionUrl.ifEmpty { "未设置" },
+                        onClick = { showSubscriptionUrlDialog = true },
+                        modifier = Modifier
+                            .focusRequester(subscriptionUrlFocusRequester)
+                            .focusRequester(focusRequester),
+                    )
+                    SettingRow(
+                        label = "立即刷新订阅",
+                        onClick = {
+                            coroutineScope.launch {
+                                val ok = SubscriptionService.refreshAndPersist()
+                                org.moontechlab.selenetv.ui.MoonToast.show(
+                                    if (ok) "订阅已刷新" else "订阅刷新失败"
+                                )
+                            }
+                        },
+                        modifier = Modifier.focusRequester(refreshSubscriptionFocusRequester),
+                    )
+                    SettingRow(
+                        label = "退出本地模式",
+                        accent = RowAccent.Red,
+                        showDivider = false,
+                        onClick = { showExitLocalModeDialog = true },
+                        modifier = Modifier.focusRequester(exitLocalModeFocusRequester),
+                    )
+                } else if (hasLogin) {
+                    SectionLabel("账户")
                     SettingRow(
                         label = "登录实例",
                         value = serverUrl.ifEmpty { "未设置" },
                         showDivider = false,
                         onClick = { showLogoutDialog = true },
-                        // 已登录时此项是最顶端可聚焦项，承接从 TabSwitcher 下来的入口焦点
                         modifier = Modifier
                             .focusRequester(loginInstanceFocusRequester)
-                            .focusRequester(focusRequester)
+                            .focusRequester(focusRequester),
                     )
                 } else {
-                    // 登录按钮（未登录时显示）
+                    SectionLabel("账户")
                     SettingRow(
                         label = "登录",
                         showDivider = false,
                         onClick = { onShowLoginScreen() },
-                        modifier = Modifier.focusRequester(focusRequester)
+                        modifier = Modifier.focusRequester(focusRequester),
                     )
                 }
 
@@ -303,17 +351,19 @@ fun SettingsTab(
                     modifier = Modifier.focusRequester(m3u8ProxyFocusRequester)
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                if (!isLocalMode) {
+                    Spacer(modifier = Modifier.height(18.dp))
 
-                // —— 搜索 ——
-                SectionLabel("搜索")
-                SettingRow(
-                    label = "搜索发起方",
-                    value = searchOrigin.ifEmpty { AppDataService.SearchOrigin.TV_DIRECT.displayName },
-                    showDivider = false,
-                    onClick = { showSearchOriginDialog = true },
-                    modifier = Modifier.focusRequester(searchOriginFocusRequester)
-                )
+                    // —— 搜索 ——
+                    SectionLabel("搜索")
+                    SettingRow(
+                        label = "搜索发起方",
+                        value = searchOrigin.ifEmpty { AppDataService.SearchOrigin.TV_DIRECT.displayName },
+                        showDivider = false,
+                        onClick = { showSearchOriginDialog = true },
+                        modifier = Modifier.focusRequester(searchOriginFocusRequester),
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -618,6 +668,107 @@ fun SettingsTab(
                 onClose()
             },
             onDismiss = onClose
+        )
+    }
+
+    // 订阅链接重填弹框
+    AnimatedSelectDialog(
+        visible = showSubscriptionUrlDialog,
+        onDismiss = { showSubscriptionUrlDialog = false },
+        onClosed = { try { subscriptionUrlFocusRequester.requestFocus() } catch (_: Exception) {} },
+    ) { onClose ->
+        TextInputDialogContent(
+            title = "订阅链接",
+            placeholder = "请输入订阅链接",
+            initialValue = subscriptionUrl,
+            onConfirm = { newUrl ->
+                onClose()
+                val trimmed = newUrl.trim()
+                if (trimmed.isEmpty()) {
+                    org.moontechlab.selenetv.ui.MoonToast.show("请输入订阅链接")
+                    return@TextInputDialogContent
+                }
+                coroutineScope.launch {
+                    val parsed = try {
+                        withContext(Dispatchers.IO) { SubscriptionService.fetchAndParse(trimmed) }
+                    } catch (e: SubscriptionService.SubscriptionException) {
+                        org.moontechlab.selenetv.ui.MoonToast.show(e.message ?: "订阅校验失败")
+                        return@launch
+                    } catch (e: Exception) {
+                        org.moontechlab.selenetv.ui.MoonToast.show("网络异常: ${e.message}")
+                        return@launch
+                    }
+                    val existing = withContext(Dispatchers.IO) { LocalStore.getSubscriptionUrl() }
+                    val shouldClearAll = !existing.isNullOrBlank() && existing != trimmed
+                    withContext(Dispatchers.IO) {
+                        if (shouldClearAll) LocalStore.clearAll()
+                        LocalStore.saveSubscriptionUrl(trimmed)
+                        LocalStore.saveSubscriptionSources(parsed.searchResources, parsed.liveSources)
+                    }
+                    subscriptionUrl = trimmed
+                    org.moontechlab.selenetv.ui.MoonToast.show(
+                        if (shouldClearAll) "已切换订阅并清空旧数据" else "订阅已更新"
+                    )
+                }
+            },
+            onDismiss = onClose,
+        )
+    }
+
+    // 退出本地模式弹框 A（按钮触发二次确认）
+    AnimatedSelectDialog(
+        visible = showExitLocalModeDialog,
+        onDismiss = { showExitLocalModeDialog = false },
+        onClosed = {
+            if (exitLocalModeChainToConfirm) {
+                exitLocalModeChainToConfirm = false
+                showExitLocalModeConfirmDialog = true
+            } else {
+                try { exitLocalModeFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
+        },
+    ) { onClose ->
+        LogoutDialogContent(
+            serverUrl = subscriptionUrl,
+            onConfirm = {
+                exitLocalModeChainToConfirm = true
+                onClose()
+            },
+        )
+    }
+
+    // 退出本地模式二次确认弹框
+    AnimatedSelectDialog(
+        visible = showExitLocalModeConfirmDialog,
+        onDismiss = { showExitLocalModeConfirmDialog = false },
+        onClosed = {
+            if (exitLocalModeConfirmed) {
+                exitLocalModeConfirmed = false
+            } else {
+                try { exitLocalModeFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
+        },
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "退出本地模式",
+            message = "退出后将清空本地订阅、收藏与播放记录。确定继续？",
+            confirmText = "确认",
+            confirmDestructive = true,
+            focusConfirm = false,
+            onConfirm = {
+                exitLocalModeConfirmed = true
+                isLocalMode = false
+                subscriptionUrl = ""
+                coroutineScope.launch {
+                    withContext(Dispatchers.IO) {
+                        LocalStore.clearAll()
+                        AppDataService.saveIsLocalMode(false)
+                    }
+                }
+                onShowLoginScreen()
+                onClose()
+            },
+            onDismiss = onClose,
         )
     }
 }
