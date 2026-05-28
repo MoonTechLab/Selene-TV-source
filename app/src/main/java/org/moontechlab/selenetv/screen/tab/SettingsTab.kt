@@ -252,7 +252,7 @@ fun SettingsTab(
                 Spacer(modifier = Modifier.height(48.dp))
 
                 // 用户头部（已登录时显示）
-                if (hasLogin) {
+                if (hasLogin && !isLocalMode) {
                     CompactUserHeader(username = username, role = userRole)
                     Spacer(modifier = Modifier.height(20.dp))
                 }
@@ -682,12 +682,12 @@ fun SettingsTab(
             placeholder = "请输入订阅链接",
             initialValue = subscriptionUrl,
             onConfirm = { newUrl ->
-                onClose()
                 val trimmed = newUrl.trim()
                 if (trimmed.isEmpty()) {
                     org.moontechlab.selenetv.ui.MoonToast.show("请输入订阅链接")
                     return@TextInputDialogContent
                 }
+                onClose()
                 coroutineScope.launch {
                     val parsed = try {
                         withContext(Dispatchers.IO) { SubscriptionService.fetchAndParse(trimmed) }
@@ -730,6 +730,8 @@ fun SettingsTab(
     ) { onClose ->
         LogoutDialogContent(
             serverUrl = subscriptionUrl,
+            title = "本地模式订阅",
+            confirmText = "退出本地模式",
             onConfirm = {
                 exitLocalModeChainToConfirm = true
                 onClose()
@@ -1014,7 +1016,9 @@ private fun TextInputDialogContent(
 @Composable
 private fun LogoutDialogContent(
     serverUrl: String,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    title: String = "登录实例",
+    confirmText: String = "退出登录",
 ) {
     val confirmButtonFocusRequester = remember { FocusRequester() }
 
@@ -1032,7 +1036,7 @@ private fun LogoutDialogContent(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "登录实例",
+            text = title,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = TextDefault
@@ -1051,7 +1055,7 @@ private fun LogoutDialogContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         DialogButton(
-            text = "退出登录",
+            text = confirmText,
             onClick = onConfirm,
             modifier = Modifier
                 .fillMaxWidth()
