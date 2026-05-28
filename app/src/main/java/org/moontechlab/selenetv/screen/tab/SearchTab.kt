@@ -76,11 +76,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.moontechlab.selenetv.data.Repositories
 import org.moontechlab.selenetv.model.AggregatedSearchResult
 import org.moontechlab.selenetv.model.SearchResult
 import org.moontechlab.selenetv.model.aggregateSearchResults
 import org.moontechlab.selenetv.model.titlesMatch
-import org.moontechlab.selenetv.service.ApiService
 import org.moontechlab.selenetv.service.SearchEvent
 import org.moontechlab.selenetv.service.SearchProgress
 import org.moontechlab.selenetv.service.SearchService
@@ -340,7 +340,7 @@ fun SearchTab(
     LaunchedEffect(Unit) {
         try {
             val history = withContext(Dispatchers.IO) {
-                ApiService.getSearchHistory()
+                Repositories.userData().getSearchHistory()
             }
             searchHistory = history
         } catch (e: Exception) {
@@ -395,7 +395,7 @@ fun SearchTab(
                 // 同步到服务器
                 try {
                     withContext(Dispatchers.IO) {
-                        ApiService.addSearchHistory(query)
+                        Repositories.userData().addSearchHistory(query)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "添加搜索历史失败: ${e.message}")
@@ -433,7 +433,7 @@ fun SearchTab(
             // 同步到服务器
             try {
                 withContext(Dispatchers.IO) {
-                    ApiService.addSearchHistory(keyword)
+                    Repositories.userData().addSearchHistory(keyword)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "添加搜索历史失败: ${e.message}")
