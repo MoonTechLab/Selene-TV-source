@@ -773,9 +773,10 @@ fun SettingsTab(
                         AppDataService.saveIsLocalMode(false)
                         org.moontechlab.selenetv.service.LiveService.clearAllCache()
                     }
+                    // 必须等 IO 落盘完成再导航：否则 SettingsTab 离开 composition 时 rememberCoroutineScope 取消正在进行的写入
+                    onShowLoginScreen()
+                    onClose()
                 }
-                onShowLoginScreen()
-                onClose()
             },
             onDismiss = onClose,
         )

@@ -309,6 +309,9 @@ private fun LoginScreenContent(
                 isLoading = false
                 showToast(e.message ?: "订阅校验失败")
                 return@launch
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 协程被取消（用户长按品牌点切表单/按 BACK）：静默退出，不弹「网络异常」toast
+                throw e
             } catch (e: Exception) {
                 isLoading = false
                 showToast("网络异常: ${e.message ?: "未知错误"}")

@@ -94,6 +94,12 @@ object SubscriptionService {
         val url = org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl() ?: return@withContext false
         runCatching { fetchAndParse(url) }.fold(
             onSuccess = { parsed ->
+                // 防竞态：拉取可能耗时数秒；落盘前再确认订阅 URL 未被用户改动，避免用旧 URL 的源覆盖新订阅的源
+                val currentUrl = org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl()
+                if (currentUrl != url) {
+                    Log.w(TAG, "刷新期间订阅 URL 已变更，丢弃旧拉取结果")
+                    return@fold false
+                }
                 org.moontechlab.selenetv.data.local.LocalStore.saveSubscriptionSources(
                     parsed.searchResources,
                     parsed.liveSources,
@@ -125,15 +131,38 @@ object SubscriptionService {
             conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
         }
         conn.requestMethod = "GET"
+        conn.instanceFollowRedirects = false
         conn.connectTimeout = 10000
         conn.readTimeout = 10000
         try {
             val code = conn.responseCode
             if (code != 200) throw SubscriptionException("获取订阅内容失败 ($code)")
-            return conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().trim() }
+            return conn.inputStream.use { input ->
+                val capped = readBytesCapped(input, MAX_SUBSCRIPTION_BYTES)
+                String(capped, Charsets.UTF_8).trim()
+            }
         } finally {
             try { conn.disconnect() } catch (_: Exception) {}
         }
+    }
+
+    private const val MAX_SUBSCRIPTION_BYTES = 1 * 1024 * 1024  // 1 MB 上限：防止恶意订阅 OOM
+
+    /**
+     * 读取流并限制最大字节数。超出 cap 抛 SubscriptionException。
+     */
+    private fun readBytesCapped(input: java.io.InputStream, cap: Int): ByteArray {
+        val buf = java.io.ByteArrayOutputStream()
+        val tmp = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val n = input.read(tmp)
+            if (n < 0) break
+            total += n
+            if (total > cap) throw SubscriptionException("订阅内容超过 ${cap / 1024} KB 上限")
+            buf.write(tmp, 0, n)
+        }
+        return buf.toByteArray()
     }
 
     private fun trustAllSslSocketFactory(): javax.net.ssl.SSLSocketFactory {
