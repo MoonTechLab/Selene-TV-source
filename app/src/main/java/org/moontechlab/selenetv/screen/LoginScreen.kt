@@ -55,6 +55,9 @@ import java.net.HttpURLConnection
 import java.net.NetworkInterface
 import java.net.URL
 import android.util.Log
+import org.moontechlab.selenetv.service.SubscriptionService
+import org.moontechlab.selenetv.ui.AnimatedSelectDialog
+import org.moontechlab.selenetv.ui.ConfirmDialogContent
 
 private const val TAG = "LoginScreen"
 
@@ -71,7 +74,6 @@ private val LoginButtonBgFocused = Color(0xFF4CAF50)
 
 @Composable
 fun LoginScreen(navController: androidx.navigation.NavController) {
-    val context = LocalContext.current
     // 登录页若是返回栈根（启动即未登录的强制登录场景）则视为门禁；从设置进入则非门禁
     val isGate = remember { navController.previousBackStackEntry == null }
 
@@ -82,15 +84,6 @@ fun LoginScreen(navController: androidx.navigation.NavController) {
             navController.navigate(HomeRoute) {
                 popUpTo(LoginRoute) { inclusive = true }
             }
-        } else {
-            navController.popBackStack()
-        }
-    }
-
-    // 门禁场景按返回键直接退出应用，否则返回上一页
-    BackHandler {
-        if (isGate) {
-            (context as? android.app.Activity)?.finish()
         } else {
             navController.popBackStack()
         }
@@ -109,29 +102,38 @@ fun LoginScreen(navController: androidx.navigation.NavController) {
             .background(brush = gradientBrush),
         contentAlignment = Alignment.Center,
     ) {
-        LoginScreenContent(onDismiss = { leave() })
+        LoginScreenContent(isGate = isGate, onLeave = { leave() })
     }
 }
 
 
 @Composable
 private fun LoginScreenContent(
-    onDismiss: () -> Unit
+    isGate: Boolean,
+    onLeave: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val activity = context as? android.app.Activity
 
-    // 表单状态
+    // ============ 共享状态 ============
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+
+    // ============ 本地模式状态 ============
+    var isLocalMode by remember { mutableStateOf(false) }
+    var subscriptionUrl by remember { mutableStateOf("") }
+    var pendingParsed by remember { mutableStateOf<SubscriptionService.ParsedSubscription?>(null) }
+    var pendingUrl by remember { mutableStateOf("") }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         serverUrl = AppDataService.getServerUrl() ?: ""
         username = AppDataService.getUsername() ?: ""
     }
-    var isLoading by remember { mutableStateOf(false) }
-    
+
     // Toast 显示函数（统一走自绘 MoonToast）
     fun showToast(message: String) {
         org.moontechlab.selenetv.ui.MoonToast.show(message)
@@ -142,13 +144,30 @@ private fun LoginScreenContent(
     val usernameFocusRequester = remember { FocusRequester() }
     val passwordFocusRequester = remember { FocusRequester() }
     val loginButtonFocusRequester = remember { FocusRequester() }
+    val subscriptionUrlFocusRequester = remember { FocusRequester() }
+    val localLoginButtonFocusRequester = remember { FocusRequester() }
     // 「品牌点」隐秘焦点：登录按钮 down 进入；长按 OK 3 秒触发隐藏模式
     val brandDotFocusRequester = remember { FocusRequester() }
 
-    // 初始聚焦
-    LaunchedEffect(Unit) {
+    // 初始聚焦 + 订阅链接预填（响应 isLocalMode 切换）
+    LaunchedEffect(isLocalMode) {
         delay(100)
-        serverUrlFocusRequester.requestFocus()
+        if (isLocalMode) {
+            subscriptionUrl = withContext(Dispatchers.IO) {
+                org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl()
+            }.orEmpty()
+            subscriptionUrlFocusRequester.requestFocus()
+        } else {
+            serverUrlFocusRequester.requestFocus()
+        }
+    }
+
+    BackHandler {
+        when {
+            isLocalMode -> { isLocalMode = false }
+            isGate -> activity?.finish()
+            else -> onLeave()
+        }
     }
 
     // 表单验证
@@ -235,7 +254,7 @@ private fun LoginScreenContent(
                         )
 
                         // 直接关闭
-                        onDismiss()
+                        onLeave()
                     }
                     401 -> {
                         showToast("用户名或密码错误")
@@ -250,6 +269,56 @@ private fun LoginScreenContent(
             } catch (e: Exception) {
                 isLoading = false
                 showToast("网络异常: ${e.message ?: "未知错误"}")
+            }
+        }
+    }
+
+    fun commitLocalMode(parsed: SubscriptionService.ParsedSubscription, url: String, clearAll: Boolean) {
+        coroutineScope.launch {
+            withContext(Dispatchers.IO) {
+                if (clearAll) org.moontechlab.selenetv.data.local.LocalStore.clearAll()
+                org.moontechlab.selenetv.data.local.LocalStore.saveSubscriptionUrl(url)
+                org.moontechlab.selenetv.data.local.LocalStore.saveSubscriptionSources(
+                    parsed.searchResources,
+                    parsed.liveSources,
+                )
+                AppDataService.saveIsLocalMode(true)
+            }
+            onLeave()
+        }
+    }
+
+    fun handleLocalModeLogin() {
+        val url = subscriptionUrl.trim()
+        if (url.isEmpty()) {
+            showToast("请输入订阅链接")
+            return
+        }
+
+        isLoading = true
+        coroutineScope.launch {
+            val parsed = try {
+                withContext(Dispatchers.IO) { SubscriptionService.fetchAndParse(url) }
+            } catch (e: SubscriptionService.SubscriptionException) {
+                isLoading = false
+                showToast(e.message ?: "订阅校验失败")
+                return@launch
+            } catch (e: Exception) {
+                isLoading = false
+                showToast("网络异常: ${e.message ?: "未知错误"}")
+                return@launch
+            }
+            isLoading = false
+
+            val existing = withContext(Dispatchers.IO) {
+                org.moontechlab.selenetv.data.local.LocalStore.getSubscriptionUrl()
+            }
+            if (!existing.isNullOrBlank() && existing != url) {
+                pendingParsed = parsed
+                pendingUrl = url
+                showClearConfirmDialog = true
+            } else {
+                commitLocalMode(parsed, url, clearAll = false)
             }
         }
     }
@@ -269,7 +338,10 @@ private fun LoginScreenContent(
             brandDotFocusRequester = brandDotFocusRequester,
             brandDotUpFocusRequester = loginButtonFocusRequester,
             onSecretActivate = {
-                org.moontechlab.selenetv.ui.MoonToast.show("已进入隐藏模式")
+                isLocalMode = !isLocalMode
+                org.moontechlab.selenetv.ui.MoonToast.show(
+                    if (isLocalMode) "已进入本地模式" else "已切回账号登录"
+                )
             }
         )
 
@@ -278,68 +350,124 @@ private fun LoginScreenContent(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
         ) {
-            // 标题
-            Text(
-                text = "账号登录",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextDefault
-            )
+            if (isLocalMode) {
+                Text(text = "本地模式", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDefault)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "无需服务端账号，输入订阅链接即可",
+                    fontSize = 13.sp,
+                    color = TextGray,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+                LoginTextField(
+                    label = "订阅链接",
+                    value = subscriptionUrl,
+                    onValueChange = { subscriptionUrl = it },
+                    placeholder = "例如: https://example.com/sub/xxx",
+                    focusRequester = subscriptionUrlFocusRequester,
+                    downFocusRequester = localLoginButtonFocusRequester,
+                )
 
-            // 服务器地址
-            LoginTextField(
-                label = "服务器地址",
-                value = serverUrl,
-                onValueChange = { serverUrl = it },
-                placeholder = "例如: 192.168.1.100:3000",
-                focusRequester = serverUrlFocusRequester,
-                downFocusRequester = usernameFocusRequester
-            )
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                LoginButton(
+                    text = if (isLoading) "校验中..." else "进入本地模式",
+                    enabled = !isLoading,
+                    onClick = { handleLocalModeLogin() },
+                    modifier = Modifier.focusRequester(localLoginButtonFocusRequester),
+                    upFocusRequester = subscriptionUrlFocusRequester,
+                    leftFocusRequester = brandDotFocusRequester,
+                )
+            } else {
+                // 账号登录表单
+                Text(
+                    text = "账号登录",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDefault
+                )
 
-            // 用户名
-            LoginTextField(
-                label = "用户名",
-                value = username,
-                onValueChange = { username = it },
-                placeholder = "请输入用户名",
-                focusRequester = usernameFocusRequester,
-                upFocusRequester = serverUrlFocusRequester,
-                downFocusRequester = passwordFocusRequester
-            )
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                // 服务器地址
+                LoginTextField(
+                    label = "服务器地址",
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    placeholder = "例如: 192.168.1.100:3000",
+                    focusRequester = serverUrlFocusRequester,
+                    downFocusRequester = usernameFocusRequester
+                )
 
-            // 密码
-            LoginTextField(
-                label = "密码",
-                value = password,
-                onValueChange = { password = it },
-                placeholder = "请输入密码",
-                isPassword = true,
-                focusRequester = passwordFocusRequester,
-                upFocusRequester = usernameFocusRequester,
-                downFocusRequester = loginButtonFocusRequester
-            )
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+                // 用户名
+                LoginTextField(
+                    label = "用户名",
+                    value = username,
+                    onValueChange = { username = it },
+                    placeholder = "请输入用户名",
+                    focusRequester = usernameFocusRequester,
+                    upFocusRequester = serverUrlFocusRequester,
+                    downFocusRequester = passwordFocusRequester
+                )
 
-            // 登录按钮
-            LoginButton(
-                text = if (isLoading) "登录中..." else "登录",
-                enabled = !isLoading,
-                onClick = { handleLogin() },
-                modifier = Modifier.focusRequester(loginButtonFocusRequester),
-                upFocusRequester = passwordFocusRequester,
-                // 暗门：登录按钮 ← 跳到左下角的品牌点（按钮在右、点在左，方向语义匹配）
-                leftFocusRequester = brandDotFocusRequester
-            )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 密码
+                LoginTextField(
+                    label = "密码",
+                    value = password,
+                    onValueChange = { password = it },
+                    placeholder = "请输入密码",
+                    isPassword = true,
+                    focusRequester = passwordFocusRequester,
+                    upFocusRequester = usernameFocusRequester,
+                    downFocusRequester = loginButtonFocusRequester
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 登录按钮
+                LoginButton(
+                    text = if (isLoading) "登录中..." else "登录",
+                    enabled = !isLoading,
+                    onClick = { handleLogin() },
+                    modifier = Modifier.focusRequester(loginButtonFocusRequester),
+                    upFocusRequester = passwordFocusRequester,
+                    // 暗门：登录按钮 ← 跳到左下角的品牌点（按钮在右、点在左，方向语义匹配）
+                    leftFocusRequester = brandDotFocusRequester
+                )
+            }
         }
+    }
+
+    AnimatedSelectDialog(
+        visible = showClearConfirmDialog,
+        onDismiss = { showClearConfirmDialog = false },
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "已存在不同的订阅",
+            message = "检测到已有本地模式内容且订阅链接不一致，是否清空全部本地模式存储？",
+            confirmText = "清空并保存",
+            confirmDestructive = true,
+            focusConfirm = false,
+            onConfirm = {
+                val p = pendingParsed
+                val u = pendingUrl
+                onClose()
+                if (p != null) commitLocalMode(p, u, clearAll = true)
+            },
+            onDismiss = {
+                val p = pendingParsed
+                val u = pendingUrl
+                onClose()
+                if (p != null) commitLocalMode(p, u, clearAll = false)
+            },
+        )
     }
 }
 
