@@ -53,6 +53,9 @@ import org.moontechlab.selenetv.service.DoubanCacheService
 import org.moontechlab.selenetv.service.SearchCacheService
 import qrcode.QRCode
 import java.net.NetworkInterface
+import org.moontechlab.selenetv.ui.AnimatedSelectDialog
+import org.moontechlab.selenetv.ui.ConfirmDialogContent
+import org.moontechlab.selenetv.ui.DialogButton
 
 // ==================== 颜色常量 ====================
 private val ItemBgDefault = Color(0x14FFFFFF) // rgba(255, 255, 255, 0.08)
@@ -623,90 +626,6 @@ fun SettingsTab(
     }
 }
 
-/**
- * 带动画的选择弹框容器
- */
-@Composable
-private fun AnimatedSelectDialog(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    onClosed: () -> Unit = {},
-    content: @Composable (onClose: () -> Unit) -> Unit
-) {
-    var showDialog by remember { mutableStateOf(false) }
-    var animateIn by remember { mutableStateOf(false) }
-    var hasBeenVisible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(visible) {
-        if (visible) {
-            hasBeenVisible = true
-            showDialog = true
-            delay(16)
-            animateIn = true
-        } else {
-            animateIn = false
-            delay(150)
-            showDialog = false
-            // 只有之前显示过才触发 onClosed
-            if (hasBeenVisible) {
-                hasBeenVisible = false
-                onClosed()
-            }
-        }
-    }
-
-    if (showDialog) {
-        // 动画参数
-        val showSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
-        val hideSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 500f)
-
-        val dialogScale by animateFloatAsState(
-            targetValue = if (animateIn) 1f else 0.85f,
-            animationSpec = if (animateIn) showSpring else hideSpring,
-            label = "dialog_scale"
-        )
-
-        val dialogOpacity by animateFloatAsState(
-            targetValue = if (animateIn) 1f else 0f,
-            animationSpec = if (animateIn) showSpring else hideSpring,
-            label = "dialog_opacity"
-        )
-
-        val overlayOpacity by animateFloatAsState(
-            targetValue = if (animateIn) 1f else 0f,
-            animationSpec = if (animateIn) showSpring else hideSpring,
-            label = "overlay_opacity"
-        )
-
-        // 用独立 Dialog 窗口承载：弹框拥有独立焦点域，D-pad 上下键不会逃逸回背景设置项；
-        // 也无需停用背景，避免打开瞬间焦点被甩到顶部 TabSwitcher 的闪烁。返回键由 onDismissRequest 处理。
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnClickOutside = false
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = overlayOpacity }
-                    .background(Color.Black.copy(alpha = 0.7f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = dialogScale
-                        scaleY = dialogScale
-                        alpha = dialogOpacity
-                    }
-                ) {
-                    content(onDismiss)
-                }
-            }
-        }
-    }
-}
 
 /**
  * IP 选择弹框内容
@@ -939,55 +858,6 @@ private fun TextInputDialogContent(
     }
 }
 
-/**
- * 弹框按钮
- */
-@Composable
-private fun DialogButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    isPrimary: Boolean = false,
-    isDestructive: Boolean = false
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    val textColor = when {
-        isFocused -> if (isDestructive) Color.White else TextFocused
-        isDestructive -> Color(0xFFE74C3C)
-        isPrimary -> Color(0xFF4CAF50)
-        else -> TextDefault
-    }
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = when {
-                isDestructive -> Color(0x33E74C3C)
-                isPrimary -> Color(0x334CAF50)
-                else -> ItemBgDefault
-            },
-            focusedContainerColor = if (isDestructive) LogoutButtonBgFocused else ItemBgFocused
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor
-            )
-        }
-    }
-}
 
 /**
  * 退出登录确认弹框内容
@@ -1500,81 +1370,6 @@ private fun RowDivider(visible: Boolean = true) {
     )
 }
 
-/**
- * 确认弹框内容
- */
-@Composable
-private fun ConfirmDialogContent(
-    title: String,
-    message: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    confirmText: String = "确定",
-    confirmDestructive: Boolean = false,
-    // 默认聚焦确认；危险操作聚焦取消——取消是首个可聚焦项，与弹框窗口的默认落焦一致，
-    // 不产生焦点位移，既消除「确认→取消→确认」的闪现，也是危险操作更安全的默认项。
-    focusConfirm: Boolean = true
-) {
-    val confirmButtonFocusRequester = remember { FocusRequester() }
-    val cancelButtonFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        delay(100)
-        (if (focusConfirm) confirmButtonFocusRequester else cancelButtonFocusRequester).requestFocus()
-    }
-
-    Column(
-        modifier = Modifier
-            .width(400.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1A1A1A))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = title,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextDefault
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = message,
-            fontSize = 14.sp,
-            color = TextGray
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 按钮行
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 取消按钮
-            DialogButton(
-                text = "取消",
-                onClick = onDismiss,
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(cancelButtonFocusRequester)
-            )
-
-            // 确认按钮
-            DialogButton(
-                text = confirmText,
-                onClick = onConfirm,
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(confirmButtonFocusRequester),
-                isPrimary = !confirmDestructive,
-                isDestructive = confirmDestructive
-            )
-        }
-    }
-}
 
 @Preview(device = Devices.TV_1080p)
 @Composable
