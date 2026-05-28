@@ -28,29 +28,40 @@ object SubscriptionService {
             throw SubscriptionException("订阅内容格式无效: ${e.message}")
         }
 
-        val searchResources = (root["api_site"]?.jsonObject ?: emptyMap()).entries.mapNotNull { (mapKey, value) ->
-            val obj = try { value.jsonObject } catch (_: Exception) { return@mapNotNull null }
-            SearchResource(
-                key = obj["key"]?.jsonPrimitive?.contentOrNull ?: mapKey,
-                name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                api = obj["api"]?.jsonPrimitive?.contentOrNull ?: "",
-                detail = obj["detail"]?.jsonPrimitive?.contentOrNull,
-                from = obj["from"]?.jsonPrimitive?.contentOrNull,
-                disabled = false,
-            )
+        val apiSiteMap = runCatching { root["api_site"]?.jsonObject }.getOrNull() ?: emptyMap()
+        val livesMap = runCatching { root["lives"]?.jsonObject }.getOrNull() ?: emptyMap()
+
+        val searchResources = apiSiteMap.entries.mapNotNull { (mapKey, value) ->
+            try {
+                val obj = value.jsonObject
+                SearchResource(
+                    key = obj["key"]?.jsonPrimitive?.contentOrNull ?: mapKey,
+                    name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                    api = obj["api"]?.jsonPrimitive?.contentOrNull ?: "",
+                    detail = obj["detail"]?.jsonPrimitive?.contentOrNull,
+                    from = obj["from"]?.jsonPrimitive?.contentOrNull,
+                    disabled = false,
+                )
+            } catch (_: Exception) {
+                null
+            }
         }
 
-        val liveSources = (root["lives"]?.jsonObject ?: emptyMap()).entries.mapNotNull { (mapKey, value) ->
-            val obj = try { value.jsonObject } catch (_: Exception) { return@mapNotNull null }
-            LiveSource(
-                key = obj["key"]?.jsonPrimitive?.contentOrNull ?: mapKey,
-                name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
-                url = obj["url"]?.jsonPrimitive?.contentOrNull ?: "",
-                ua = obj["ua"]?.jsonPrimitive?.contentOrNull ?: "",
-                epg = obj["epg"]?.jsonPrimitive?.contentOrNull ?: "",
-                from = obj["from"]?.jsonPrimitive?.contentOrNull ?: "",
-                disabled = false,
-            )
+        val liveSources = livesMap.entries.mapNotNull { (mapKey, value) ->
+            try {
+                val obj = value.jsonObject
+                LiveSource(
+                    key = obj["key"]?.jsonPrimitive?.contentOrNull ?: mapKey,
+                    name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                    url = obj["url"]?.jsonPrimitive?.contentOrNull ?: "",
+                    ua = obj["ua"]?.jsonPrimitive?.contentOrNull ?: "",
+                    epg = obj["epg"]?.jsonPrimitive?.contentOrNull ?: "",
+                    from = obj["from"]?.jsonPrimitive?.contentOrNull ?: "",
+                    disabled = false,
+                )
+            } catch (_: Exception) {
+                null
+            }
         }
 
         if (searchResources.isEmpty() && liveSources.isEmpty()) {

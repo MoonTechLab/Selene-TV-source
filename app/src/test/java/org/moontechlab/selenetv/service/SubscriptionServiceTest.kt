@@ -54,4 +54,34 @@ class SubscriptionServiceTest {
             fail("应当抛 SubscriptionException")
         } catch (_: SubscriptionService.SubscriptionException) {}
     }
+
+    @Test fun api_site_as_array_is_skipped_not_thrown() {
+        // api_site 不是对象（这里是数组）：整段降级为空，不抛 IllegalArgumentException
+        val payload = """{"api_site":["a","b"],"lives":{"l":{"name":"L","url":"https://x"}}}"""
+        val parsed = SubscriptionService.parseSubscriptionJson(payload)
+        assertEquals(0, parsed.searchResources.size)
+        assertEquals(1, parsed.liveSources.size)
+    }
+
+    @Test fun bad_entry_in_api_site_is_skipped() {
+        // 一个条目的 name 字段被填成嵌套对象：该条目被跳过，其它正常解析
+        val payload = """
+            {
+              "api_site": {
+                "good": {"name":"G","api":"https://g"},
+                "bad":  {"name":{"lang":"zh"},"api":"https://b"}
+              }
+            }
+        """.trimIndent()
+        val parsed = SubscriptionService.parseSubscriptionJson(payload)
+        assertEquals(1, parsed.searchResources.size)
+        assertEquals("G", parsed.searchResources.first().name)
+    }
+
+    @Test fun lives_as_string_is_skipped_not_thrown() {
+        val payload = """{"api_site":{"a":{"name":"A","api":"https://x"}},"lives":"flat_string"}"""
+        val parsed = SubscriptionService.parseSubscriptionJson(payload)
+        assertEquals(1, parsed.searchResources.size)
+        assertEquals(0, parsed.liveSources.size)
+    }
 }
