@@ -32,6 +32,8 @@ object AppDataService {
     private const val KEY_DECODE_MODE = "decode_mode"
     private const val KEY_SEARCH_ORIGIN = "search_origin"
     private const val KEY_IS_LOCAL_MODE = "is_local_mode"
+    private const val KEY_SKIPPED_VERSION = "skipped_version"
+    private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
 
     private lateinit var prefs: SharedPreferences
 
@@ -551,5 +553,21 @@ object AppDataService {
     fun getSearchOriginSync(): SearchOrigin {
         if (isLocalModeCache) return SearchOrigin.TV_DIRECT
         return SearchOrigin.fromKey(prefs.getString(KEY_SEARCH_ORIGIN, SearchOrigin.TV_DIRECT.key) ?: SearchOrigin.TV_DIRECT.key)
+    }
+
+    // ==================== 应用更新偏好 ====================
+
+    /** 用户「跳过此版本」记下的版本号（去 v，如 "1.3.0"）。 */
+    fun getSkippedVersionSync(): String? = prefs.getString(KEY_SKIPPED_VERSION, null)
+
+    fun setSkippedVersionSync(version: String) {
+        prefs.edit().putString(KEY_SKIPPED_VERSION, version).apply()
+    }
+
+    /** 「稍后」写入的冷却截止时间戳（毫秒）；0 表示无冷却。 */
+    fun getUpdatePostponedUntilSync(): Long = prefs.getLong(KEY_UPDATE_POSTPONED_UNTIL, 0L)
+
+    fun setUpdatePostponedUntilSync(until: Long) {
+        prefs.edit().putLong(KEY_UPDATE_POSTPONED_UNTIL, until).apply()
     }
 }
