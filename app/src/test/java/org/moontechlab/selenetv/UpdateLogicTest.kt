@@ -3,8 +3,11 @@ package org.moontechlab.selenetv
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.moontechlab.selenetv.model.GithubAsset
 import org.moontechlab.selenetv.model.GithubRelease
 import org.moontechlab.selenetv.service.UpdateLogic
 
@@ -43,5 +46,23 @@ class UpdateLogicTest {
         assertTrue(UpdateLogic.compareVersions("1.2", "1.2.0") == 0)
         assertTrue(UpdateLogic.compareVersions("1.2.2", "1.2.3") < 0)
         assertEquals(0, UpdateLogic.compareVersions("bad", "1.2.2"))
+    }
+
+    private val assets = listOf(
+        GithubAsset("SeleneTV-v1.2.2-arm64-v8a.apk", "https://example.com/a.apk", 1, ""),
+        GithubAsset("SeleneTV-v1.2.2-armeabi-v7a.apk", "https://example.com/b.apk", 2, ""),
+    )
+
+    @Test
+    fun selectsAssetByDeviceAbiPriority() {
+        val r64 = UpdateLogic.selectAsset(listOf("arm64-v8a", "armeabi-v7a"), assets)
+        assertEquals("arm64-v8a", r64?.first)
+        assertEquals("https://example.com/a.apk", r64?.second?.browserDownloadUrl)
+
+        val r32 = UpdateLogic.selectAsset(listOf("armeabi-v7a", "armeabi"), assets)
+        assertEquals("armeabi-v7a", r32?.first)
+
+        assertNull(UpdateLogic.selectAsset(listOf("x86_64", "x86"), assets))
+        assertNull(UpdateLogic.selectAsset(listOf("arm64-v8a"), emptyList()))
     }
 }

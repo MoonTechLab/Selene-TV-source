@@ -30,4 +30,19 @@ object UpdateLogic {
         }
         return 0
     }
+
+    /**
+     * 按设备 ABI 优先级（Build.SUPPORTED_ABIS 顺序）选匹配的 APK 资产。
+     * 规则：资产文件名以 .apk 结尾且包含该 ABI 串即命中；按设备优先级取第一个命中。
+     * 无任何匹配（资产缺失/CI 构建中/罕见架构）返回 null。
+     */
+    fun selectAsset(supportedAbis: List<String>, assets: List<GithubAsset>): Pair<String, GithubAsset>? {
+        for (abi in supportedAbis) {
+            val match = assets.firstOrNull {
+                it.name.endsWith(".apk", ignoreCase = true) && it.name.contains(abi, ignoreCase = true)
+            }
+            if (match != null) return abi to match
+        }
+        return null
+    }
 }
