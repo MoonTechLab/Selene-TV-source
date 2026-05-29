@@ -65,4 +65,21 @@ class UpdateLogicTest {
         assertNull(UpdateLogic.selectAsset(listOf("x86_64", "x86"), assets))
         assertNull(UpdateLogic.selectAsset(listOf("arm64-v8a"), emptyList()))
     }
+
+    private fun release(tag: String, assets: List<GithubAsset>) =
+        GithubRelease(tagName = tag, name = tag, body = "log", assets = assets)
+
+    @Test
+    fun buildsUpdateInfoOnlyWhenNewerAndAssetPresent() {
+        val abis = listOf("arm64-v8a", "armeabi-v7a")
+
+        val info = UpdateLogic.buildUpdateInfo(release("v1.3.0", assets), "1.2.2", abis)
+        assertNotNull(info)
+        assertEquals("1.3.0", info?.version)
+        assertEquals("arm64-v8a", info?.abi)
+        assertEquals("https://example.com/a.apk", info?.apkUrl)
+
+        assertNull(UpdateLogic.buildUpdateInfo(release("v1.2.2", assets), "1.2.2", abis))
+        assertNull(UpdateLogic.buildUpdateInfo(release("v1.3.0", emptyList()), "1.2.2", abis))
+    }
 }

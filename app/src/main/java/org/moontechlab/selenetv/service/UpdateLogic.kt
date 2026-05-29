@@ -45,4 +45,26 @@ object UpdateLogic {
         }
         return null
     }
+
+    /**
+     * 组合判定：远端版本须严格高于本地，且能为当前设备选到 APK，才返回 UpdateInfo；
+     * 否则（不高于本地 / CI 构建中无资产 / 无匹配架构）返回 null。
+     */
+    fun buildUpdateInfo(
+        release: GithubRelease,
+        currentVersion: String,
+        supportedAbis: List<String>,
+    ): UpdateInfo? {
+        if (compareVersions(release.tagName, currentVersion) <= 0) return null
+        val (abi, asset) = selectAsset(supportedAbis, release.assets) ?: return null
+        val cleanVersion = release.tagName.trim().removePrefix("v").removePrefix("V")
+        return UpdateInfo(
+            version = cleanVersion,
+            title = release.name.ifBlank { release.tagName },
+            changelog = release.body,
+            apkUrl = asset.browserDownloadUrl,
+            apkSize = asset.size,
+            abi = abi,
+        )
+    }
 }
