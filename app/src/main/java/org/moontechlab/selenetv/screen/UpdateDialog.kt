@@ -61,6 +61,8 @@ fun UpdateGate() {
     var visible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        // 仅在已登录 / 本地模式下检查：未登录时首屏是强制登录页，不在其上弹更新框打扰
+        if (!AppDataService.isLoggedInSync() && !AppDataService.isLocalModeSync()) return@LaunchedEffect
         val result = withContext(Dispatchers.IO) {
             runCatching { UpdateService.checkForUpdate(context) }.getOrNull()
         } ?: return@LaunchedEffect
