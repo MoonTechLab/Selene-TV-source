@@ -25,13 +25,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.moontechlab.selenetv.model.UpdateInfo
@@ -107,11 +112,12 @@ fun UpdateDialog(
     var progress by remember { mutableFloatStateOf(0f) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
     var errorMsg by remember { mutableStateOf("") }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     fun startDownload() {
         phase = Phase.DOWNLOADING
         progress = 0f
-        scope.launch {
+        downloadJob = scope.launch {
             try {
                 var lastPct = -1
                 val file = withContext(Dispatchers.IO) {
@@ -127,6 +133,8 @@ fun UpdateDialog(
                 downloadedFile = file
                 phase = Phase.DONE
                 InstallHelper.installApk(context, file)
+            } catch (e: CancellationException) {
+                throw e   // 取消不算错误，phase 已由取消处理重置
             } catch (e: Exception) {
                 errorMsg = e.message ?: "下载失败"
                 phase = Phase.ERROR
@@ -147,6 +155,8 @@ fun UpdateDialog(
         ) {
             when (phase) {
                 Phase.INFO -> Column {
+                    val fr = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
                     Text("发现新版本 ${info.version}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.padding(top = 4.dp))
                     Text("当前 $currentVersion", color = Color(0xFF888888), fontSize = 13.sp)
@@ -169,7 +179,7 @@ fun UpdateDialog(
                             text = "立即更新",
                             onClick = { startDownload() },
                             isPrimary = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).focusRequester(fr),
                         )
                         DialogButton(
                             text = "稍后",
@@ -185,6 +195,8 @@ fun UpdateDialog(
                 }
 
                 Phase.DOWNLOADING -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val fr = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
                     Text("正在下载更新…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.padding(top = 16.dp))
                     val pct = if (progress > 0f) "${(progress * 100).toInt()}%" else "下载中…"
@@ -204,9 +216,21 @@ fun UpdateDialog(
                                 .background(Color(0xFF4CAF50)),
                         )
                     }
+                    Spacer(Modifier.padding(top = 20.dp))
+                    DialogButton(
+                        text = "取消",
+                        onClick = {
+                            downloadJob?.cancel()
+                            progress = 0f
+                            phase = Phase.INFO
+                        },
+                        modifier = Modifier.width(160.dp).focusRequester(fr),
+                    )
                 }
 
                 Phase.DONE -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val fr = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
                     Text("下载完成", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.padding(top = 16.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -214,7 +238,7 @@ fun UpdateDialog(
                             text = "安装",
                             onClick = { downloadedFile?.let { InstallHelper.installApk(context, it) } },
                             isPrimary = true,
-                            modifier = Modifier.width(160.dp),
+                            modifier = Modifier.width(160.dp).focusRequester(fr),
                         )
                         DialogButton(
                             text = "关闭",
@@ -225,6 +249,8 @@ fun UpdateDialog(
                 }
 
                 Phase.ERROR -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    val fr = remember { FocusRequester() }
+                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
                     Text("更新失败", color = Color(0xFFE74C3C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.padding(top = 12.dp))
                     Text(errorMsg, color = Color(0xFFCCCCCC), fontSize = 13.sp)
@@ -234,7 +260,7 @@ fun UpdateDialog(
                             text = "重试",
                             onClick = { startDownload() },
                             isPrimary = true,
-                            modifier = Modifier.width(160.dp),
+                            modifier = Modifier.width(160.dp).focusRequester(fr),
                         )
                         DialogButton(
                             text = "关闭",
