@@ -1,8 +1,8 @@
-package org.moontechlab.selenetv
+package org.moontechlab.selenetv.service
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.decodeFromString
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -10,7 +10,6 @@ import org.junit.Test
 import org.moontechlab.selenetv.model.GithubAsset
 import org.moontechlab.selenetv.model.GithubRelease
 import org.moontechlab.selenetv.model.UpdateInfo
-import org.moontechlab.selenetv.service.UpdateLogic
 
 class UpdateLogicTest {
 
@@ -95,8 +94,8 @@ class UpdateLogicTest {
         val sixHours = 6 * 60 * 60 * 1000L
 
         assertTrue(UpdateLogic.shouldPrompt(sampleInfo, null, 0L, now, manual = false))
-        assertTrue(!UpdateLogic.shouldPrompt(sampleInfo, "1.3.0", 0L, now, manual = false))
-        assertTrue(!UpdateLogic.shouldPrompt(sampleInfo, null, now + sixHours, now, manual = false))
+        assertFalse(UpdateLogic.shouldPrompt(sampleInfo, "1.3.0", 0L, now, manual = false))
+        assertFalse(UpdateLogic.shouldPrompt(sampleInfo, null, now + sixHours, now, manual = false))
         assertTrue(UpdateLogic.shouldPrompt(sampleInfo, "1.3.0", now + sixHours, now, manual = true))
     }
 
