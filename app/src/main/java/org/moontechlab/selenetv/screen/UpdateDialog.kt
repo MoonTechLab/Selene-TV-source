@@ -29,7 +29,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
@@ -170,9 +174,11 @@ fun UpdateDialog(
                             .verticalScroll(rememberScrollState()),
                     ) {
                         Text(
-                            info.changelog.ifBlank { "（无更新说明）" },
+                            text = if (info.changelog.isBlank()) AnnotatedString("（无更新说明）")
+                            else renderChangelog(info.changelog),
                             color = Color(0xFFCCCCCC),
                             fontSize = 13.sp,
+                            lineHeight = 19.sp,
                         )
                     }
                     Spacer(Modifier.padding(top = 20.dp))
@@ -272,6 +278,68 @@ fun UpdateDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 轻量 Markdown 渲染：只覆盖 release body 常见的简单语法，不做完整解析。
+ * - 行首 `#`/`##`/`###` → 加粗标题（仅加粗，不放大字号）
+ * - 行首 `- ` / `* ` → 项目符号 `• `
+ * - 行内 `**粗体**` → 加粗白色；`` `code` `` → 去掉反引号原样显示
+ * 源中的连续空行折叠为单个空行间隔，避免间距过大。
+ */
+private fun renderChangelog(raw: String): AnnotatedString = buildAnnotatedString {
+    val lines = raw.trim().replace("\r\n", "\n").split("\n")
+    var emittedAny = false
+    var pendingBlank = false
+    for (line in lines) {
+        val t = line.trim()
+        if (t.isBlank()) { pendingBlank = true; continue }
+        if (emittedAny) {
+            append("\n")
+            if (pendingBlank) append("\n") // 源中的空行 → 单个空行间隔（连续空行已折叠）
+        }
+        pendingBlank = false
+        emittedAny = true
+        when {
+            t.startsWith("#") ->
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
+                    appendInline(t.trimStart('#').trim())
+                }
+            t.startsWith("- ") || t.startsWith("* ") -> {
+                append("• ")
+                appendInline(t.substring(2))
+            }
+            else -> appendInline(t)
+        }
+    }
+}
+
+/** 处理行内 `**粗体**` 与 `` `code` ``，其余原样追加。 */
+private fun AnnotatedString.Builder.appendInline(text: String) {
+    var i = 0
+    while (i < text.length) {
+        val boldStart = text.indexOf("**", i)
+        val codeStart = text.indexOf("`", i)
+        // 选最近的标记
+        val next = listOf(boldStart, codeStart).filter { it >= 0 }.minOrNull()
+        if (next == null) {
+            append(text.substring(i)); return
+        }
+        append(text.substring(i, next))
+        if (next == boldStart) {
+            val end = text.indexOf("**", next + 2)
+            if (end < 0) { append(text.substring(next)); return }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
+                append(text.substring(next + 2, end))
+            }
+            i = end + 2
+        } else {
+            val end = text.indexOf("`", next + 1)
+            if (end < 0) { append(text.substring(next)); return }
+            append(text.substring(next + 1, end)) // 去掉反引号，原样显示
+            i = end + 1
         }
     }
 }
