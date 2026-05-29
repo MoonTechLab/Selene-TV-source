@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -103,7 +105,7 @@ fun UpdateGate() {
 
 /**
  * 更新弹窗。四态：信息 / 下载中 / 完成 / 错误。
- * 下载中禁止返回键关闭；下载完成自动拉起安装器（未授予未知来源权限时转为「安装」按钮等用户授权后重试）。
+ * 下载中禁止返回键关闭；下载完成进入完成态，由用户点「安装」拉起安装器（首次会引导开启未知来源权限）。
  */
 @Composable
 fun UpdateDialog(
@@ -156,7 +158,7 @@ fun UpdateDialog(
                 }
                 downloadedFile = file
                 phase = Phase.DONE
-                InstallHelper.installApk(context, file)
+                // 不自动拉起安装器：进入完成态，由用户点「安装」触发（InstallHelper 内部处理未知来源授权）。
             } catch (e: CancellationException) {
                 throw e   // 取消不算错误，phase 已由取消处理重置
             } catch (e: Exception) {
@@ -209,13 +211,14 @@ fun UpdateDialog(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
                                     .background(Color(0x22FFFFFF)),
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(if (progress > 0f) progress else 0f)
-                                        .padding(vertical = 4.dp)
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progress.coerceIn(0f, 1f))
                                         .background(Color(0xFF4CAF50)),
                                 )
                             }
