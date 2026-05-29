@@ -157,6 +157,7 @@ fun UpdateDialog(
                     }
                 }
                 downloadedFile = file
+                progress = 1f          // 完成态进度条固定满格，显示 100%
                 phase = Phase.DONE
                 // 不自动拉起安装器：进入完成态，由用户点「安装」触发（InstallHelper 内部处理未知来源授权）。
             } catch (e: CancellationException) {
@@ -205,7 +206,8 @@ fun UpdateDialog(
 
                 // 状态区：下载进度 / 错误信息（仅相应相位显示）
                 when (phase) {
-                    Phase.DOWNLOADING -> {
+                    // 下载中与完成态都显示进度行；完成态固定 100%（progress 已置 1f）
+                    Phase.DOWNLOADING, Phase.DONE -> {
                         Spacer(Modifier.padding(top = 18.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
