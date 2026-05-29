@@ -20,6 +20,13 @@ object UpdateService {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    /** 下载专用客户端：APK 较大，放宽 readTimeout 防止慢速/卡顿网络中途超时。 */
+    private val downloadClient by lazy {
+        MediaHttp.httpClient.newBuilder()
+            .readTimeout(5, java.util.concurrent.TimeUnit.MINUTES)
+            .build()
+    }
+
     /** 当前 versionName（与 SettingsTab.VersionColophon 一致，不依赖 BuildConfig）。 */
     fun currentVersionName(context: Context): String =
         runCatching {
@@ -60,6 +67,7 @@ object UpdateService {
     /**
      * 下载 APK 到 cacheDir/update/。下载前清空该目录。
      * onProgress 回调 0f..1f；总长未知时回调 -1f。失败抛 ApiException 并删除残文件。
+     * 调用方应自行节流（如按百分比变化）以免过频回调。
      */
     fun downloadApk(context: Context, info: UpdateInfo, onProgress: (Float) -> Unit): File {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
@@ -67,7 +75,7 @@ object UpdateService {
         val outFile = File(dir, "SeleneTV-${info.version}-${info.abi}.apk")
         val request = Request.Builder().url(info.apkUrl).header("User-Agent", "SeleneTV").build()
         try {
-            MediaHttp.httpClient.newCall(request).execute().use { resp ->
+            downloadClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) throw ApiException("下载失败 (${resp.code})", resp.code)
                 val body = resp.body ?: throw ApiException("下载失败：空响应")
                 val total = body.contentLength()
