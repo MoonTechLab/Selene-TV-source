@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.moontechlab.selenetv.model.GithubAsset
 import org.moontechlab.selenetv.model.GithubRelease
+import org.moontechlab.selenetv.model.UpdateInfo
 import org.moontechlab.selenetv.service.UpdateLogic
 
 class UpdateLogicTest {
@@ -81,5 +82,26 @@ class UpdateLogicTest {
 
         assertNull(UpdateLogic.buildUpdateInfo(release("v1.2.2", assets), "1.2.2", abis))
         assertNull(UpdateLogic.buildUpdateInfo(release("v1.3.0", emptyList()), "1.2.2", abis))
+    }
+
+    private val sampleInfo = UpdateInfo(
+        version = "1.3.0", title = "v1.3.0", changelog = "log",
+        apkUrl = "https://example.com/a.apk", apkSize = 1, abi = "arm64-v8a",
+    )
+
+    @Test
+    fun shouldPromptHonorsSkipAndCooldownExceptManual() {
+        val now = 1_000_000L
+        val sixHours = 6 * 60 * 60 * 1000L
+
+        assertTrue(UpdateLogic.shouldPrompt(sampleInfo, null, 0L, now, manual = false))
+        assertTrue(!UpdateLogic.shouldPrompt(sampleInfo, "1.3.0", 0L, now, manual = false))
+        assertTrue(!UpdateLogic.shouldPrompt(sampleInfo, null, now + sixHours, now, manual = false))
+        assertTrue(UpdateLogic.shouldPrompt(sampleInfo, "1.3.0", now + sixHours, now, manual = true))
+    }
+
+    @Test
+    fun cooldownConstantIsSixHours() {
+        assertEquals(6 * 60 * 60 * 1000L, UpdateLogic.COOLDOWN_MILLIS)
     }
 }

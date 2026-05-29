@@ -67,4 +67,24 @@ object UpdateLogic {
             abi = abi,
         )
     }
+
+    /** 「稍后」冷却时长：6 小时。 */
+    const val COOLDOWN_MILLIS = 6L * 60 * 60 * 1000
+
+    /**
+     * 是否应弹窗。手动检查（manual=true）绕过 skip 与冷却。
+     * 自动检查：跳过了该版本、或仍在冷却期内 → 不弹。
+     */
+    fun shouldPrompt(
+        info: UpdateInfo,
+        skippedVersion: String?,
+        postponedUntil: Long,
+        now: Long,
+        manual: Boolean,
+    ): Boolean {
+        if (manual) return true
+        if (info.version == skippedVersion) return false
+        if (now < postponedUntil) return false
+        return true
+    }
 }
