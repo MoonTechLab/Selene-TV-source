@@ -61,6 +61,9 @@ fun AppNavHost() {
         // （见 HomeScreen 的 detailRoute overlay），以保持首页组合存活、数据与焦点不丢失。
     }
 
+        // 启动时检查应用更新（命中且通过判定链才弹窗；失败静默）
+        UpdateGate()
+
         // 全局自绘 Toast：渲染在所有页面/覆盖层之上，底部居中
         MoonToastHost(
             modifier = Modifier
