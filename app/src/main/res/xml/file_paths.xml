@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 对应 UpdateService 下载目录 cacheDir/update/ -->
+    <cache-path name="update" path="update/" />
+</paths>

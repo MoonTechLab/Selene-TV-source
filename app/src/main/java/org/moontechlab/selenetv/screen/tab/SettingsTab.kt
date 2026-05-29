@@ -49,6 +49,7 @@ import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.DoubanCacheService
 import org.moontechlab.selenetv.service.SearchCacheService
 import org.moontechlab.selenetv.service.SubscriptionService
+import org.moontechlab.selenetv.service.UpdateService
 import qrcode.QRCode
 import java.net.NetworkInterface
 import org.moontechlab.selenetv.ui.AnimatedSelectDialog
@@ -176,6 +177,12 @@ fun SettingsTab(
     // 缓存按钮 FocusRequester
     val clearDoubanCacheFocusRequester = remember { FocusRequester() }
     val clearSearchCacheFocusRequester = remember { FocusRequester() }
+
+    // 手动检查更新状态
+    var manualUpdateInfo by remember { mutableStateOf<org.moontechlab.selenetv.model.UpdateInfo?>(null) }
+    var showManualUpdateDialog by remember { mutableStateOf(false) }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    val checkUpdateFocusRequester = remember { FocusRequester() }
 
     var isLocalMode by remember { mutableStateOf(AppDataService.isLocalModeSync()) }
     var subscriptionUrl by remember { mutableStateOf("") }
@@ -424,6 +431,38 @@ fun SettingsTab(
                     showDivider = false,
                     onClick = { showClearSearchCacheDialog = true },
                     modifier = Modifier.focusRequester(clearSearchCacheFocusRequester)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // —— 关于 ——
+                SectionLabel("关于")
+                SettingRow(
+                    label = "检查更新",
+                    value = if (checkingUpdate) "检查中…" else null,
+                    showDivider = false,
+                    onClick = {
+                        if (checkingUpdate) return@SettingRow
+                        checkingUpdate = true
+                        coroutineScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching { UpdateService.checkForUpdate(context) }
+                            }
+                            checkingUpdate = false
+                            result.fold(
+                                onSuccess = { info ->
+                                    if (info != null) {
+                                        manualUpdateInfo = info
+                                        showManualUpdateDialog = true
+                                    } else {
+                                        org.moontechlab.selenetv.ui.MoonToast.show("已是最新版本")
+                                    }
+                                },
+                                onFailure = { org.moontechlab.selenetv.ui.MoonToast.show("检查更新失败") },
+                            )
+                        }
+                    },
+                    modifier = Modifier.focusRequester(checkUpdateFocusRequester),
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -846,6 +885,21 @@ fun SettingsTab(
                 }
             },
             onDismiss = onClose,
+        )
+    }
+
+    // 手动检查更新弹框
+    manualUpdateInfo?.let { info ->
+        org.moontechlab.selenetv.screen.UpdateDialog(
+            info = info,
+            visible = showManualUpdateDialog,
+            onDismiss = { showManualUpdateDialog = false },
+            onPostpone = {
+                AppDataService.setUpdatePostponedUntilSync(
+                    System.currentTimeMillis() + org.moontechlab.selenetv.service.UpdateLogic.COOLDOWN_MILLIS,
+                )
+            },
+            onSkip = { AppDataService.setSkippedVersionSync(info.version) },
         )
     }
 }
