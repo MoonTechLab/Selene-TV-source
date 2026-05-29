@@ -2,11 +2,11 @@ package org.moontechlab.selenetv.util
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import org.moontechlab.selenetv.ui.MoonToast
 import java.io.File
 
@@ -24,7 +24,7 @@ object InstallHelper {
         ) {
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:${context.packageName}"),
+                "package:${context.packageName}".toUri(),
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(intent) }
                 .onFailure {
