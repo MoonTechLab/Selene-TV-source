@@ -25,8 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -53,6 +55,7 @@ import org.moontechlab.selenetv.util.InstallHelper
 import java.io.File
 
 private enum class Phase { INFO, DOWNLOADING, DONE, ERROR }
+
 
 /**
  * 启动时挂在全局根（AppNavHost）的更新闸门：拉取→判定→（命中则）弹窗。
@@ -120,6 +123,21 @@ fun UpdateDialog(
     var errorMsg by remember { mutableStateOf("") }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
+    // 焦点种子：把焦点送进「按钮组」容器（focusGroup），让焦点系统自然指派到子按钮——
+    // 程序化 requestFocus 直接打在 tv Surface 上虽能获焦却不渲染高亮，经由 group 自然进入才会高亮。
+    // 容器稳定存在、按 phase 重新种焦，相位切换后焦点不漏到弹窗背后的内容。
+    val buttonsFocus = remember { FocusRequester() }
+    var buttonsHaveFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(phase) {
+        buttonsHaveFocus = false
+        var tries = 0
+        while (!buttonsHaveFocus && tries < 15) {
+            delay(50)
+            runCatching { buttonsFocus.requestFocus() }
+            tries++
+        }
+    }
+
     fun startDownload() {
         phase = Phase.DOWNLOADING
         progress = 0f
@@ -159,122 +177,131 @@ fun UpdateDialog(
                 .background(Color(0xFF1A1A1A))
                 .padding(28.dp),
         ) {
-            when (phase) {
-                Phase.INFO -> Column {
-                    val fr = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
-                    Text("发现新版本 ${info.version}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.padding(top = 4.dp))
-                    Text("当前 $currentVersion", color = Color(0xFF888888), fontSize = 13.sp)
-                    Spacer(Modifier.padding(top = 16.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 220.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        Text(
-                            text = if (info.changelog.isBlank()) AnnotatedString("（无更新说明）")
-                            else renderChangelog(info.changelog),
-                            color = Color(0xFFCCCCCC),
-                            fontSize = 13.sp,
-                            lineHeight = 19.sp,
-                        )
-                    }
-                    Spacer(Modifier.padding(top = 20.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DialogButton(
-                            text = "立即更新",
-                            onClick = { startDownload() },
-                            isPrimary = true,
-                            modifier = Modifier.weight(1f).focusRequester(fr),
-                        )
-                        DialogButton(
-                            text = "稍后",
-                            onClick = { onPostpone(); onClose() },
-                            modifier = Modifier.weight(1f),
-                        )
-                        DialogButton(
-                            text = "跳过此版本",
-                            onClick = { onSkip(); onClose() },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
+            // 单一弹窗：标题 + 更新日志始终长显，仅「状态区（进度/错误）」与「按钮区」随相位变化，
+            // 避免整块内容相位切换导致的焦点/高亮丢失。
+            Column {
+                Text("发现新版本 ${info.version}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.padding(top = 4.dp))
+                Text("当前 $currentVersion", color = Color(0xFF888888), fontSize = 13.sp)
+                Spacer(Modifier.padding(top = 16.dp))
 
-                Phase.DOWNLOADING -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val fr = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
-                    Text("正在下载更新…", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.padding(top = 16.dp))
-                    val pct = if (progress > 0f) "${(progress * 100).toInt()}%" else "下载中…"
-                    Text(pct, color = Color(0xFF4CAF50), fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.padding(top = 16.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0x22FFFFFF)),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(if (progress > 0f) progress else 0f)
-                                .padding(vertical = 4.dp)
-                                .background(Color(0xFF4CAF50)),
-                        )
-                    }
-                    Spacer(Modifier.padding(top = 20.dp))
-                    DialogButton(
-                        text = "取消",
-                        onClick = {
-                            downloadJob?.cancel()
-                            progress = 0f
-                            phase = Phase.INFO
-                        },
-                        modifier = Modifier.width(160.dp).focusRequester(fr),
+                // 更新日志（始终显示、可滚动）
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = if (info.changelog.isBlank()) AnnotatedString("（无更新说明）")
+                        else renderChangelog(info.changelog),
+                        color = Color(0xFFCCCCCC),
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
                     )
                 }
 
-                Phase.DONE -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val fr = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
-                    Text("下载完成", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.padding(top = 16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DialogButton(
-                            text = "安装",
-                            onClick = { downloadedFile?.let { InstallHelper.installApk(context, it) } },
-                            isPrimary = true,
-                            modifier = Modifier.width(160.dp).focusRequester(fr),
-                        )
-                        DialogButton(
-                            text = "关闭",
-                            onClick = onClose,
-                            modifier = Modifier.width(160.dp),
-                        )
+                // 状态区：下载进度 / 错误信息（仅相应相位显示）
+                when (phase) {
+                    Phase.DOWNLOADING -> {
+                        Spacer(Modifier.padding(top = 18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0x22FFFFFF)),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(if (progress > 0f) progress else 0f)
+                                        .padding(vertical = 4.dp)
+                                        .background(Color(0xFF4CAF50)),
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = if (progress > 0f) "${(progress * 100).toInt()}%" else "下载中…",
+                                color = Color(0xFF4CAF50),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
+                    Phase.ERROR -> {
+                        Spacer(Modifier.padding(top = 14.dp))
+                        Text("更新失败：$errorMsg", color = Color(0xFFE74C3C), fontSize = 13.sp)
+                    }
+                    else -> {}
                 }
 
-                Phase.ERROR -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val fr = remember { FocusRequester() }
-                    LaunchedEffect(Unit) { delay(100); runCatching { fr.requestFocus() } }
-                    Text("更新失败", color = Color(0xFFE74C3C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.padding(top = 12.dp))
-                    Text(errorMsg, color = Color(0xFFCCCCCC), fontSize = 13.sp)
-                    Spacer(Modifier.padding(top = 20.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DialogButton(
-                            text = "重试",
-                            onClick = { startDownload() },
-                            isPrimary = true,
-                            modifier = Modifier.width(160.dp).focusRequester(fr),
+                // 按钮区：随相位变化。外层 focusGroup 容器稳定存在；相位切换后由上面的
+                // LaunchedEffect 把焦点自然送进组内首个子按钮，触发 tv Surface 的获焦高亮。
+                Spacer(Modifier.padding(top = 20.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(buttonsFocus)
+                        .focusGroup()
+                        .onFocusChanged { buttonsHaveFocus = it.hasFocus },
+                ) {
+                    when (phase) {
+                        Phase.INFO -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DialogButton(
+                                text = "立即更新",
+                                onClick = { startDownload() },
+                                isPrimary = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            DialogButton(
+                                text = "稍后",
+                                onClick = { onPostpone(); onClose() },
+                                modifier = Modifier.weight(1f),
+                            )
+                            DialogButton(
+                                text = "跳过此版本",
+                                onClick = { onSkip(); onClose() },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+
+                        Phase.DOWNLOADING -> DialogButton(
+                            text = "取消",
+                            onClick = {
+                                downloadJob?.cancel()
+                                progress = 0f
+                                phase = Phase.INFO
+                            },
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        DialogButton(
-                            text = "关闭",
-                            onClick = onClose,
-                            modifier = Modifier.width(160.dp),
-                        )
+
+                        Phase.DONE -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DialogButton(
+                                text = "安装",
+                                onClick = { downloadedFile?.let { InstallHelper.installApk(context, it) } },
+                                isPrimary = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            DialogButton(
+                                text = "关闭",
+                                onClick = onClose,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+
+                        Phase.ERROR -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DialogButton(
+                                text = "重试",
+                                onClick = { startDownload() },
+                                isPrimary = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            DialogButton(
+                                text = "关闭",
+                                onClick = onClose,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
