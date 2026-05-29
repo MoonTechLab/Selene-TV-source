@@ -142,7 +142,12 @@ fun DialogButton(
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = when {
+            // 容器底色也跟随 isFocused（onFocusChanged）：tv Surface 的 focusedContainerColor
+            // 仅在「经 D-pad 导航获焦」时渲染，程序化 requestFocus 获焦不触发；故这里用 isFocused
+            // 兜底，让程序化种焦的按钮同样显示高亮白底（D-pad 获焦时 focusedContainerColor 仍生效，等价）。
+            containerColor = if (isFocused) {
+                if (isDestructive) DialogDestructiveFocused else DialogItemBgFocused
+            } else when {
                 isDestructive -> Color(0x33E74C3C)
                 isPrimary -> Color(0x334CAF50)
                 else -> DialogItemBgDefault
