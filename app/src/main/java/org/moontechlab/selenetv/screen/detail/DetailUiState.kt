@@ -27,6 +27,8 @@ data class DetailUiState(
     val episodePickerVisible: Boolean = false,
     // TMDB 剧照/ logo（仅 hero 渲染）。非空且含 backdrop 时切到 Apple TV 式布局。
     val tmdbArt: TmdbArt? = null,
+    // TMDB 媒体引用（mediaType/tmdbId/season/imdbId）。用于片头/片尾跳过等功能。
+    val tmdbRef: org.moontechlab.selenetv.model.TmdbMediaRef? = null,
     // 测速优选：key 为 source+id。speedTesting 期间禁止选源、源卡片变暗；完成后按分排序并自动选中冠军。
     val speedResults: Map<String, SourceSpeed> = emptyMap(),
     val speedTesting: Boolean = false,
