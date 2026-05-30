@@ -5,20 +5,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -46,8 +45,11 @@ fun IntroSkipButton(
     onFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    // 焦点视觉一律从 interactionSource 派生（collectIsFocusedAsState），而非裸 onFocusChanged——
+    // 后者挂在本组件的 modifier 链上时不可靠（程序化 requestFocus 后 isFocused 不翻转，按钮恒显未聚焦态）。
     val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    LaunchedEffect(focused) { onFocusChanged(focused) }
     val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "skip_scale")
     val bg = if (focused) Color.White else Color.Black
     val fg = if (focused) Color.Black else Color.White
@@ -55,7 +57,6 @@ fun IntroSkipButton(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .focusRequester(focusRequester)
-            .onFocusChanged { focused = it.isFocused; onFocusChanged(it.isFocused) }
             .focusProperties {
                 down = speedPillFocus
                 up = FocusRequester.Cancel
