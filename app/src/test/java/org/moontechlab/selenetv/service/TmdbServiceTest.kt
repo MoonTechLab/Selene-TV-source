@@ -42,4 +42,16 @@ class TmdbServiceTest {
         assertEquals(1, TmdbService.parseSeasonNumber("Blade Runner 2049"))
         assertEquals(1, TmdbService.parseSeasonNumber("ぐらんぶる"))
     }
+
+    @Test
+    fun parseImdbId_extractsId() {
+        assertEquals("tt0944947", TmdbService.parseImdbId("""{"imdb_id":"tt0944947","tvdb_id":121361}"""))
+    }
+
+    @Test
+    fun parseImdbId_nullWhenMissingOrBlank() {
+        assertEquals(null, TmdbService.parseImdbId("""{"imdb_id":null}"""))
+        assertEquals(null, TmdbService.parseImdbId("""{"imdb_id":""}"""))
+        assertEquals(null, TmdbService.parseImdbId("""{}"""))
+    }
 }
