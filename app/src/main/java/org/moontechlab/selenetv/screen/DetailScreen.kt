@@ -278,8 +278,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             TmdbService.resolveArt(q, resp.data.year, key, doubanCacheService)
                         }
                     } else null
+                    val ref = if (key.isNotBlank()) {
+                        kotlinx.coroutines.withTimeoutOrNull(4000) {
+                            TmdbService.resolveMediaRef(q, resp.data.year, key, doubanCacheService)
+                        }
+                    } else null
                     ensureActive()
-                    state = state.copy(details = resp.data, tmdbArt = art, detailsLoading = false)
+                    state = state.copy(details = resp.data, tmdbArt = art, tmdbRef = ref, detailsLoading = false)
                 } else {
                     state = state.copy(details = resp.data, detailsLoading = false)
                 }
