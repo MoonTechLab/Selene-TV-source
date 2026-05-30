@@ -105,6 +105,51 @@ object TmdbService {
     }
 
     /**
+     * 从续作原名后缀提取季号；无明确季标记返回 1。与 [stripSeasonSuffix] 同套模式。
+     */
+    internal fun parseSeasonNumber(title: String): Int {
+        val t = title.trim()
+        Regex("""\s+season\s+(\d+)$""", RegexOption.IGNORE_CASE).find(t)?.let { return it.groupValues[1].toInt() }
+        Regex("""\s+(\d+)(st|nd|rd|th)\s+season$""", RegexOption.IGNORE_CASE).find(t)?.let { return it.groupValues[1].toInt() }
+        Regex("""\s+season\s+([ivxlcdm]+)$""", RegexOption.IGNORE_CASE).find(t)?.let { m ->
+            romanToInt(m.groupValues[1])?.let { return it }
+        }
+        Regex("""第\s*([0-9一二三四五六七八九十百]+)\s*[季期]$""").find(t)?.let { m ->
+            cnNumberToInt(m.groupValues[1])?.let { return it }
+        }
+        return 1
+    }
+
+    private fun romanToInt(s: String): Int? {
+        val map = mapOf('i' to 1, 'v' to 5, 'x' to 10, 'l' to 50, 'c' to 100, 'd' to 500, 'm' to 1000)
+        var total = 0
+        var prev = 0
+        for (c in s.lowercase().reversed()) {
+            val v = map[c] ?: return null
+            if (v < prev) total -= v else { total += v; prev = v }
+        }
+        return total.takeIf { it > 0 }
+    }
+
+    /** 覆盖季号常见范围 1–99（阿拉伯 + 简单中文数字）。 */
+    private fun cnNumberToInt(s: String): Int? {
+        s.toIntOrNull()?.let { return it }
+        val d = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+        return when {
+            s == "十" -> 10
+            s.length == 1 -> d[s[0]]
+            s.startsWith("十") -> 10 + (d[s[1]] ?: return null)
+            s.contains("十") -> {
+                val parts = s.split("十")
+                val tens = d[parts[0][0]] ?: return null
+                val ones = if (parts.size > 1 && parts[1].isNotEmpty()) (d[parts[1][0]] ?: return null) else 0
+                tens * 10 + ones
+            }
+            else -> null
+        }
+    }
+
+    /**
      * 去掉续作的「季」后缀，便于用基础剧名命中 TMDB。仅识别明确的季标记，避免误删正片名里的数字/词。
      * 例：「ぐらんぶる Season 2」→「ぐらんぶる」、「某剧 第二季」→「某剧」、「Foo 2nd Season」→「Foo」。
      */

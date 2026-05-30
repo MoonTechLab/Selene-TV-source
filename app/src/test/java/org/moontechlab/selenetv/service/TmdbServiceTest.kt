@@ -25,4 +25,21 @@ class TmdbServiceTest {
         assertEquals("ぐらんぶる", TmdbService.stripSeasonSuffix("ぐらんぶる"))
         assertEquals("玲珑", TmdbService.stripSeasonSuffix("玲珑"))
     }
+
+    @Test
+    fun parseSeasonNumber_extractsSeason() {
+        assertEquals(2, TmdbService.parseSeasonNumber("ぐらんぶる Season 2"))
+        assertEquals(2, TmdbService.parseSeasonNumber("某剧 第二季"))
+        assertEquals(10, TmdbService.parseSeasonNumber("某剧第十期"))
+        assertEquals(23, TmdbService.parseSeasonNumber("某剧 第二十三季"))
+        assertEquals(2, TmdbService.parseSeasonNumber("Attack on Titan 2nd Season"))
+        assertEquals(3, TmdbService.parseSeasonNumber("Foo Season III"))
+    }
+
+    @Test
+    fun parseSeasonNumber_defaultsToOne() {
+        assertEquals(1, TmdbService.parseSeasonNumber("玲珑"))
+        assertEquals(1, TmdbService.parseSeasonNumber("Blade Runner 2049"))
+        assertEquals(1, TmdbService.parseSeasonNumber("ぐらんぶる"))
+    }
 }
