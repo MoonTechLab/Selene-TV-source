@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.moontechlab.selenetv.model.TmdbArt
+import org.moontechlab.selenetv.model.TmdbMediaRef
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -36,6 +37,7 @@ object TmdbService {
     private const val TIMEOUT_MS = 15000
 
     private const val CACHE_PREFIX = "tmdb_art"
+    private const val REF_PREFIX = "tmdb_ref"
     private const val TTL_HIT = 30L * 24 * 60 * 60 * 1000   // 有图：30 天
     private const val TTL_MISS = 3L * 24 * 60 * 60 * 1000   // 无图：3 天
 
@@ -102,6 +104,51 @@ object TmdbService {
             return searchOnce(stripped, year, apiKey)
         }
         return null
+    }
+
+    /**
+     * 从续作原名后缀提取季号；无明确季标记返回 1。与 [stripSeasonSuffix] 同套模式。
+     */
+    internal fun parseSeasonNumber(title: String): Int {
+        val t = title.trim()
+        Regex("""\s+season\s+(\d+)$""", RegexOption.IGNORE_CASE).find(t)?.let { return it.groupValues[1].toInt() }
+        Regex("""\s+(\d+)(st|nd|rd|th)\s+season$""", RegexOption.IGNORE_CASE).find(t)?.let { return it.groupValues[1].toInt() }
+        Regex("""\s+season\s+([ivxlcdm]+)$""", RegexOption.IGNORE_CASE).find(t)?.let { m ->
+            romanToInt(m.groupValues[1])?.let { return it }
+        }
+        Regex("""第\s*([0-9一二三四五六七八九十百]+)\s*[季期]$""").find(t)?.let { m ->
+            cnNumberToInt(m.groupValues[1])?.let { return it }
+        }
+        return 1
+    }
+
+    private fun romanToInt(s: String): Int? {
+        val map = mapOf('i' to 1, 'v' to 5, 'x' to 10, 'l' to 50, 'c' to 100, 'd' to 500, 'm' to 1000)
+        var total = 0
+        var prev = 0
+        for (c in s.lowercase().reversed()) {
+            val v = map[c] ?: return null
+            if (v < prev) total -= v else { total += v; prev = v }
+        }
+        return total.takeIf { it > 0 }
+    }
+
+    /** 覆盖季号常见范围 1–99（阿拉伯 + 简单中文数字）。 */
+    private fun cnNumberToInt(s: String): Int? {
+        s.toIntOrNull()?.let { return it }
+        val d = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+        return when {
+            s == "十" -> 10
+            s.length == 1 -> d[s[0]]
+            s.startsWith("十") -> 10 + (d[s[1]] ?: return null)
+            s.contains("十") -> {
+                val parts = s.split("十")
+                val tens = d[parts[0][0]] ?: return null
+                val ones = if (parts.size > 1 && parts[1].isNotEmpty()) (d[parts[1][0]] ?: return null) else 0
+                tens * 10 + ones
+            }
+            else -> null
+        }
     }
 
     /**
@@ -193,6 +240,51 @@ object TmdbService {
         val en = png.filter { lang(it) == "en" }.maxByOrNull { vote(it) }
         val any = png.maxByOrNull { vote(it) }
         return (zh ?: en ?: any)?.let { path(it) }
+    }
+
+    internal fun parseImdbId(body: String): String? = runCatching {
+        json.parseToJsonElement(body).jsonObject["imdb_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    private fun fetchImdbId(mediaType: String, tmdbId: Long, apiKey: String): String? {
+        val (code, body) = httpGet("$API_BASE/$mediaType/$tmdbId/external_ids?api_key=$apiKey")
+        if (code != HttpURLConnection.HTTP_OK) return null
+        return parseImdbId(body)
+    }
+
+    /**
+     * 解析片头片尾取数所需的 TMDB 标识。复用 [search]（original_title+year）拿 (mediaType,tmdbId)，
+     * 季号取自 [parseSeasonNumber]，TV 再取 imdb（introdb.app 用）。失败/无配 key 返回 null。
+     * 复用 [DoubanCacheService]，键前缀 tmdb_ref，命中 30d / 未命中 3d。
+     */
+    suspend fun resolveMediaRef(
+        queryTitle: String,
+        year: String,
+        apiKey: String,
+        cache: DoubanCacheService,
+    ): TmdbMediaRef? = withContext(Dispatchers.IO) {
+        if (queryTitle.isBlank() || apiKey.isBlank()) return@withContext null
+        val cacheKey = "${REF_PREFIX}_${queryTitle}_$year"
+        val cached = runCatching { cache.get(cacheKey) { json.decodeFromString<TmdbMediaRef>(it) } }.getOrNull()
+        if (cached != null) return@withContext cached.takeIf { it.tmdbId > 0 }
+
+        val ref = try {
+            val (mediaType, tmdbId) = search(queryTitle, year, apiKey) ?: return@withContext run {
+                cache.set(cacheKey, json.encodeToString(TmdbMediaRef("", 0, 1, null)), TTL_MISS)
+                null
+            }
+            TmdbMediaRef(
+                mediaType = mediaType,
+                tmdbId = tmdbId,
+                season = parseSeasonNumber(queryTitle),
+                imdbId = if (mediaType == "tv") fetchImdbId(mediaType, tmdbId, apiKey) else null,
+            )
+        } catch (e: Exception) {
+            android.util.Log.d("TmdbService", "resolveMediaRef 失败: ${e.message}")
+            null
+        }
+        if (ref != null) cache.set(cacheKey, json.encodeToString(ref), TTL_HIT)
+        ref
     }
 
     private fun httpGet(url: String): Pair<Int, String> {

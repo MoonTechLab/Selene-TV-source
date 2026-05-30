@@ -27,6 +27,8 @@ data class PlayerLaunch(
     val startPositionMs: Long = 0L,
     /** 模拟时长（毫秒）。接入真实播放器后由播放器回填。 */
     val durationMs: Long = 45 * 60 * 1000L,
+    /** TMDB 媒体引用（用于片头/片尾跳过等需要 TMDB ID 的功能）。可为空（未配 key 或解析失败）。 */
+    val tmdbRef: org.moontechlab.selenetv.model.TmdbMediaRef? = null,
 ) {
     val selectedSource: SearchResult?
         get() = sources.firstOrNull { sourceKey(it) == selectedSourceKey }

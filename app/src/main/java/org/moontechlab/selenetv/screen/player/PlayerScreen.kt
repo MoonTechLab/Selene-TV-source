@@ -140,6 +140,11 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val epCount = episodes.size.coerceAtLeast(1)
     val hasNext = currentEpisode < epCount - 1
 
+    var segments by remember { mutableStateOf<List<org.moontechlab.selenetv.model.SkipSegment>>(emptyList()) }
+    val activeSegment = remember(segments, positionMs, durationMs) {
+        org.moontechlab.selenetv.service.IntroSkipService.pickActiveSegment(segments, positionMs, durationMs)
+    }
+
     fun wake() { controlsVisible = true; interactionTick++ }
 
     // 统一保存入口：仅在本源成功起播过（hasStarted）时才落记录——死链/未起播不存。
@@ -240,6 +245,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val scrubberFocus = remember { FocusRequester() }
     val panelTabFocus = remember { FocusRequester() }
     val speedPillFocus = remember { FocusRequester() }
+    val skipFocus = remember { FocusRequester() }
+    var skipFocused by remember { mutableStateOf(false) }
 
     // 首帧载入起播集（带进入时的续看位置）
     LaunchedEffect(Unit) {
@@ -252,6 +259,18 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             controller.syncProgress()
             kotlinx.coroutines.delay(500)
         }
+    }
+    // 每集拉取跳过段（best-effort，失败空列表）
+    LaunchedEffect(currentEpisode, currentSourceKey, launch.tmdbRef) {
+        val ref = launch.tmdbRef
+        segments = if (ref == null) emptyList()
+        else runCatching {
+            org.moontechlab.selenetv.service.IntroSkipService.fetchSegments(
+                ref,
+                currentEpisode + 1,
+                org.moontechlab.selenetv.service.DoubanCacheService.getInstance(context),
+            )
+        }.getOrDefault(emptyList())
     }
     // 10s 定时保存
     LaunchedEffect(currentEpisode, currentSourceKey) {
@@ -308,6 +327,20 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen) {
             kotlinx.coroutines.delay(AUTO_HIDE_MS)
             controlsVisible = false
+            try { (if (activeSegment != null) skipFocus else scrubberFocus).requestFocus() } catch (_: Exception) {}
+        }
+    }
+
+    // 控制条隐藏期间：段内→焦点借给跳过键，段外→还给进度条（重试以越过清焦延迟）
+    LaunchedEffect(activeSegment != null, controlsVisible) {
+        if (!controlsVisible) {
+            val target = if (activeSegment != null) skipFocus else scrubberFocus
+            repeat(5) {
+                try { target.requestFocus() } catch (_: Exception) {}
+                kotlinx.coroutines.delay(40)
+            }
+        } else if (activeSegment == null && skipFocused) {
+            // 控制条可见时段刚结束：焦点仍滞留在已移出的跳过键上 → 显式还给进度条
             try { scrubberFocus.requestFocus() } catch (_: Exception) {}
         }
     }
@@ -483,6 +516,37 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(),
         ) {
+            if (activeSegment != null) {
+                val seg = activeSegment
+                val label = when (seg.type) {
+                    org.moontechlab.selenetv.model.SkipType.INTRO -> "跳过片头"
+                    org.moontechlab.selenetv.model.SkipType.RECAP -> "跳过回顾"
+                    org.moontechlab.selenetv.model.SkipType.OUTRO -> "跳过片尾"
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(end = 56.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IntroSkipButton(
+                        label = label,
+                        focusRequester = skipFocus,
+                        speedPillFocus = speedPillFocus,
+                        controlsVisible = controlsVisible,
+                        onFocusChanged = { skipFocused = it },
+                        onSkip = {
+                            // 片头/回顾/片尾一律 seek 到本段末——片尾不在此跳下一集，
+                            // 是否续集交回「本集自然播完 onEnded→goNext」既有逻辑。
+                            controller.seekTo(minOf(seg.endMs, durationMs))
+                            wake()
+                            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
+                        },
+                        onWakeControls = {
+                            wake()
+                            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
+                        },
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -519,6 +583,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                                 onClick = { speedPopupOpen = true; wake() },
                                 focusRequester = speedPillFocus,
                                 scrubberFocus = scrubberFocus,
+                                upTarget = if (activeSegment != null) skipFocus else null,
                             )
                             // SpeedPopup 内部用 MutableTransitionState 跟踪进出态，
                             // 退场动画期间自行续命挂载——不再用外层 if 直接拆装

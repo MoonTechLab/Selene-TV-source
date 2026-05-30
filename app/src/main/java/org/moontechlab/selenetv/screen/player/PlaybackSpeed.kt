@@ -78,6 +78,7 @@ fun SpeedPill(
     onClick: () -> Unit,
     focusRequester: FocusRequester,
     scrubberFocus: FocusRequester,
+    upTarget: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -95,7 +96,7 @@ fun SpeedPill(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .focusProperties {
                 down = scrubberFocus
-                up = FocusRequester.Cancel
+                up = upTarget ?: FocusRequester.Cancel
                 left = FocusRequester.Cancel
                 right = FocusRequester.Cancel
             },

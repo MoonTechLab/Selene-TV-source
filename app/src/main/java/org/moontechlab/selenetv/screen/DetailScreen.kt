@@ -278,8 +278,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                             TmdbService.resolveArt(q, resp.data.year, key, doubanCacheService)
                         }
                     } else null
+                    val ref = if (key.isNotBlank()) {
+                        kotlinx.coroutines.withTimeoutOrNull(4000) {
+                            TmdbService.resolveMediaRef(q, resp.data.year, key, doubanCacheService)
+                        }
+                    } else null
                     ensureActive()
-                    state = state.copy(details = resp.data, tmdbArt = art, detailsLoading = false)
+                    state = state.copy(details = resp.data, tmdbArt = art, tmdbRef = ref, detailsLoading = false)
                 } else {
                     state = state.copy(details = resp.data, detailsLoading = false)
                 }
@@ -299,7 +304,12 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
                 TmdbService.resolveArt(q.originalTitle, q.year, key, doubanCacheService)
             }
         } else null
-        state = state.copy(tmdbArt = art, detailsLoading = false)
+        val ref = if (key.isNotBlank()) {
+            kotlinx.coroutines.withTimeoutOrNull(4000) {
+                TmdbService.resolveMediaRef(q.originalTitle, q.year, key, doubanCacheService)
+            }
+        } else null
+        state = state.copy(tmdbArt = art, tmdbRef = ref, detailsLoading = false)
     }
 
     // 拉播放记录
@@ -503,6 +513,7 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
             episodeIndex = epIndex,
             startPositionMs = startMs.coerceAtLeast(0),
             durationMs = if (totalMs > 0L) totalMs else 45 * 60 * 1000L,
+            tmdbRef = state.tmdbRef,
         )
     }
 
