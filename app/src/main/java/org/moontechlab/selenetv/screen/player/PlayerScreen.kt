@@ -427,6 +427,27 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             ctrlAlphaAnim.animateTo(if (controlsVisible) 1f else 0f, tween(if (controlsVisible) 220 else 280))
         }
     }
+    // 跳过按钮的显隐淡入淡出：与控制条同理走 fixedMotionScale 手动 Animatable（Dialog 窗口会拉伸默认动画时长）。
+    // 退场期间 activeSegment 已置空，故把上次的文案/段末位置记下来，撑住渲染直到 alpha 归零再消失。
+    val skipAlphaAnim = remember { androidx.compose.animation.core.Animatable(0f) }
+    var lastSkipLabel by remember { mutableStateOf("") }
+    var lastSkipEndMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(activeSegment) {
+        val s = activeSegment
+        if (s != null) {
+            lastSkipLabel = when (s.type) {
+                org.moontechlab.selenetv.model.SkipType.INTRO -> "跳过片头"
+                org.moontechlab.selenetv.model.SkipType.RECAP -> "跳过回顾"
+                org.moontechlab.selenetv.model.SkipType.OUTRO -> "跳过片尾"
+            }
+            lastSkipEndMs = s.endMs
+        }
+    }
+    LaunchedEffect(activeSegment != null) {
+        kotlinx.coroutines.withContext(fixedMotionScale) {
+            skipAlphaAnim.animateTo(if (activeSegment != null) 1f else 0f, tween(if (activeSegment != null) 220 else 200))
+        }
+    }
 
     Box(
         modifier = modifier
@@ -516,37 +537,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(),
         ) {
-            if (activeSegment != null) {
-                val seg = activeSegment
-                val label = when (seg.type) {
-                    org.moontechlab.selenetv.model.SkipType.INTRO -> "跳过片头"
-                    org.moontechlab.selenetv.model.SkipType.RECAP -> "跳过回顾"
-                    org.moontechlab.selenetv.model.SkipType.OUTRO -> "跳过片尾"
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(end = 56.dp, bottom = 12.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    IntroSkipButton(
-                        label = label,
-                        focusRequester = skipFocus,
-                        speedPillFocus = speedPillFocus,
-                        controlsVisible = controlsVisible,
-                        onFocusChanged = { skipFocused = it },
-                        onSkip = {
-                            // 片头/回顾/片尾一律 seek 到本段末——片尾不在此跳下一集，
-                            // 是否续集交回「本集自然播完 onEnded→goNext」既有逻辑。
-                            controller.seekTo(minOf(seg.endMs, durationMs))
-                            wake()
-                            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
-                        },
-                        onWakeControls = {
-                            wake()
-                            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
-                        },
-                    )
-                }
-            }
+            // 控制条 + 跳过按钮叠放层：跳过按钮浮在控制条之上（不再作为独立行把控制条整体顶高到半屏），
+            // 因而它不随控制条的 ctrlAlpha 淡出、常驻可见；垂直位置见下方浮层，随控制条显隐平滑迁移。
+            Box(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -651,6 +644,42 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(text = "详情 · 选集 · 换源", color = Color.White.copy(alpha = 0.35f), fontSize = 11.sp)
                         }
+                    }
+                }
+            }
+                // 跳过按钮浮层：垂直位置在「进度条高度（无控制条）↔ 略高于倍速按钮（有控制条）」间插值。
+                // 用与控制条淡入淡出同源的 ctrlAlpha 驱动 → 迁移的时长/曲线与控制条出现/消失完全一致。
+                // 面板展开时控制条内部整体下沉（底距 10→2、下拉提示 22→0，合计 30dp），故再按 panelReveal
+                // 同步下移，使按钮在面板开合时仍贴齐进度条/倍速按钮。两个端点常量按 1080p 设计稿可微调。
+                // 显隐走 skipAlphaAnim（fixedMotionScale 手动 Animatable）淡入淡出；退场期间用记住的文案/段末撑住渲染。
+                if (activeSegment != null || skipAlphaAnim.value > 0.001f) {
+                    val skipBottom =
+                        androidx.compose.ui.unit.lerp(54.dp, 140.dp, ctrlAlpha) - 30.dp * panelReveal.value
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .graphicsLayer { alpha = skipAlphaAnim.value }
+                            .padding(end = 56.dp, bottom = skipBottom),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        IntroSkipButton(
+                            label = lastSkipLabel,
+                            focusRequester = skipFocus,
+                            speedPillFocus = speedPillFocus,
+                            controlsVisible = controlsVisible,
+                            onFocusChanged = { skipFocused = it },
+                            onSkip = {
+                                // 片头/回顾/片尾一律 seek 到本段末——片尾不在此跳下一集，
+                                // 是否续集交回「本集自然播完 onEnded→goNext」既有逻辑。
+                                controller.seekTo(minOf(lastSkipEndMs, durationMs))
+                                wake()
+                                try { scrubberFocus.requestFocus() } catch (_: Exception) {}
+                            },
+                            onWakeControls = {
+                                wake()
+                                try { scrubberFocus.requestFocus() } catch (_: Exception) {}
+                            },
+                        )
                     }
                 }
             }

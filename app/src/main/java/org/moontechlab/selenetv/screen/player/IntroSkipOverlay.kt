@@ -51,8 +51,11 @@ fun IntroSkipButton(
     val focused by interactionSource.collectIsFocusedAsState()
     LaunchedEffect(focused) { onFocusChanged(focused) }
     val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "skip_scale")
-    val bg = if (focused) Color.White else Color.Black
-    val fg = if (focused) Color.Black else Color.White
+    // 未聚焦：与选集面板的集数按钮（EpisodeChip）同款玻璃拟态——白@0.07 底 / 透明边 / 白@0.95 字。
+    // 聚焦态维持原本的反色（白底黑字、无边）。
+    val bg = if (focused) Color.White else Color.White.copy(alpha = 0.07f)
+    val fg = if (focused) Color.Black else Color.White.copy(alpha = 0.95f)
+    val borderColor = Color.Transparent
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
@@ -73,7 +76,7 @@ fun IntroSkipButton(
                 }
             }
             .focusable(interactionSource = interactionSource)
-            .border(1.dp, if (focused) Color.Transparent else Color.White, RoundedCornerShape(6.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
             .background(bg, RoundedCornerShape(6.dp))
             .padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
