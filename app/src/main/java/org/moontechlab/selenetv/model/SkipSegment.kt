@@ -3,6 +3,7 @@ package org.moontechlab.selenetv.model
 import kotlinx.serialization.Serializable
 
 /** 跳过段类型。OUTRO 含片尾字幕 / 下集预告。 */
+@Serializable
 enum class SkipType { INTRO, RECAP, OUTRO }
 
 /**
