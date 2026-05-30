@@ -45,8 +45,8 @@ fun IntroSkipButton(
     onFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    // 焦点视觉一律从 interactionSource 派生（collectIsFocusedAsState），而非裸 onFocusChanged——
-    // 后者挂在本组件的 modifier 链上时不可靠（程序化 requestFocus 后 isFocused 不翻转，按钮恒显未聚焦态）。
+    // 焦点视觉从 interactionSource 派生（collectIsFocusedAsState，Material 标准做法），
+    // 而非裸 onFocusChanged——后者在本组件被程序化借焦的场景下不可靠。
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     LaunchedEffect(focused) { onFocusChanged(focused) }
