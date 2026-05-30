@@ -41,6 +41,7 @@ fun IntroSkipButton(
     controlsVisible: Boolean,
     onSkip: () -> Unit,
     onWakeControls: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -55,7 +56,7 @@ fun IntroSkipButton(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .focusRequester(focusRequester)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; onFocusChanged(it.isFocused) }
             .focusProperties {
                 down = speedPillFocus
                 up = FocusRequester.Cancel

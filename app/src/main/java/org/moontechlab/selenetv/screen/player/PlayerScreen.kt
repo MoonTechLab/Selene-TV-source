@@ -246,6 +246,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val panelTabFocus = remember { FocusRequester() }
     val speedPillFocus = remember { FocusRequester() }
     val skipFocus = remember { FocusRequester() }
+    var skipFocused by remember { mutableStateOf(false) }
 
     // 首帧载入起播集（带进入时的续看位置）
     LaunchedEffect(Unit) {
@@ -338,6 +339,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 try { target.requestFocus() } catch (_: Exception) {}
                 kotlinx.coroutines.delay(40)
             }
+        } else if (activeSegment == null && skipFocused) {
+            // 控制条可见时段刚结束：焦点仍滞留在已移出的跳过键上 → 显式还给进度条
+            try { scrubberFocus.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -528,6 +532,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         focusRequester = skipFocus,
                         speedPillFocus = speedPillFocus,
                         controlsVisible = controlsVisible,
+                        onFocusChanged = { skipFocused = it },
                         onSkip = {
                             if (seg.type == org.moontechlab.selenetv.model.SkipType.OUTRO && hasNext) {
                                 goNext()
