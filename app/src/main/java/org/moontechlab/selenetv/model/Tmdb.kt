@@ -15,3 +15,17 @@ data class TmdbArt(
     val backdropUrl: String? = null,
     val logoUrl: String? = null,
 )
+
+/**
+ * 解析后的 TMDB 媒体标识，供片头片尾取数用。
+ * @param mediaType "movie" 或 "tv"
+ * @param season 季号（从豆瓣原名后缀解析，无后缀=1）
+ * @param imdbId 仅 TV 解析；供 introdb.app（仅吃 imdb）补充用
+ */
+@Serializable
+data class TmdbMediaRef(
+    val mediaType: String,
+    val tmdbId: Long,
+    val season: Int,
+    val imdbId: String?,
+)
