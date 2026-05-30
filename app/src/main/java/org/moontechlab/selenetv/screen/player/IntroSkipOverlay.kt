@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.Text
@@ -45,14 +47,11 @@ fun IntroSkipButton(
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
     val scale by animateFloatAsState(if (focused) 1.03f else 1f, label = "skip_scale")
     val bg = if (focused) Color.White else Color.Black
     val fg = if (focused) Color.Black else Color.White
-    Text(
-        text = label,
-        color = fg,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.W600,
+    Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .focusRequester(focusRequester)
@@ -72,9 +71,16 @@ fun IntroSkipButton(
                     else -> false
                 }
             }
-            .focusable()
+            .focusable(interactionSource = interactionSource)
             .border(1.dp, if (focused) Color.Transparent else Color.White, RoundedCornerShape(6.dp))
             .background(bg, RoundedCornerShape(6.dp))
             .padding(horizontal = 20.dp, vertical = 10.dp),
-    )
+    ) {
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.W600,
+        )
+    }
 }
