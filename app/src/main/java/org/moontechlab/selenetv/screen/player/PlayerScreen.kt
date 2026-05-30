@@ -521,7 +521,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 val label = when (seg.type) {
                     org.moontechlab.selenetv.model.SkipType.INTRO -> "跳过片头"
                     org.moontechlab.selenetv.model.SkipType.RECAP -> "跳过回顾"
-                    org.moontechlab.selenetv.model.SkipType.OUTRO -> if (hasNext) "下一集" else "跳过片尾"
+                    org.moontechlab.selenetv.model.SkipType.OUTRO -> "跳过片尾"
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(end = 56.dp, bottom = 12.dp),
@@ -534,12 +534,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         controlsVisible = controlsVisible,
                         onFocusChanged = { skipFocused = it },
                         onSkip = {
-                            if (seg.type == org.moontechlab.selenetv.model.SkipType.OUTRO && hasNext) {
-                                goNext()
-                            } else {
-                                controller.seekTo(minOf(seg.endMs, durationMs))
-                                wake()
-                            }
+                            // 片头/回顾/片尾一律 seek 到本段末——片尾不在此跳下一集，
+                            // 是否续集交回「本集自然播完 onEnded→goNext」既有逻辑。
+                            controller.seekTo(minOf(seg.endMs, durationMs))
+                            wake()
                             try { scrubberFocus.requestFocus() } catch (_: Exception) {}
                         },
                         onWakeControls = {
