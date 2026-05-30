@@ -758,7 +758,9 @@ private fun PlayerScrubber(
                 // 返回键一律交给 BackHandler 处理：不在此唤醒控制条，否则会与「隐藏/退出」逻辑打架
                 if (e.key == Key.Back) return@onKeyEvent false
                 if (!controlsVisible) {
-                    if (e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter) onToggle() else onWake()
+                    // 与 Netflix 一致：无控制条时任意键（含 OK）只唤起控制条，不直接暂停，
+                    // 避免 OK 被「暂停」占用，为片头按钮预聚焦后的「OK=跳过」让路
+                    onWake()
                     return@onKeyEvent true
                 }
                 when (e.key) {
