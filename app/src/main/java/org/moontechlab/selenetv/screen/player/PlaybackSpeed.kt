@@ -79,6 +79,7 @@ fun SpeedPill(
     focusRequester: FocusRequester,
     scrubberFocus: FocusRequester,
     upTarget: FocusRequester? = null,
+    leftTarget: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -97,7 +98,7 @@ fun SpeedPill(
             .focusProperties {
                 down = scrubberFocus
                 up = upTarget ?: FocusRequester.Cancel
-                left = FocusRequester.Cancel
+                left = leftTarget ?: FocusRequester.Cancel
                 right = FocusRequester.Cancel
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),

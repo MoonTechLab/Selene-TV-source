@@ -130,6 +130,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var speedPopupOpen by remember { mutableStateOf(false) }
     LaunchedEffect(playbackSpeed) { controller.speed = playbackSpeed }
 
+    var resizeMode by remember { mutableStateOf(VideoResizeMode.FIT) }
+    var aspectPopupOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(resizeMode) { controller.resizeMode = resizeMode }
+
     // 播放状态全部来自播放器后端（VideoPlayer）
     val isPlaying = controller.isPlaying
     val positionMs = controller.positionMs
@@ -245,6 +249,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val scrubberFocus = remember { FocusRequester() }
     val panelTabFocus = remember { FocusRequester() }
     val speedPillFocus = remember { FocusRequester() }
+    val aspectPillFocus = remember { FocusRequester() }
     val skipFocus = remember { FocusRequester() }
     var skipFocused by remember { mutableStateOf(false) }
 
@@ -323,8 +328,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     // OSD 自动隐藏：播放中、面板未开、倍速弹窗未开、静止满 4s 即隐去
     // 隐藏时把焦点收回进度条——避免焦点遗留在 pill 等隐藏元素上，下次按键时唤起路径不可预测
-    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, interactionTick) {
-        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen) {
+    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, aspectPopupOpen, interactionTick) {
+        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen && !aspectPopupOpen) {
             kotlinx.coroutines.delay(AUTO_HIDE_MS)
             controlsVisible = false
             try { (if (activeSegment != null) skipFocus else scrubberFocus).requestFocus() } catch (_: Exception) {}
@@ -393,9 +398,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }
     }
     // 倍速弹窗自有 dismissOnBackPress（独立 Popup window），这里全线让位
-    BackHandler(enabled = panelOpen && !speedPopupOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen && controlsVisible && !speedPopupOpen) { controlsVisible = false }
-    BackHandler(enabled = !panelOpen && !controlsVisible && !speedPopupOpen) {
+    BackHandler(enabled = panelOpen && !speedPopupOpen && !aspectPopupOpen) { panelOpen = false }
+    BackHandler(enabled = !panelOpen && controlsVisible && !speedPopupOpen && !aspectPopupOpen) { controlsVisible = false }
+    BackHandler(enabled = !panelOpen && !controlsVisible && !speedPopupOpen && !aspectPopupOpen) {
         if (backExitArmed) {
             saveProgress(force = true)
             onExit()
@@ -571,12 +576,34 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Box {
+                            AspectRatioPill(
+                                currentMode = resizeMode,
+                                onClick = { speedPopupOpen = false; aspectPopupOpen = true; wake() },
+                                focusRequester = aspectPillFocus,
+                                scrubberFocus = scrubberFocus,
+                                rightTarget = speedPillFocus,
+                                upTarget = if (activeSegment != null) skipFocus else null,
+                            )
+                            AspectRatioPopup(
+                                open = aspectPopupOpen,
+                                currentMode = resizeMode,
+                                onSelect = {
+                                    resizeMode = it
+                                    aspectPopupOpen = false
+                                    wake()
+                                },
+                                onDismiss = { aspectPopupOpen = false },
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box {
                             SpeedPill(
                                 currentSpeed = playbackSpeed,
-                                onClick = { speedPopupOpen = true; wake() },
+                                onClick = { aspectPopupOpen = false; speedPopupOpen = true; wake() },
                                 focusRequester = speedPillFocus,
                                 scrubberFocus = scrubberFocus,
                                 upTarget = if (activeSegment != null) skipFocus else null,
+                                leftTarget = aspectPillFocus,
                             )
                             // SpeedPopup 内部用 MutableTransitionState 跟踪进出态，
                             // 退场动画期间自行续命挂载——不再用外层 if 直接拆装
@@ -606,7 +633,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         onFocused = { if (!routeContentUpToTab) panelOpen = false },
                         suppressActive = routeContentUpToTab,
                         focusRequester = scrubberFocus,
-                        upTarget = speedPillFocus,
+                        upTarget = aspectPillFocus,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -21,6 +21,8 @@ interface VideoPlayer {
     var onEnded: () -> Unit
     /** 播放倍速（1f=原速）。直播实现可忽略。 */
     var speed: Float
+    /** 画面缩放模式。直播实现可忽略，默认 FIT。 */
+    var resizeMode: VideoResizeMode
 
     fun load(url: String, startMs: Long, playWhenReady: Boolean = true)
     fun seekTo(ms: Long)
@@ -36,4 +38,10 @@ interface VideoPlayer {
     /** 视频画面：各实现自行渲染（Exo→PlayerView；MPV→SurfaceView）。 */
     @Composable
     fun VideoSurface(modifier: Modifier)
+}
+
+enum class VideoResizeMode {
+    FIT,   // 适应：保持比例，留黑边（默认）
+    ZOOM,  // 铺满：保持比例，裁剪填满
+    FILL,  // 拉伸：变形填满
 }

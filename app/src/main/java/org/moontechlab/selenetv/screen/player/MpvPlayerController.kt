@@ -60,6 +60,26 @@ class MpvPlayerController(
             if (!released) mpv.setPropertyString("speed", value.toString())
         }
 
+    override var resizeMode: VideoResizeMode = VideoResizeMode.FIT
+        set(value) {
+            field = value
+            if (released) return
+            when (value) {
+                VideoResizeMode.FIT -> {
+                    mpv.setPropertyString("keepaspect", "yes")
+                    mpv.setPropertyString("panscan", "0")
+                }
+                VideoResizeMode.ZOOM -> {
+                    mpv.setPropertyString("keepaspect", "yes")
+                    mpv.setPropertyString("panscan", "1.0")
+                }
+                VideoResizeMode.FILL -> {
+                    mpv.setPropertyString("keepaspect", "no")
+                    mpv.setPropertyString("panscan", "0")
+                }
+            }
+        }
+
     init {
         mpv.setOptionString("vo", "gpu")
         mpv.setOptionString("gpu-context", "android")

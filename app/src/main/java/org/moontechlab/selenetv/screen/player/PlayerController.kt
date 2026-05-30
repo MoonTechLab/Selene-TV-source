@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.MediaHttp
@@ -69,6 +70,20 @@ class PlayerController(
             field = value
             exo.setPlaybackSpeed(value)
         }
+
+    private var playerView: PlayerView? = null
+
+    override var resizeMode: VideoResizeMode = VideoResizeMode.FIT
+        set(value) {
+            field = value
+            playerView?.resizeMode = exoResizeMode(value)
+        }
+
+    private fun exoResizeMode(mode: VideoResizeMode): Int = when (mode) {
+        VideoResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        VideoResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        VideoResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    }
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
@@ -130,8 +145,11 @@ class PlayerController(
                         useController = false
                         player = exo
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        resizeMode = exoResizeMode(this@PlayerController.resizeMode)
                     }
+                    .also { playerView = it }
             },
+            onRelease = { playerView = null },
             modifier = modifier,
         )
     }
