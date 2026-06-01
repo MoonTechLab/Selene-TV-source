@@ -35,6 +35,7 @@ object AppDataService {
     private const val KEY_SKIPPED_VERSION = "skipped_version"
     private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
     private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"
+    private const val KEY_DANMAKU_SOURCES = "danmaku_sources"   // 启用源 key 的 CSV
 
     private lateinit var prefs: SharedPreferences
 
@@ -49,6 +50,10 @@ object AppDataService {
     @Volatile
     private var danmakuEnabledCache: Boolean = false
 
+    // 启用的弹幕源 key 集合缓存（同步读，供播放页并发拉取用）
+    @Volatile
+    private var danmakuSourcesCache: Set<String> = org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
+
     /**
      * 初始化服务，需要在 Application 中调用
      */
@@ -56,6 +61,9 @@ object AppDataService {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
         danmakuEnabledCache = prefs.getBoolean(KEY_DANMAKU_ENABLED, false)
+        danmakuSourcesCache = prefs.getString(KEY_DANMAKU_SOURCES, null)
+            ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+            ?: org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
         // 每次启动生成新的 session token
         generateSessionToken()
     }
@@ -221,6 +229,19 @@ object AppDataService {
 
     /** 同步读，零阻塞；供播放页初始化弹幕开关用。 */
     fun isDanmakuEnabledSync(): Boolean = danmakuEnabledCache
+
+    /** 同步读启用的弹幕源 key 集合（供播放页并发拉取用）。 */
+    fun getEnabledDanmakuSourcesSync(): Set<String> = danmakuSourcesCache
+
+    /** 启用/禁用某弹幕源；同步更新内存缓存，按注册表顺序持久化。 */
+    suspend fun setDanmakuSourceEnabled(key: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+        val next = danmakuSourcesCache.toMutableSet().apply { if (enabled) add(key) else remove(key) }
+        // 按注册表顺序写出，便于阅读
+        val ordered = org.moontechlab.selenetv.service.danmaku.DanmakuSources.ALL
+            .map { it.key }.filter { it in next }
+        prefs.edit().putString(KEY_DANMAKU_SOURCES, ordered.joinToString(",")).apply()
+        danmakuSourcesCache = ordered.toSet()
+    }
 
     // ==================== 豆瓣数据源设置 ====================
 

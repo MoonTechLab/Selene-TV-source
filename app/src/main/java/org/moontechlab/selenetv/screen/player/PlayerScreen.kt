@@ -149,11 +149,20 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         org.moontechlab.selenetv.service.IntroSkipService.pickActiveSegment(segments, positionMs, durationMs)
     }
 
-    // 弹幕（Phase 0：B站源，best-effort）。开关由设置项 danmakuEnabled 控制。
+    // 弹幕（Phase 2：多源聚合，形态 C）。开关由设置项 danmakuEnabled 控制。
+    // 进页/切集只并发跑 search 得命中源（danmakuMatches），弹幕正文按选中源（selectedDanmakuKey）按需拉取，
+    // 已拉取的按 key 存内存（danmakuCommentsByKey，每集重建），切源零延迟。
     var danmakuEnabled by remember { mutableStateOf(org.moontechlab.selenetv.service.AppDataService.isDanmakuEnabledSync()) }
-    var danmakuComments by remember {
-        mutableStateOf<List<org.moontechlab.selenetv.model.DanmakuComment>>(emptyList())
+    var danmakuMatches by remember {
+        mutableStateOf<List<org.moontechlab.selenetv.service.DanmakuService.SourceMatch>>(emptyList())
     }
+    var selectedDanmakuKey by remember { mutableStateOf<String?>(null) }
+    // 每集重建：key → 该源已拉取的弹幕列表
+    val danmakuCommentsByKey = remember(currentEpisode) {
+        androidx.compose.runtime.mutableStateMapOf<String, List<org.moontechlab.selenetv.model.DanmakuComment>>()
+    }
+    val danmakuComments = danmakuCommentsByKey[selectedDanmakuKey] ?: emptyList()
+    var danmakuPopupOpen by remember { mutableStateOf(false) }
 
     fun wake() { controlsVisible = true; interactionTick++ }
 
@@ -256,6 +265,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val panelTabFocus = remember { FocusRequester() }
     val speedPillFocus = remember { FocusRequester() }
     val aspectPillFocus = remember { FocusRequester() }
+    val danmakuPillFocus = remember { FocusRequester() }
     val skipFocus = remember { FocusRequester() }
     var skipFocused by remember { mutableStateOf(false) }
 
@@ -283,16 +293,40 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             )
         }.getOrDefault(emptyList())
     }
-    // 每集拉取弹幕（best-effort，失败空列表）。仅在开启时拉取。
-    LaunchedEffect(currentEpisode, currentSourceKey, danmakuEnabled) {
-        danmakuComments = if (!danmakuEnabled) emptyList()
-        else runCatching {
-            org.moontechlab.selenetv.service.DanmakuService.fetch(
-                context,
-                launch.title,
-                currentEpisode + 1,
-            )
+    // 每集：并发跑 search 得命中源（轻量），默认渲染优先级最高的命中源（拉它一个的弹幕）。
+    // 不依赖 currentSourceKey——弹幕认的是剧名，不随换视频源变。
+    LaunchedEffect(currentEpisode, danmakuEnabled) {
+        if (!danmakuEnabled) {
+            danmakuMatches = emptyList()
+            selectedDanmakuKey = null
+            danmakuCommentsByKey.clear()
+            return@LaunchedEffect
+        }
+        val matches = runCatching {
+            org.moontechlab.selenetv.service.DanmakuService.probe(context, launch.title)
         }.getOrDefault(emptyList())
+        danmakuMatches = matches
+        val default = matches.firstOrNull()
+        selectedDanmakuKey = default?.key
+        if (default != null && danmakuCommentsByKey[default.key] == null) {
+            val list = runCatching {
+                org.moontechlab.selenetv.service.DanmakuService.fetchComments(context, default, currentEpisode + 1)
+            }.getOrDefault(emptyList())
+            danmakuCommentsByKey[default.key] = list
+        }
+    }
+    // 切换弹幕源：选中并按需拉取该源弹幕（已拉过则零延迟）。
+    fun selectDanmakuSource(key: String) {
+        selectedDanmakuKey = key
+        if (danmakuCommentsByKey[key] != null) return
+        val match = danmakuMatches.firstOrNull { it.key == key } ?: return
+        val ep = currentEpisode
+        scope.launch {
+            val list = runCatching {
+                org.moontechlab.selenetv.service.DanmakuService.fetchComments(context, match, ep + 1)
+            }.getOrDefault(emptyList())
+            danmakuCommentsByKey[key] = list
+        }
     }
     // 10s 定时保存
     LaunchedEffect(currentEpisode, currentSourceKey) {
@@ -345,8 +379,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     // OSD 自动隐藏：播放中、面板未开、倍速弹窗未开、静止满 4s 即隐去
     // 隐藏时把焦点收回进度条——避免焦点遗留在 pill 等隐藏元素上，下次按键时唤起路径不可预测
-    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, aspectPopupOpen, interactionTick) {
-        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen && !aspectPopupOpen) {
+    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, aspectPopupOpen, danmakuPopupOpen, interactionTick) {
+        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen && !aspectPopupOpen && !danmakuPopupOpen) {
             kotlinx.coroutines.delay(AUTO_HIDE_MS)
             controlsVisible = false
             try { (if (activeSegment != null) skipFocus else scrubberFocus).requestFocus() } catch (_: Exception) {}
@@ -414,10 +448,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             backExitArmed = false
         }
     }
-    // 倍速弹窗自有 dismissOnBackPress（独立 Popup window），这里全线让位
-    BackHandler(enabled = panelOpen && !speedPopupOpen && !aspectPopupOpen) { panelOpen = false }
-    BackHandler(enabled = !panelOpen && controlsVisible && !speedPopupOpen && !aspectPopupOpen) { controlsVisible = false }
-    BackHandler(enabled = !panelOpen && !controlsVisible && !speedPopupOpen && !aspectPopupOpen) {
+    // 倍速/比例/弹幕源弹窗自有 dismissOnBackPress（独立 Popup window），这里全线让位
+    BackHandler(enabled = panelOpen && !speedPopupOpen && !aspectPopupOpen && !danmakuPopupOpen) { panelOpen = false }
+    BackHandler(enabled = !panelOpen && controlsVisible && !speedPopupOpen && !aspectPopupOpen && !danmakuPopupOpen) { controlsVisible = false }
+    BackHandler(enabled = !panelOpen && !controlsVisible && !speedPopupOpen && !aspectPopupOpen && !danmakuPopupOpen) {
         if (backExitArmed) {
             saveProgress(force = true)
             onExit()
@@ -604,13 +638,42 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(modifier = Modifier.width(16.dp))
+                        // 弹幕源胶囊：仅当有命中源时挂载，置于画面比例左侧。
+                        val danmakuPillShown = danmakuEnabled && danmakuMatches.isNotEmpty()
+                        if (danmakuPillShown) {
+                            Box {
+                                DanmakuSourcePill(
+                                    currentLabel = org.moontechlab.selenetv.service.danmaku.DanmakuSources
+                                        .displayOf(selectedDanmakuKey ?: danmakuMatches.first().key),
+                                    onClick = { speedPopupOpen = false; aspectPopupOpen = false; danmakuPopupOpen = true; wake() },
+                                    focusRequester = danmakuPillFocus,
+                                    scrubberFocus = scrubberFocus,
+                                    rightTarget = aspectPillFocus,
+                                    upTarget = if (activeSegment != null) skipFocus else null,
+                                )
+                                DanmakuSourcePopup(
+                                    open = danmakuPopupOpen,
+                                    matches = danmakuMatches,
+                                    currentKey = selectedDanmakuKey,
+                                    counts = danmakuMatches.associate { it.key to danmakuCommentsByKey[it.key]?.size },
+                                    onSelect = {
+                                        selectDanmakuSource(it)
+                                        danmakuPopupOpen = false
+                                        wake()
+                                    },
+                                    onDismiss = { danmakuPopupOpen = false },
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Box {
                             AspectRatioPill(
                                 currentMode = resizeMode,
-                                onClick = { speedPopupOpen = false; aspectPopupOpen = true; wake() },
+                                onClick = { speedPopupOpen = false; danmakuPopupOpen = false; aspectPopupOpen = true; wake() },
                                 focusRequester = aspectPillFocus,
                                 scrubberFocus = scrubberFocus,
                                 rightTarget = speedPillFocus,
+                                leftTarget = if (danmakuPillShown) danmakuPillFocus else null,
                                 upTarget = if (activeSegment != null) skipFocus else null,
                             )
                             AspectRatioPopup(
@@ -628,7 +691,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         Box {
                             SpeedPill(
                                 currentSpeed = playbackSpeed,
-                                onClick = { aspectPopupOpen = false; speedPopupOpen = true; wake() },
+                                onClick = { aspectPopupOpen = false; danmakuPopupOpen = false; speedPopupOpen = true; wake() },
                                 focusRequester = speedPillFocus,
                                 scrubberFocus = scrubberFocus,
                                 upTarget = if (activeSegment != null) skipFocus else null,

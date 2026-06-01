@@ -84,6 +84,7 @@ fun AspectRatioPill(
     focusRequester: FocusRequester,
     scrubberFocus: FocusRequester,
     rightTarget: FocusRequester,
+    leftTarget: FocusRequester? = null,
     upTarget: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -103,7 +104,7 @@ fun AspectRatioPill(
             .focusProperties {
                 down = scrubberFocus
                 up = upTarget ?: FocusRequester.Cancel
-                left = FocusRequester.Cancel
+                left = leftTarget ?: FocusRequester.Cancel
                 right = rightTarget
             },
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),

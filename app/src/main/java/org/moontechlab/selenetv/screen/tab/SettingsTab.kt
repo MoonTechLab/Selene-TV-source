@@ -188,6 +188,10 @@ fun SettingsTab(
 
     var isLocalMode by remember { mutableStateOf(AppDataService.isLocalModeSync()) }
     var danmakuEnabled by remember { mutableStateOf(AppDataService.isDanmakuEnabledSync()) }
+    // 弹幕源启用集合（多选）
+    var enabledDanmakuSources by remember { mutableStateOf(AppDataService.getEnabledDanmakuSourcesSync()) }
+    var showDanmakuSourcesDialog by remember { mutableStateOf(false) }
+    val danmakuSourcesFocusRequester = remember { FocusRequester() }
     var subscriptionUrl by remember { mutableStateOf("") }
 
     // 本地模式分区相关弹框状态
@@ -416,16 +420,23 @@ fun SettingsTab(
                     onClick = { showDecodeModeDialog = true },
                     modifier = Modifier.focusRequester(decodeModeFocusRequester)
                 )
-                // 弹幕开关（Phase 0：B站源，点播生效）
+                // 弹幕开关（Phase 2：多源聚合，点播生效）
                 SettingRow(
                     label = "弹幕",
                     value = if (danmakuEnabled) "开" else "关",
-                    showDivider = false,
                     onClick = {
                         val next = !danmakuEnabled
                         danmakuEnabled = next
                         coroutineScope.launch { AppDataService.setDanmakuEnabled(next) }
                     },
+                )
+                // 弹幕源多选（进播放页并发 search，命中源进「弹幕源」chip）
+                SettingRow(
+                    label = "弹幕源",
+                    value = "${enabledDanmakuSources.size} 个已启用",
+                    showDivider = false,
+                    onClick = { showDanmakuSourcesDialog = true },
+                    modifier = Modifier.focusRequester(danmakuSourcesFocusRequester),
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -638,6 +649,23 @@ fun SettingsTab(
                 onClose()
             },
             onDismiss = onClose
+        )
+    }
+
+    // 弹幕源多选弹框
+    AnimatedSelectDialog(
+        visible = showDanmakuSourcesDialog,
+        onDismiss = { showDanmakuSourcesDialog = false },
+        onClosed = { danmakuSourcesFocusRequester.requestFocus() }
+    ) { _ ->
+        DanmakuSourceSelectDialogContent(
+            enabled = enabledDanmakuSources,
+            onToggle = { key ->
+                val on = key !in enabledDanmakuSources
+                enabledDanmakuSources = enabledDanmakuSources.toMutableSet()
+                    .apply { if (on) add(key) else remove(key) }
+                coroutineScope.launch { AppDataService.setDanmakuSourceEnabled(key, on) }
+            },
         )
     }
 
@@ -1009,6 +1037,53 @@ private fun IpSelectDialogContent(
 /**
  * 通用源选择弹框内容
  */
+@Composable
+private fun DanmakuSourceSelectDialogContent(
+    enabled: Set<String>,
+    onToggle: (String) -> Unit,
+) {
+    val firstItemFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(100)
+        runCatching { firstItemFocusRequester.requestFocus() }
+    }
+    Column(
+        modifier = Modifier
+            .width(450.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1A1A1A))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = "弹幕源", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextDefault)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "进播放页并发搜索，命中源进「弹幕源」切换；一次只渲染一个源",
+            fontSize = 12.sp,
+            color = TextDefault.copy(alpha = 0.5f),
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            org.moontechlab.selenetv.service.danmaku.DanmakuSources.ALL.forEachIndexed { index, def ->
+                SourceSelectItem(
+                    text = def.display,
+                    isSelected = def.key in enabled,
+                    onClick = { onToggle(def.key) },
+                    modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
+                )
+                if (index < org.moontechlab.selenetv.service.danmaku.DanmakuSources.ALL.lastIndex) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SourceSelectDialogContent(
     title: String,
