@@ -35,6 +35,7 @@ class BilibiliDanmakuSource : DanmakuSource {
         const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         const val REFERER = "https://www.bilibili.com/"
+        const val MAX_SEGMENTS = 100   // 每段约 6 分钟 → 上限 ~10 小时，防失控
     }
 
     @Volatile private var buvidCookie: String? = null
@@ -126,14 +127,35 @@ class BilibiliDanmakuSource : DanmakuSource {
 
     // ──────────────────────── getComments ────────────────────────
 
-    /** /x/v1/dm/list.so?oid={cid} → deflate 压缩 XML → inflate → 解析。 */
+    /**
+     * 取全量弹幕。主路径：新版分段 protobuf `x/v2/dm/web/seg.so?type=1&oid=cid&segment_index=N`
+     * （每段约 6 分钟，逐段累加直到空段）。兜底：旧版 `x/v1/dm/list.so`（deflate XML）。
+     */
     override fun getComments(episodeId: String): List<DanmakuComment> {
         val cid = episodeId.toLongOrNull() ?: return emptyList()
-        return runCatching {
-            val bytes = httpGetBytes("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid")
-            val xml = inflateDanmaku(bytes)
-            BiliDanmaku.parseXml(xml)
-        }.getOrDefault(emptyList()).also { Log.i(TAG, "getComments cid=$cid -> ${it.size} 条弹幕") }
+        val all = ArrayList<DanmakuComment>()
+        runCatching {
+            var seg = 1
+            while (seg <= MAX_SEGMENTS) {
+                val bytes = httpGetBytes(
+                    "https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid=$cid&segment_index=$seg"
+                )
+                if (bytes.isEmpty()) break          // 段越界 → 非 2xx → 空字节 → 结束
+                val part = BiliDmProto.parseSegment(bytes)
+                if (part.isEmpty()) break
+                all += part
+                seg++
+            }
+        }
+        if (all.isEmpty()) {
+            // seg.so 偶发为空（部分内容需登录态）→ 退回旧版 XML
+            runCatching {
+                val xml = inflateDanmaku(httpGetBytes("https://api.bilibili.com/x/v1/dm/list.so?oid=$cid"))
+                all += BiliDanmaku.parseXml(xml)
+            }
+        }
+        Log.i(TAG, "getComments cid=$cid -> ${all.size} 条弹幕")
+        return all
     }
 
     /** dm/list.so 是 raw deflate（nowrap）。失败则退化按 zlib/明文尝试。 */
