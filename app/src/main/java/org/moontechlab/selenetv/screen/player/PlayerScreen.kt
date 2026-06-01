@@ -288,9 +288,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         danmakuComments = if (!danmakuEnabled) emptyList()
         else runCatching {
             org.moontechlab.selenetv.service.DanmakuService.fetch(
+                context,
                 launch.title,
                 currentEpisode + 1,
-                org.moontechlab.selenetv.service.DoubanCacheService.getInstance(context),
             )
         }.getOrDefault(emptyList())
     }

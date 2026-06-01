@@ -1,5 +1,6 @@
 package org.moontechlab.selenetv.service.danmaku
 
+import kotlinx.serialization.Serializable
 import org.moontechlab.selenetv.model.DanmakuComment
 
 /**
@@ -25,6 +26,7 @@ interface DanmakuSource {
 }
 
 /** 搜索结果候选。type: tvseries / movie / ova / web（信息性，便于匹配排序）。 */
+@Serializable
 data class DanmakuMedia(
     val provider: String,
     val mediaId: String,
@@ -36,6 +38,7 @@ data class DanmakuMedia(
 )
 
 /** 分集。episodeIndex 从 1 开始。 */
+@Serializable
 data class DanmakuEpisode(
     val provider: String,
     val episodeId: String,

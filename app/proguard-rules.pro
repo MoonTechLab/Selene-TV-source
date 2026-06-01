@@ -32,6 +32,15 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
+# 弹幕源 DTO（service.danmaku 包内的 @Serializable，JS 桥接反序列化用）
+-keep,includedescriptorclasses class org.moontechlab.selenetv.service.danmaku.**$$serializer { *; }
+-keepclassmembers class org.moontechlab.selenetv.service.danmaku.** {
+    *** Companion;
+}
+-keepclasseswithmembers class org.moontechlab.selenetv.service.danmaku.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
 # ---- OkHttp ----
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.conscrypt.**
@@ -59,3 +68,9 @@
 # ---- akdanmaku 弹幕引擎 ----
 -keep class com.kuaishou.akdanmaku.** { *; }
 -dontwarn com.kuaishou.akdanmaku.**
+
+# ---- Rhino 脚本引擎 ----
+-keep class org.mozilla.javascript.** { *; }
+-dontwarn org.mozilla.javascript.**
+# 宿主桥接：方法经 Rhino LiveConnect 反射调用，不可混淆/裁剪
+-keep class org.moontechlab.selenetv.service.danmaku.DanmakuHostBridge { *; }

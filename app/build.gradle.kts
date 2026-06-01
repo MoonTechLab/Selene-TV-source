@@ -123,6 +123,9 @@ dependencies {
     // 弹幕渲染引擎（开源，OpenGL，纯 Kotlin 无 .so）
     implementation("com.kuaishou:akdanmaku:1.0.3")
 
+    // 弹幕源脚本引擎（Rhino 解释模式，纯 JVM 无 .so；弹幕抓取策略以 JS 脚本下发）
+    implementation("org.mozilla:rhino-runtime:1.7.14")
+
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")
     implementation("io.ktor:ktor-server-netty:2.3.12")

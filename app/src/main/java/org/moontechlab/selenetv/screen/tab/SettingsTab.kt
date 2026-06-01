@@ -173,10 +173,12 @@ fun SettingsTab(
     // 缓存清理确认弹框状态
     var showClearDoubanCacheDialog by remember { mutableStateOf(false) }
     var showClearSearchCacheDialog by remember { mutableStateOf(false) }
+    var showClearDanmakuCacheDialog by remember { mutableStateOf(false) }
 
     // 缓存按钮 FocusRequester
     val clearDoubanCacheFocusRequester = remember { FocusRequester() }
     val clearSearchCacheFocusRequester = remember { FocusRequester() }
+    val clearDanmakuCacheFocusRequester = remember { FocusRequester() }
 
     // 手动检查更新状态
     var manualUpdateInfo by remember { mutableStateOf<org.moontechlab.selenetv.model.UpdateInfo?>(null) }
@@ -439,9 +441,15 @@ fun SettingsTab(
                 SettingRow(
                     label = "清空搜索缓存",
                     accent = RowAccent.Orange,
-                    showDivider = false,
                     onClick = { showClearSearchCacheDialog = true },
                     modifier = Modifier.focusRequester(clearSearchCacheFocusRequester)
+                )
+                SettingRow(
+                    label = "清空弹幕缓存",
+                    accent = RowAccent.Orange,
+                    showDivider = false,
+                    onClick = { showClearDanmakuCacheDialog = true },
+                    modifier = Modifier.focusRequester(clearDanmakuCacheFocusRequester)
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -729,6 +737,26 @@ fun SettingsTab(
                 coroutineScope.launch {
                     SearchCacheService.clearCache()
                     org.moontechlab.selenetv.ui.MoonToast.show("搜索缓存已清空")
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 清空弹幕缓存确认弹框
+    AnimatedSelectDialog(
+        visible = showClearDanmakuCacheDialog,
+        onDismiss = { showClearDanmakuCacheDialog = false },
+        onClosed = { clearDanmakuCacheFocusRequester.requestFocus() }
+    ) { onClose ->
+        ConfirmDialogContent(
+            title = "清空弹幕缓存",
+            message = "确定要清空所有弹幕缓存数据吗？",
+            onConfirm = {
+                coroutineScope.launch {
+                    org.moontechlab.selenetv.service.DanmakuService.clearCache(context)
+                    org.moontechlab.selenetv.ui.MoonToast.show("弹幕缓存已清空")
                 }
                 onClose()
             },
