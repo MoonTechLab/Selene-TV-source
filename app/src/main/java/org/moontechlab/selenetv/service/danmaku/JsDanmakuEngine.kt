@@ -29,9 +29,32 @@ class JsDanmakuEngine(scriptSource: String, scriptName: String, bridge: DanmakuH
             cx.languageVersion = RhinoContext.VERSION_ES6
             val s = cx.initStandardObjects()
             val host = cx.newObject(s)
+            // HTTP
             host.put("httpGet", host, fn { a -> bridge.httpGet(str(a, 0), strOrNull(a, 1)) })
+            host.put("httpGetGbk", host, fn { a -> bridge.httpGetGbk(str(a, 0), strOrNull(a, 1)) })
+            host.put("httpPost", host, fn { a -> bridge.httpPost(str(a, 0), strOrNull(a, 1), strOrNull(a, 2)) })
+            host.put("httpGetBytes", host, fn { a -> bridge.httpGetBytes(str(a, 0), strOrNull(a, 1)) })
+            host.put("httpGetFull", host, fn { a -> bridge.httpGetFull(str(a, 0), strOrNull(a, 1)) })
+            host.put("httpPostFull", host, fn { a -> bridge.httpPostFull(str(a, 0), strOrNull(a, 1), strOrNull(a, 2)) })
+            host.put("cookie", host, fn { a -> bridge.cookie(str(a, 0), str(a, 1)) })
+            // 弹幕（B站）
             host.put("fetchDanmakuSeg", host, fn { a -> bridge.fetchDanmakuSeg(str(a, 0), strOrNull(a, 1)) })
             host.put("fetchDanmakuXml", host, fn { a -> bridge.fetchDanmakuXml(str(a, 0), strOrNull(a, 1)) })
+            // 解压
+            host.put("inflate", host, fn { a -> bridge.inflate(str(a, 0), bool(a, 1)) })
+            host.put("gunzip", host, fn { a -> bridge.gunzip(str(a, 0)) })
+            // 哈希 / 加密
+            host.put("md5", host, fn { a -> bridge.md5(str(a, 0)) })
+            host.put("sha1", host, fn { a -> bridge.sha1(str(a, 0)) })
+            host.put("hmac", host, fn { a -> bridge.hmac(str(a, 0), str(a, 1), str(a, 2)) })
+            host.put("hmacBase64", host, fn { a -> bridge.hmacBase64(str(a, 0), str(a, 1), str(a, 2)) })
+            host.put("aesEcbDecrypt", host, fn { a -> bridge.aesEcbDecrypt(str(a, 0), str(a, 1)) })
+            host.put("aesCbcDecrypt", host, fn { a -> bridge.aesCbcDecrypt(str(a, 0), str(a, 1), str(a, 2)) })
+            host.put("aesCbcDecryptNoPad", host, fn { a -> bridge.aesCbcDecryptNoPad(str(a, 0), str(a, 1), str(a, 2)) })
+            host.put("aesCbcEncrypt", host, fn { a -> bridge.aesCbcEncrypt(str(a, 0), str(a, 1), str(a, 2)) })
+            host.put("b64decode", host, fn { a -> bridge.b64decode(str(a, 0)) })
+            host.put("b64encode", host, fn { a -> bridge.b64encode(str(a, 0)) })
+            host.put("protoDecode", host, fn { a -> bridge.protoDecode(str(a, 0)) })
             host.put("log", host, fn { a -> bridge.log(str(a, 0)); Undefined.instance })
             ScriptableObject.putProperty(s, "host", host)
             cx.evaluateString(s, scriptSource, scriptName, 1, null)
@@ -71,4 +94,7 @@ class JsDanmakuEngine(scriptSource: String, scriptName: String, bridge: DanmakuH
         val v = args[i]
         return if (v == null || v is Undefined) null else ScriptRuntime.toString(v)
     }
+
+    private fun bool(args: Array<out Any?>, i: Int): Boolean =
+        if (i < args.size) ScriptRuntime.toBoolean(args[i]) else false
 }

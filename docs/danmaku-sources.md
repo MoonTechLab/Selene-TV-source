@@ -6,6 +6,14 @@
 > **校验状态**：`bilibili` 已在本项目实测打通；其余源端点为 strings 提取，**参数细节（尤其签名、分段边界）需抓包或进一步反向确认后再落地**——文档内已标注。
 > 版本对应 misaka 资源仓库 `linux-x86/versions.json`（提取于 2026-06-01）。
 
+> **实现状态**（`app/src/main/assets/danmaku/*.js`，截至 2026-06-02，共 15 源全部落地脚本）：
+> - ✅ **已实现并实测**：bilibili
+> - ✅ **已实现（逆向，待真机首跑核对）**：tencent / iqiyi / youku / mgtv / sohu / le / xigua / renren
+> - ✅ **已实现·hanjutv**：curl 真打验证（出口东京），ES5 移植；HXQ 明文 + TV 加密两路合并
+> - 🟡 **best-effort（端点已逆，未抓包）**：ezdmw（HTML 正则 + getData XML；sign/nk 抽取为推断，失败安全返空）
+> - ⛔ **骨架占位（阻塞，契约函数返 []）**：mddcloud（jsonSign 私钥签名未逆）/ migu（WASM 网关签名）/ gamer（Cloudflare 盾需 FlareSolverr）/ dandanplay（需 AppId 签名，华语覆盖近零）
+> - 注：脚本均已就位但**尚未接入 `DanmakuService` 的源选择/聚合**（仍硬编码 bilibili），待 Phase 2 远程下发 + 多源聚合后启用。
+
 ## 0. 统一约定
 
 所有源最终归一到本项目的契约（见 `service/danmaku/DanmakuSource.kt`）：
