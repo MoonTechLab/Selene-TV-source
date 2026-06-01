@@ -34,6 +34,7 @@ object AppDataService {
     private const val KEY_IS_LOCAL_MODE = "is_local_mode"
     private const val KEY_SKIPPED_VERSION = "skipped_version"
     private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
+    private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"
 
     private lateinit var prefs: SharedPreferences
 
@@ -44,12 +45,17 @@ object AppDataService {
     @Volatile
     private var isLocalModeCache: Boolean = false
 
+    // 弹幕开关缓存（同步读，供播放页初始化用）
+    @Volatile
+    private var danmakuEnabledCache: Boolean = false
+
     /**
      * 初始化服务，需要在 Application 中调用
      */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
+        danmakuEnabledCache = prefs.getBoolean(KEY_DANMAKU_ENABLED, false)
         // 每次启动生成新的 session token
         generateSessionToken()
     }
@@ -204,6 +210,17 @@ object AppDataService {
 
     /** 同步读，零阻塞；`init()` 时预热缓存。 */
     fun isLocalModeSync(): Boolean = isLocalModeCache
+
+    // ==================== 弹幕设置 ====================
+
+    /** 保存弹幕开关；同步更新内存缓存。 */
+    suspend fun setDanmakuEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit().putBoolean(KEY_DANMAKU_ENABLED, enabled).apply()
+        danmakuEnabledCache = enabled
+    }
+
+    /** 同步读，零阻塞；供播放页初始化弹幕开关用。 */
+    fun isDanmakuEnabledSync(): Boolean = danmakuEnabledCache
 
     // ==================== 豆瓣数据源设置 ====================
 

@@ -149,6 +149,12 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         org.moontechlab.selenetv.service.IntroSkipService.pickActiveSegment(segments, positionMs, durationMs)
     }
 
+    // 弹幕（Phase 0：B站源，best-effort）。开关由设置项 danmakuEnabled 控制。
+    var danmakuEnabled by remember { mutableStateOf(org.moontechlab.selenetv.service.AppDataService.isDanmakuEnabledSync()) }
+    var danmakuComments by remember {
+        mutableStateOf<List<org.moontechlab.selenetv.model.DanmakuComment>>(emptyList())
+    }
+
     fun wake() { controlsVisible = true; interactionTick++ }
 
     // 统一保存入口：仅在本源成功起播过（hasStarted）时才落记录——死链/未起播不存。
@@ -272,6 +278,17 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         else runCatching {
             org.moontechlab.selenetv.service.IntroSkipService.fetchSegments(
                 ref,
+                currentEpisode + 1,
+                org.moontechlab.selenetv.service.DoubanCacheService.getInstance(context),
+            )
+        }.getOrDefault(emptyList())
+    }
+    // 每集拉取弹幕（best-effort，失败空列表）。仅在开启时拉取。
+    LaunchedEffect(currentEpisode, currentSourceKey, danmakuEnabled) {
+        danmakuComments = if (!danmakuEnabled) emptyList()
+        else runCatching {
+            org.moontechlab.selenetv.service.DanmakuService.fetch(
+                launch.title,
                 currentEpisode + 1,
                 org.moontechlab.selenetv.service.DoubanCacheService.getInstance(context),
             )
@@ -476,6 +493,18 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     ) {
 
         controller.VideoSurface(Modifier.fillMaxSize())
+
+        // 弹幕层：叠在画面之上、压暗/控制条之下。
+        if (danmakuEnabled && danmakuComments.isNotEmpty()) {
+            DanmakuOverlay(
+                comments = danmakuComments,
+                positionMs = positionMs,
+                isPlaying = isPlaying,
+                speed = playbackSpeed,
+                visible = danmakuEnabled,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
         // 面板打开时压暗画面（手动 Animatable，scale=1，见上方说明）
         val dim = dimAnim.value

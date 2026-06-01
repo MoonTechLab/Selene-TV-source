@@ -185,6 +185,7 @@ fun SettingsTab(
     val checkUpdateFocusRequester = remember { FocusRequester() }
 
     var isLocalMode by remember { mutableStateOf(AppDataService.isLocalModeSync()) }
+    var danmakuEnabled by remember { mutableStateOf(AppDataService.isDanmakuEnabledSync()) }
     var subscriptionUrl by remember { mutableStateOf("") }
 
     // 本地模式分区相关弹框状态
@@ -410,9 +411,19 @@ fun SettingsTab(
                 SettingRow(
                     label = "解码",
                     value = decodeMode.ifEmpty { "硬解" },
-                    showDivider = false,
                     onClick = { showDecodeModeDialog = true },
                     modifier = Modifier.focusRequester(decodeModeFocusRequester)
+                )
+                // 弹幕开关（Phase 0：B站源，点播生效）
+                SettingRow(
+                    label = "弹幕",
+                    value = if (danmakuEnabled) "开" else "关",
+                    showDivider = false,
+                    onClick = {
+                        val next = !danmakuEnabled
+                        danmakuEnabled = next
+                        coroutineScope.launch { AppDataService.setDanmakuEnabled(next) }
+                    },
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))

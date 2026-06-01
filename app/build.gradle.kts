@@ -120,6 +120,9 @@ dependencies {
     implementation(libs.androidx.media3.extractor)
     implementation(libs.libmpv)
 
+    // 弹幕渲染引擎（开源，OpenGL，纯 Kotlin 无 .so）
+    implementation("com.kuaishou:akdanmaku:1.0.3")
+
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")
     implementation("io.ktor:ktor-server-netty:2.3.12")
