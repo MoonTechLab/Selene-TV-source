@@ -1,0 +1,26 @@
+package org.moontechlab.selenetv.service.danmaku
+
+/**
+ * 弹幕渲染设置（外观/行为，与「显示区域」「弹幕源」并列，统一在播放页弹窗里调）。
+ * - [opacity]     不透明度 0.3~1.0 → akdanmaku alpha
+ * - [speed]       滚动速度倍率 0.5~2.0（越大越快）→ durationMs = 8000 / speed
+ * - [fontScale]   字号倍率 0.6~1.6 → textSizeScale
+ * - [densityPct]  显示密度百分比（25/50/75/100）→ 数据层抽样上屏比例（防刷屏）
+ * - [antiOverlap] 防重叠 → allowOverlap = !antiOverlap
+ */
+data class DanmakuRenderSettings(
+    val opacity: Float = 0.85f,
+    val speed: Float = 1.0f,
+    val fontScale: Float = 1.0f,
+    val densityPct: Int = 100,
+    val antiOverlap: Boolean = false,
+) {
+    companion object {
+        const val BASE_DURATION_MS = 8000f   // speed=1.0 时滚动弹幕飞过屏幕的时长
+
+        val OPACITY_STEPS = listOf(0.4f, 0.55f, 0.7f, 0.85f, 1.0f)
+        val SPEED_STEPS = listOf(0.5f, 0.75f, 1.0f, 1.5f, 2.0f)
+        val FONT_STEPS = listOf(0.7f, 0.85f, 1.0f, 1.2f, 1.4f)
+        val DENSITY_STEPS = listOf(25, 50, 75, 100)
+    }
+}

@@ -14,7 +14,6 @@ import org.moontechlab.selenetv.service.danmaku.DanmakuEpisode
 import org.moontechlab.selenetv.service.danmaku.DanmakuMedia
 import org.moontechlab.selenetv.service.danmaku.DanmakuSource
 import org.moontechlab.selenetv.service.danmaku.DanmakuSources
-import org.moontechlab.selenetv.service.danmaku.RhinoDanmakuSource
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,16 +36,28 @@ object DanmakuService {
     private const val TTL_HIT = 7L * 24 * 60 * 60 * 1000   // 命中 7 天
     private const val CACHE_DIR = "danmaku_cache"
 
-    /** search 命中的候选源（尚未拉弹幕）。mediaId 留待 [fetchComments] 取分集用。 */
-    data class SourceMatch(val key: String, val display: String, val mediaId: String)
+    /** 某源 search 命中的一条候选剧集。score = matchScore（仅供排序/调试）。 */
+    data class Candidate(val mediaId: String, val title: String, val score: Int)
+
+    /**
+     * search 命中的候选源：携带该源 **top-3** 候选剧集（按分降序）。
+     * activeMediaId = 当前生效剧集（默认最高分那条；用户可在二级菜单改用其它候选）。
+     * mediaId 留待 [fetchComments] 取分集用。
+     */
+    data class SourceMatch(
+        val key: String,
+        val display: String,
+        val candidates: List<Candidate>,
+        val activeMediaId: String = candidates.firstOrNull()?.mediaId ?: "",
+    ) {
+        val activeTitle: String get() = candidates.firstOrNull { it.mediaId == activeMediaId }?.title ?: ""
+    }
 
     @Serializable
     private data class Cached(val timestamp: Long, val list: List<DanmakuComment>)
 
     private fun sourceFor(context: Context, def: DanmakuSources.Def): DanmakuSource =
-        sources.getOrPut(def.key) {
-            RhinoDanmakuSource(context.applicationContext, def.asset, def.key)
-        }
+        sources.getOrPut(def.key) { def.factory() }
 
     /**
      * 并发对所有启用源跑 **search**，返回命中该剧的候选源（按注册表优先级顺序，首项即默认渲染源）。
@@ -62,14 +73,15 @@ object DanmakuService {
             defs.map { def ->
                 async {
                     runCatching {
-                        val media = pickBestMatch(title, sourceFor(context, def).search(title))
-                        media?.let { SourceMatch(def.key, def.display, it.mediaId) }
+                        val cands = pickTopMatches(title, sourceFor(context, def).search(title), 3)
+                        if (cands.isEmpty()) null else SourceMatch(def.key, def.display, cands)
                     }.getOrNull()
                 }
             }.awaitAll()
         }
-        // 保持 defs（注册表）顺序 = 优先级顺序
+        // 按「最佳候选的匹配分」降序 —— 选源/菜单都认标题匹配质量，不再按注册表优先级。
         defs.mapNotNull { def -> matched.firstOrNull { it?.key == def.key } }
+            .sortedByDescending { it.candidates.firstOrNull()?.score ?: 0 }
     }
 
     // 标题归一：去书名号/括号/分隔符/空白并转小写，用于跨源标题比对。
@@ -144,13 +156,14 @@ object DanmakuService {
         if (nq == nc) return 10000                       // 去标点完全一致（含季度）
         val qBase = stripSeason(nq); val cBase = stripSeason(nc)
         val sameSeason = seasonFromTitle(query) == seasonFromTitle(candTitle)
-        if (qBase.isNotEmpty() && qBase == cBase) return if (sameSeason) 5000 else 0  // 同剧，仅同季算命中
+        // 同分桶内再用 ratio(0~100) 做细排，使「同档」的源/候选也按真实接近度排序（桶间不重叠：5000 段 > 3000 段 > 模糊≤100）。
+        if (qBase.isNotEmpty() && qBase == cBase) return if (sameSeason) 5000 + ratio(nq, nc) else 0  // 同剧，仅同季算命中
         // 跨平台命名差异：一方在基础剧名后接篇章/篇名（爱奇艺「凡人修仙传-风起天南」、腾讯「凡人修仙传仙界篇」
         // vs B站「凡人修仙传」）。较短基础名是较长名的前缀、且足够长（≥4，避免「主角」误中「女主角失格」之类）、
         // 同季 → 判命中（中等分，弱于完全/同名同季，强于纯模糊）。
         val shortB = if (qBase.length <= cBase.length) qBase else cBase
         val longB = if (qBase.length <= cBase.length) cBase else qBase
-        if (shortB.length >= 4 && longB.startsWith(shortB) && sameSeason) return 3000
+        if (shortB.length >= 4 && longB.startsWith(shortB) && sameSeason) return 3000 + ratio(qBase, cBase)
         val r = ratio(qBase, cBase)                      // 基础剧名模糊
         return if (r >= 85 && sameSeason) r else 0       // 阈值 85，且季度一致
     }
@@ -167,6 +180,20 @@ object DanmakuService {
             .map { it to matchScore(query, it.title) }           // ② 相似度打分
             .filter { it.second > 0 }                            // 下限：低于阈值不算命中
             .maxByOrNull { it.second }?.first                    // 取最高（同分保留 search 相关性首个）
+    }
+
+    /**
+     * 取某源 search 候选里相关性 **top-n**（降序），供二级菜单列出「前几匹配剧集」。
+     * 同 [pickBestMatch] 的黑名单 + 打分 + 下限；稳定排序保留同分时的 search 相关性顺序。
+     */
+    internal fun pickTopMatches(query: String, candidates: List<DanmakuMedia>, n: Int): List<Candidate> {
+        if (candidates.isEmpty() || normalizeTitle(query).isEmpty()) return emptyList()
+        return candidates
+            .filterNot { isJunkTitle(it.title) }
+            .map { Candidate(it.mediaId, it.title, matchScore(query, it.title)) }
+            .filter { it.score > 0 }
+            .sortedByDescending { it.score }
+            .take(n)
     }
 
     // 垃圾分集黑名单（移植自 misaka search_result_global_blacklist）。中文表逐项照搬；
@@ -192,40 +219,57 @@ object DanmakuService {
         return if (kept.isEmpty()) episodes else kept
     }
 
+    /** 分片滑动加载的块大小（秒）：分片源按播放进度附近「块」连续加载，不再一次性拉全集。 */
+    const val CHUNK_SEC = 300
+
+    /** 秒位置 → 块下标。 */
+    fun chunkOf(sec: Int): Int = if (sec <= 0) 0 else sec / CHUNK_SEC
+
+    /** 读某窗缓存（命中且未过期）；坏文件/过期删除并返回 null。 */
+    private fun readCache(file: File): List<DanmakuComment>? {
+        if (!file.exists()) return null
+        return runCatching {
+            val c = json.decodeFromString<Cached>(file.readText())
+            if (System.currentTimeMillis() - c.timestamp < TTL_HIT) c.list else { file.delete(); null }
+        }.onFailure { file.delete() }.getOrNull()
+    }
+
+    // 已解析的 episodeId 备忘：getEpisodes 是网络调用，分块连续加载时只解析一次。
+    private val epIdMemo = ConcurrentHashMap<String, String>()
+
+    private fun resolveEpisodeId(context: Context, sourceKey: String, mediaId: String, episode1Based: Int): String? {
+        val memoKey = "$sourceKey|$mediaId|$episode1Based"
+        epIdMemo[memoKey]?.let { return it }
+        val def = DanmakuSources.byKey[sourceKey] ?: return null
+        val src = sourceFor(context, def)
+        val episodes = runCatching { filterJunkEpisodes(src.getEpisodes(mediaId)) }.getOrDefault(emptyList())
+        val epId = (episodes.getOrNull(episode1Based - 1) ?: episodes.firstOrNull())?.episodeId ?: return null
+        epIdMemo[memoKey] = epId
+        return epId
+    }
+
     /**
-     * 拉取**单个已命中源**某集的弹幕正文（getEpisodes→getComments），含磁盘缓存。失败/无匹配 → 空。
-     * 仅在该源被选中（默认源或用户切换）时调用。
+     * 拉取单个已命中源某集 **第 [chunk] 块**（时间窗 `[chunk*CHUNK_SEC, (chunk+1)*CHUNK_SEC)`）的弹幕。
+     * 含按 (源,媒体,集,块) 独立磁盘缓存——分片源由播放页按播放进度连续拉相邻块（滑动加载），
+     * 拉过的块复用缓存、不重拉。失败/空 → 空。
      */
-    suspend fun fetchComments(
+    suspend fun fetchChunk(
         context: Context,
-        match: SourceMatch,
+        sourceKey: String,
+        mediaId: String,
         episode1Based: Int,
+        chunk: Int,
     ): List<DanmakuComment> = withContext(Dispatchers.IO) {
-        val def = DanmakuSources.byKey[match.key] ?: return@withContext emptyList()
-        val file = cacheFile(context, "${match.key}_${match.mediaId}_$episode1Based")
-
-        // 读缓存（命中且未过期）
-        if (file.exists()) {
-            val cached = runCatching {
-                val c = json.decodeFromString<Cached>(file.readText())
-                if (System.currentTimeMillis() - c.timestamp < TTL_HIT) c.list else { file.delete(); null }
-            }.onFailure { file.delete() }.getOrNull()
-            if (cached != null) return@withContext cached
-        }
-
-        val list = runCatching {
-            val src = sourceFor(context, def)
-            val episodes = filterJunkEpisodes(src.getEpisodes(match.mediaId))
-            val ep = episodes.getOrNull(episode1Based - 1) ?: episodes.firstOrNull()
-            ?: return@runCatching emptyList()
-            src.getComments(ep.episodeId)
-        }.getOrDefault(emptyList())
-        android.util.Log.i("DanmakuService", "[${match.key}] ep$episode1Based -> ${list.size} 条")
-
-        // 只缓存命中（非空）；miss 不写，下次重试
-        if (list.isNotEmpty()) {
-            runCatching { file.writeText(json.encodeToString(Cached(System.currentTimeMillis(), list))) }
-        }
+        if (DanmakuSources.byKey[sourceKey] == null) return@withContext emptyList()
+        val fromSec = chunk * CHUNK_SEC
+        val toSec = fromSec + CHUNK_SEC
+        val file = cacheFile(context, "${sourceKey}_${mediaId}_${episode1Based}_c$chunk")
+        readCache(file)?.let { return@withContext it }
+        val epId = resolveEpisodeId(context, sourceKey, mediaId, episode1Based) ?: return@withContext emptyList()
+        val src = sourceFor(context, DanmakuSources.byKey[sourceKey]!!)
+        val list = runCatching { src.getComments(epId, fromSec, toSec) }.getOrDefault(emptyList())
+        android.util.Log.i("DanmakuService", "[$sourceKey] chunk$chunk[$fromSec,$toSec) -> ${list.size} 条")
+        if (list.isNotEmpty()) runCatching { file.writeText(json.encodeToString(Cached(System.currentTimeMillis(), list))) }
         list
     }
 

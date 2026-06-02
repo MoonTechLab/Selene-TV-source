@@ -187,7 +187,8 @@ fun SettingsTab(
     val checkUpdateFocusRequester = remember { FocusRequester() }
 
     var isLocalMode by remember { mutableStateOf(AppDataService.isLocalModeSync()) }
-    var danmakuEnabled by remember { mutableStateOf(AppDataService.isDanmakuEnabledSync()) }
+    // 弹幕默认模式：off（完全关闭）/ manual（默认不开启）/ auto（默认开启）。点按循环。
+    var danmakuMode by remember { mutableStateOf(AppDataService.getDanmakuModeSync()) }
     // 弹幕源启用集合（多选）
     var enabledDanmakuSources by remember { mutableStateOf(AppDataService.getEnabledDanmakuSourcesSync()) }
     var showDanmakuSourcesDialog by remember { mutableStateOf(false) }
@@ -420,14 +421,14 @@ fun SettingsTab(
                     onClick = { showDecodeModeDialog = true },
                     modifier = Modifier.focusRequester(decodeModeFocusRequester)
                 )
-                // 弹幕开关（Phase 2：多源聚合，点播生效）
+                // 弹幕默认模式（点按循环）：关闭=完全不请求/不显示按键；手动=probe 但不自动选源；自动=自动选最佳源。
                 SettingRow(
                     label = "弹幕",
-                    value = if (danmakuEnabled) "开" else "关",
+                    value = when (danmakuMode) { "auto" -> "自动"; "manual" -> "手动"; else -> "关闭" },
                     onClick = {
-                        val next = !danmakuEnabled
-                        danmakuEnabled = next
-                        coroutineScope.launch { AppDataService.setDanmakuEnabled(next) }
+                        val next = when (danmakuMode) { "off" -> "manual"; "manual" -> "auto"; else -> "off" }
+                        danmakuMode = next
+                        coroutineScope.launch { AppDataService.setDanmakuMode(next) }
                     },
                 )
                 // 弹幕源多选（进播放页并发 search，命中源进「弹幕源」chip）
@@ -748,7 +749,10 @@ fun SettingsTab(
                 }
                 onClose()
             },
-            onDismiss = onClose
+            onDismiss = onClose,
+            confirmText = "清空",
+            confirmDestructive = true,
+            focusConfirm = false,
         )
     }
 
@@ -768,7 +772,10 @@ fun SettingsTab(
                 }
                 onClose()
             },
-            onDismiss = onClose
+            onDismiss = onClose,
+            confirmText = "清空",
+            confirmDestructive = true,
+            focusConfirm = false,
         )
     }
 
@@ -788,7 +795,10 @@ fun SettingsTab(
                 }
                 onClose()
             },
-            onDismiss = onClose
+            onDismiss = onClose,
+            confirmText = "清空",
+            confirmDestructive = true,
+            focusConfirm = false,
         )
     }
 

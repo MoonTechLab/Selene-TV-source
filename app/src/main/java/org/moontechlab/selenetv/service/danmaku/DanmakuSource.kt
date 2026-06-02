@@ -23,6 +23,14 @@ interface DanmakuSource {
 
     /** 取某集的弹幕，归一为统一模型。 */
     fun getComments(episodeId: String): List<DanmakuComment>
+
+    /**
+     * 取某集 **指定时间窗** `[startSec, endSec)` 的弹幕（秒）。`endSec<=0` = 到结尾。
+     * 供「先拉当前段、其余后台补」的分段流式拉取用；脚本不支持窗参则退化为全集。
+     * 默认实现回退到全集 [getComments]，新源无需都改。
+     */
+    fun getComments(episodeId: String, startSec: Int, endSec: Int): List<DanmakuComment> =
+        getComments(episodeId)
 }
 
 /** 搜索结果候选。type: tvseries / movie / ova / web（信息性，便于匹配排序）。 */

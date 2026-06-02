@@ -35,8 +35,14 @@ object AppDataService {
     private const val KEY_SKIPPED_VERSION = "skipped_version"
     private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
     private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"   // 旧开关（仅迁移读）
-    private const val KEY_DANMAKU_AREA = "danmaku_area"         // 显示区域：off/third/half/full
+    private const val KEY_DANMAKU_AREA = "danmaku_area"         // 显示区域：third/half/full（off 已迁移到 mode）
+    private const val KEY_DANMAKU_MODE = "danmaku_mode"         // 默认模式：off/manual(默认不开启)/auto(默认开启)
     private const val KEY_DANMAKU_SOURCES = "danmaku_sources"   // 启用源 key 的 CSV
+    private const val KEY_DANMAKU_OPACITY = "danmaku_opacity"        // 不透明度 Float
+    private const val KEY_DANMAKU_SPEED = "danmaku_speed"            // 滚动速度倍率 Float
+    private const val KEY_DANMAKU_FONT = "danmaku_font_scale"        // 字号倍率 Float
+    private const val KEY_DANMAKU_DENSITY = "danmaku_density_pct"    // 显示密度 % Int
+    private const val KEY_DANMAKU_ANTIOVERLAP = "danmaku_anti_overlap" // 防重叠 Boolean
 
     private lateinit var prefs: SharedPreferences
 
@@ -47,13 +53,21 @@ object AppDataService {
     @Volatile
     private var isLocalModeCache: Boolean = false
 
-    // 弹幕显示区域缓存（off/third/half/full；同步读，供播放页初始化用）。off 即关闭。
+    // 弹幕显示区域缓存（third/half/full；同步读，供播放页初始化用）。决定弹幕层占屏高度。
     @Volatile
-    private var danmakuAreaCache: String = "off"
+    private var danmakuAreaCache: String = "full"
+
+    // 弹幕默认模式缓存（off=完全关闭/manual=默认不开启/auto=默认开启）。决定播放页是否 probe/选源/显示弹幕键。
+    @Volatile
+    private var danmakuModeCache: String = "off"
 
     // 启用的弹幕源 key 集合缓存（同步读，供播放页并发拉取用）
     @Volatile
     private var danmakuSourcesCache: Set<String> = org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
+
+    // 弹幕渲染设置缓存（同步读，供播放页/弹幕层用）
+    @Volatile
+    private var danmakuRenderCache = org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings()
 
     /**
      * 初始化服务，需要在 Application 中调用
@@ -61,11 +75,28 @@ object AppDataService {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
-        danmakuAreaCache = prefs.getString(KEY_DANMAKU_AREA, null)
-            ?: if (prefs.getBoolean(KEY_DANMAKU_ENABLED, false)) "full" else "off"   // 迁移旧开关
+        // 区域 off 仍保留（播放页可暂时关闭）。仅首次（无 mode 记录）做一次性迁移：旧 area=off → mode=off + 区域回落 full。
+        val rawArea = prefs.getString(KEY_DANMAKU_AREA, null)
+            ?: if (prefs.getBoolean(KEY_DANMAKU_ENABLED, false)) "full" else "off"
+        val savedMode = prefs.getString(KEY_DANMAKU_MODE, null)
+        if (savedMode == null) {
+            danmakuModeCache = if (rawArea == "off") "off" else "auto"
+            danmakuAreaCache = if (rawArea == "off") "full" else rawArea
+        } else {
+            danmakuModeCache = savedMode
+            danmakuAreaCache = rawArea
+        }
         danmakuSourcesCache = prefs.getString(KEY_DANMAKU_SOURCES, null)
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
             ?: org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
+        val d = org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings()
+        danmakuRenderCache = d.copy(
+            opacity = prefs.getFloat(KEY_DANMAKU_OPACITY, d.opacity),
+            speed = prefs.getFloat(KEY_DANMAKU_SPEED, d.speed),
+            fontScale = prefs.getFloat(KEY_DANMAKU_FONT, d.fontScale),
+            densityPct = prefs.getInt(KEY_DANMAKU_DENSITY, d.densityPct),
+            antiOverlap = prefs.getBoolean(KEY_DANMAKU_ANTIOVERLAP, d.antiOverlap),
+        )
         // 每次启动生成新的 session token
         generateSessionToken()
     }
@@ -223,20 +254,26 @@ object AppDataService {
 
     // ==================== 弹幕设置 ====================
 
-    /** 保存弹幕开关（映射到区域：开→full，关→off）；同步更新内存缓存。 */
-    suspend fun setDanmakuEnabled(enabled: Boolean) = setDanmakuArea(if (enabled) "full" else "off")
+    /** 保存弹幕默认模式（off/manual/auto）；同步更新内存缓存。 */
+    suspend fun setDanmakuMode(mode: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_DANMAKU_MODE, mode).apply()
+        danmakuModeCache = mode
+    }
 
-    /** 保存弹幕显示区域（off/third/half/full）；同步更新内存缓存。 */
+    /** 同步读弹幕默认模式（off/manual/auto）。 */
+    fun getDanmakuModeSync(): String = danmakuModeCache
+
+    /** 保存弹幕显示区域（third/half/full，仅区域）；同步更新内存缓存。 */
     suspend fun setDanmakuArea(area: String) = withContext(Dispatchers.IO) {
         prefs.edit().putString(KEY_DANMAKU_AREA, area).apply()
         danmakuAreaCache = area
     }
 
-    /** 同步读弹幕显示区域（off/third/half/full）。 */
+    /** 同步读弹幕显示区域（third/half/full）。 */
     fun getDanmakuAreaSync(): String = danmakuAreaCache
 
-    /** 同步读，零阻塞；供播放页初始化弹幕开关用（区域非 off 即开）。 */
-    fun isDanmakuEnabledSync(): Boolean = danmakuAreaCache != "off"
+    /** 同步读，零阻塞；供播放页初始化弹幕开关用（模式非 off 即开）。 */
+    fun isDanmakuEnabledSync(): Boolean = danmakuModeCache != "off"
 
     /** 同步读启用的弹幕源 key 集合（供播放页并发拉取用）。 */
     fun getEnabledDanmakuSourcesSync(): Set<String> = danmakuSourcesCache
@@ -249,6 +286,21 @@ object AppDataService {
             .map { it.key }.filter { it in next }
         prefs.edit().putString(KEY_DANMAKU_SOURCES, ordered.joinToString(",")).apply()
         danmakuSourcesCache = ordered.toSet()
+    }
+
+    /** 同步读弹幕渲染设置（不透明度/速度/字号/密度/防重叠）。 */
+    fun getDanmakuRenderSettingsSync(): org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings = danmakuRenderCache
+
+    /** 保存弹幕渲染设置；同步更新内存缓存。 */
+    suspend fun setDanmakuRenderSettings(s: org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings) = withContext(Dispatchers.IO) {
+        prefs.edit()
+            .putFloat(KEY_DANMAKU_OPACITY, s.opacity)
+            .putFloat(KEY_DANMAKU_SPEED, s.speed)
+            .putFloat(KEY_DANMAKU_FONT, s.fontScale)
+            .putInt(KEY_DANMAKU_DENSITY, s.densityPct)
+            .putBoolean(KEY_DANMAKU_ANTIOVERLAP, s.antiOverlap)
+            .apply()
+        danmakuRenderCache = s
     }
 
     // ==================== 豆瓣数据源设置 ====================

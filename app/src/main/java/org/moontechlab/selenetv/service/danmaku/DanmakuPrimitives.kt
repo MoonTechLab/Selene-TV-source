@@ -9,8 +9,8 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * 弹幕源脚本所需的纯算法原语（哈希/HMAC/AES/解压）。全部基于 ByteArray，无 Android/Base64 依赖，
- * 便于 JVM 单测。[DanmakuHostBridge] 在外层套 Base64 暴露给 JS。
+ * 弹幕源所需的纯算法原语（哈希/HMAC/AES/解压）。全部基于 ByteArray，无 Android/Base64 依赖，
+ * 便于 JVM 单测；[DanmakuNet] 在外层封装供各原生源调用。
  */
 object DanmakuPrimitives {
 

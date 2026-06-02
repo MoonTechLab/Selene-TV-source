@@ -16,9 +16,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -42,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -131,110 +139,217 @@ fun DanmakuPill(
 }
 
 /**
- * 弹幕统一菜单：上半「显示区域」（关闭/1/3/半屏/全屏），下半「弹幕源」（命中源 + 条数，开启时才显示）。
- * 一个独立 Popup window，自管焦点 + BACK。位置 = 胶囊上方 8dp，左端对齐。选中即生效并关闭。
+ * 弹幕设置弹窗（居中模态，背景压暗）。打开时播放页暂停、视频定格做实时预览底；关闭时按需恢复播放。
+ * 左栏「弹幕源」：命中源 + 条数 + 其匹配剧集（✓=生效，OK 选用该源+该剧集）；
+ * 右栏「显示与外观」：显示区域 + 不透明度/滚动速度/字号/显示密度/防重叠（分段选择，OK 即生效持久化）。
+ * 独立 Popup window（focusable + BACK 关闭）。D-pad：左右跨栏、上下选项、左右切分段值。
  *
- * @param counts key → 已拉取条数；null = 尚未拉取（切到该源时才会拉）。
+ * @param counts key → 已拉取条数；null = 尚未拉取。
  */
 @Composable
-fun DanmakuMenuPopup(
+fun DanmakuSettingsDialog(
     open: Boolean,
     areaKey: String,
     matches: List<SourceMatch>,
     selectedSourceKey: String?,
     counts: Map<String, Int?>,
+    activeMediaByKey: Map<String, String>,
+    candidateCounts: Map<String, Int>,   // "源key|mediaId" → 该段抓到的条数（一键统计填充）
+    settings: DanmakuRenderSettings,
+    onFetchAllCounts: () -> Unit,         // 一键抓取全部源各条目弹幕数
     onSelectArea: (String) -> Unit,
-    onSelectSource: (String) -> Unit,
+    onSelectCandidate: (String, String) -> Unit,
+    onChangeSettings: (DanmakuRenderSettings) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
     transitionState.targetState = open
     if (!transitionState.currentState && !transitionState.targetState) return
 
-    val showSources = areaKey != "off"
-    // 焦点目标：4 个区域项 + （开启时）N 个源项。打开时落到当前区域项。
-    val focusCount = DanmakuAreaOptions.size + if (showSources) matches.size else 0
-    val focusRequesters = remember(focusCount) { List(focusCount) { FocusRequester() } }
-    val currentIndex = remember(areaKey) {
-        DanmakuAreaOptions.indexOfFirst { it.key == areaKey }.coerceAtLeast(0)
-    }
-
-    val density = LocalDensity.current
-    val gapPx = with(density) { 8.dp.roundToPx() }
-    val positionProvider = remember(gapPx) {
+    val centerProvider = remember {
         object : PopupPositionProvider {
             override fun calculatePosition(
                 anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize,
-            ): IntOffset {
-                val x = anchorBounds.left.coerceAtMost(windowSize.width - popupContentSize.width).coerceAtLeast(0)
-                val y = (anchorBounds.top - popupContentSize.height - gapPx).coerceAtLeast(0)
-                return IntOffset(x, y)
-            }
+            ): IntOffset = IntOffset(
+                ((windowSize.width - popupContentSize.width) / 2).coerceAtLeast(0),
+                ((windowSize.height - popupContentSize.height) / 2).coerceAtLeast(0),
+            )
         }
     }
+    // 初始焦点：选中源的生效剧集；无选中则首个候选；无源则落到右栏「显示区域」。
+    val initialFocus = remember { FocusRequester() }
+    val initialKey = selectedSourceKey ?: matches.firstOrNull()?.key
+    val initialMedia = matches.firstOrNull { it.key == initialKey }
+        ?.let { activeMediaByKey[it.key] ?: it.activeMediaId }
+
     Popup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true),
-        popupPositionProvider = positionProvider,
+        popupPositionProvider = centerProvider,
     ) {
-        LaunchedEffect(focusCount) {
-            repeat(8) {
-                try { focusRequesters[currentIndex].requestFocus(); return@LaunchedEffect }
+        LaunchedEffect(Unit) {
+            repeat(10) {
+                try { initialFocus.requestFocus(); return@LaunchedEffect }
                 catch (_: Exception) { kotlinx.coroutines.delay(40) }
             }
         }
         AnimatedVisibility(
             visibleState = transitionState,
-            enter = fadeIn(animationSpec = tween(180)) +
-                scaleIn(initialScale = 0.92f, animationSpec = tween(220), transformOrigin = TransformOrigin(0f, 1f)),
-            exit = fadeOut(animationSpec = tween(140)) +
-                scaleOut(targetScale = 0.95f, animationSpec = tween(160), transformOrigin = TransformOrigin(0f, 1f)),
+            enter = fadeIn(animationSpec = tween(180)) + scaleIn(initialScale = 0.94f, animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(140)) + scaleOut(targetScale = 0.96f, animationSpec = tween(160)),
         ) {
             Column(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .width(740.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xF20A0A0A))
-                    .padding(vertical = 8.dp, horizontal = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                    .padding(22.dp),
             ) {
-                DanmakuSectionLabel("显示区域")
-                DanmakuAreaOptions.forEachIndexed { i, opt ->
-                    DanmakuMenuItem(
-                        label = opt.label,
-                        trailing = null,
-                        selected = opt.key == areaKey,
-                        onClick = { onSelectArea(opt.key) },
-                        focusRequester = focusRequesters[i],
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "弹幕设置",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.W700,
                     )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    // 一键抓取全部源各条目的弹幕数（紧跟标题；不切换当前渲染源，只统计）。
+                    DanmakuChip(label = "统计各源弹幕", selected = false, onClick = onFetchAllCounts)
                 }
-                if (showSources) {
-                    Spacer(modifier = Modifier.size(6.dp))
-                    DanmakuSectionLabel("弹幕源")
-                    if (matches.isEmpty()) {
-                        Text(
-                            text = "无可用源",
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                    } else {
-                        matches.forEachIndexed { j, m ->
-                            val c = counts[m.key]
-                            DanmakuMenuItem(
-                                label = m.display,
-                                trailing = when {
-                                    c == null -> null
-                                    c <= 0 -> "无"
-                                    else -> c.toString()
-                                },
-                                selected = m.key == selectedSourceKey,
-                                onClick = { onSelectSource(m.key) },
-                                focusRequester = focusRequesters[DanmakuAreaOptions.size + j],
+                Row(modifier = Modifier.height(348.dp)) {
+                    // 左栏：各源名称 + 其匹配剧集（不再加「弹幕源」分组标题）
+                    Column(modifier = Modifier.width(288.dp).verticalScroll(rememberScrollState())) {
+                        if (matches.isEmpty()) {
+                            Text(
+                                text = "无可用源",
+                                color = Color.White.copy(alpha = 0.4f),
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             )
+                        } else {
+                            matches.forEach { m ->
+                                val active = activeMediaByKey[m.key] ?: m.activeMediaId
+                                val isSel = m.key == selectedSourceKey
+                                DanmakuSourceHeader(display = m.display, count = counts[m.key], current = isSel)
+                                m.candidates.forEach { cand ->
+                                    val isInitial = m.key == initialKey && cand.mediaId == initialMedia
+                                    DanmakuMenuItem(
+                                        label = cand.title,
+                                        // 统计后显示该段条数 + 加号（分段源，仅当前段）；选中态由绿点+加粗体现，不打勾。
+                                        trailing = candidateCounts["${m.key}|${cand.mediaId}"]?.let { if (it > 0) "$it+" else "无" },
+                                        selected = isSel && cand.mediaId == active,
+                                        onClick = { onSelectCandidate(m.key, cand.mediaId) },
+                                        indent = 16.dp,
+                                        focusRequester = if (isInitial) initialFocus else null,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(18.dp))
+                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.08f)))
+                    Spacer(modifier = Modifier.width(18.dp))
+                    // 右栏：显示区域 + 外观/行为分段设置
+                    Column(
+                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        SettingRow("显示区域", DanmakuAreaOptions.map { it.key }, areaKey, { danmakuAreaLabel(it) },
+                            firstFocus = if (matches.isEmpty()) initialFocus else null) { onSelectArea(it) }
+                        SettingRow("不透明度", DanmakuRenderSettings.OPACITY_STEPS, settings.opacity, { "${(it * 100).toInt()}%" }) {
+                            onChangeSettings(settings.copy(opacity = it))
+                        }
+                        SettingRow("滚动速度", DanmakuRenderSettings.SPEED_STEPS, settings.speed, ::danmakuSpeedLabel) {
+                            onChangeSettings(settings.copy(speed = it))
+                        }
+                        SettingRow("字号", DanmakuRenderSettings.FONT_STEPS, settings.fontScale, ::danmakuFontLabel) {
+                            onChangeSettings(settings.copy(fontScale = it))
+                        }
+                        SettingRow("显示密度", DanmakuRenderSettings.DENSITY_STEPS, settings.densityPct, { if (it >= 100) "全部" else "$it%" }) {
+                            onChangeSettings(settings.copy(densityPct = it))
+                        }
+                        SettingRow("防重叠", listOf(false, true), settings.antiOverlap, { if (it) "开" else "关" }) {
+                            onChangeSettings(settings.copy(antiOverlap = it))
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+private fun danmakuSpeedLabel(s: Float): String = when {
+    s <= 0.5f -> "很慢"; s <= 0.75f -> "慢"; s <= 1.0f -> "标准"; s <= 1.5f -> "快"; else -> "很快"
+}
+private fun danmakuFontLabel(s: Float): String = when {
+    s <= 0.7f -> "小"; s <= 0.85f -> "较小"; s <= 1.0f -> "标准"; s <= 1.2f -> "较大"; else -> "大"
+}
+
+/** 一行设置：左固定标签 + 右一组分段选项（chip）。选中项落初始焦点（firstFocus）。 */
+@Composable
+private fun <T> SettingRow(
+    label: String,
+    options: List<T>,
+    selected: T,
+    labelOf: (T) -> String,
+    firstFocus: FocusRequester? = null,
+    onSelect: (T) -> Unit,
+) {
+    Row(modifier = Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.W600,
+            modifier = Modifier.width(60.dp),
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { opt ->
+                DanmakuChip(
+                    label = labelOf(opt),
+                    selected = opt == selected,
+                    onClick = { onSelect(opt) },
+                    focusRequester = if (opt == selected) firstFocus else null,
+                )
+            }
+        }
+    }
+}
+
+/** 分段选项 chip：聚焦=白底黑字，选中=绿字绿框，常态=白 0.6 + 细框。 */
+@Composable
+private fun DanmakuChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(8.dp)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused },
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape = shape),
+        colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.White),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(border = BorderStroke(1.dp, if (selected) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.15f)), shape = shape),
+            focusedBorder = Border(border = BorderStroke(0.dp, Color.Transparent), shape = shape),
+        ),
+    ) {
+        Box(modifier = Modifier.padding(horizontal = 13.dp, vertical = 6.dp)) {
+            Text(
+                text = label,
+                color = when { focused -> Color(0xFF0A0A0A); selected -> Color(0xFF4CAF50); else -> Color.White.copy(alpha = 0.6f) },
+                fontSize = 12.sp,
+                fontWeight = if (focused || selected) FontWeight.W700 else FontWeight.W500,
+            )
         }
     }
 }
@@ -250,27 +365,59 @@ private fun DanmakuSectionLabel(text: String) {
     )
 }
 
+/** 弹幕源分组标题（不可聚焦）：源名 + 条数 + ● 当前渲染源。其下缩进列出该源匹配剧集。 */
+@Composable
+private fun DanmakuSourceHeader(display: String, count: Int?, current: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(6.dp).clip(CircleShape)
+                .background(if (current) Color(0xFF4CAF50) else Color.Transparent),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = display,
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.W700,
+            modifier = Modifier.weight(1f),
+        )
+        val countText = when { count == null -> null; count <= 0 -> "无"; else -> count.toString() }
+        if (countText != null) {
+            Text(
+                text = countText,
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.W600,
+            )
+        }
+    }
+}
+
 @Composable
 private fun DanmakuMenuItem(
     label: String,
     trailing: String?,
     selected: Boolean,
     onClick: () -> Unit,
-    focusRequester: FocusRequester,
+    focusRequester: FocusRequester? = null,
+    indent: Dp = 0.dp,                                // 候选剧集行缩进，体现「源 ▸ 剧集」层级
 ) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .focusRequester(focusRequester)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
-            .width(184.dp),
+            .fillMaxWidth(),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
         colors = ClickableSurfaceDefaults.colors(containerColor = Color.Transparent, focusedContainerColor = Color.White),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            modifier = Modifier.padding(start = 12.dp + indent, end = 12.dp, top = 9.dp, bottom = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -284,6 +431,8 @@ private fun DanmakuMenuItem(
                 color = when { focused -> Color(0xFF0A0A0A); selected -> Color.White; else -> Color.White.copy(alpha = 0.65f) },
                 fontSize = 15.sp,
                 fontWeight = if (focused || selected) FontWeight.W700 else FontWeight.W500,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             if (trailing != null) {
