@@ -1,5 +1,6 @@
 // 乐视视频弹幕源（逆向验证：甄嬛传 9006 条）。
-// search HTML(GBK) 内嵌 vidEpisode → getEpisodes 零网络；getComments: danmu/list?vid&start&end(秒, 单次≤1000 需拆窗)。
+// search HTML(UTF-8) 内嵌 vidEpisode → getEpisodes 零网络；getComments: danmu/list?vid&start&end(秒, 单次≤1000 需拆窗)。
+// 注：so.le.com 已从 GBK 迁移到 UTF-8，故 search 用 httpGet（用 httpGetGbk 会乱码导致标题对不上、永不命中）。
 // 契约返回 JSON：mode 1滚/4底/5顶，color 十进制 RGB。
 function _f(s, key) { var m = new RegExp(key + ":'([^']*)'").exec(s); return m ? m[1] : null; }
 function _leType(t) { if (t === "tv") return "tv"; if (t === "movie" || t === "film") return "movie"; if (t === "cartoon" || t === "comic") return "anime"; if (t === "zongyi" || t === "variety") return "show"; return t || "tv"; }
@@ -9,7 +10,7 @@ function _leColor(c) { var n = parseInt(String(c || "FFFFFF").replace(/^#/, ""),
 function search(keyword) {
   var out = [];
   try {
-    var html = host.httpGetGbk("https://so.le.com/s?wd=" + encodeURIComponent(keyword), '{"User-Agent":"Mozilla/5.0"}');
+    var html = host.httpGet("https://so.le.com/s?wd=" + encodeURIComponent(keyword), '{"User-Agent":"Mozilla/5.0"}');
     var re = /data-info="\{([^"]*?)\}"/g, m;
     while ((m = re.exec(html)) !== null) {
       var info = m[1], pid = _f(info, "pid"), type = _f(info, "type"), ve = _f(info, "vidEpisode");

@@ -2,7 +2,8 @@
 // search: msite/search/v2；getEpisodes: variety/showlist(综艺) 或 episode/list(剧集)；
 // getComments: getctlbarrage→CDN {N}.json(分钟序号,404停) 兜底 rdbarrage(time步进)。
 // 契约返回 JSON：mode 1(芒果普通弹幕全滚动)，color 十进制(渐变未映射,统一白)。
-var MG_H = JSON.stringify({ "User-Agent": "Mozilla/5.0", "Referer": "https://www.mgtv.com/" });
+// 注：mobileso 搜索接口已开始校验 UA，短 "Mozilla/5.0" 会被 401 拒；须用完整浏览器 UA。
+var MG_H = JSON.stringify({ "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36", "Referer": "https://www.mgtv.com/" });
 
 function _stripB(s) { return (s || "").replace(/<\/?B>/g, ""); }
 function _durSec(t) { if (!t) return 0; var p = t.split(":"); for (var i = 0; i < p.length; i++) p[i] = parseInt(p[i], 10) || 0; return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+p[1]; }
