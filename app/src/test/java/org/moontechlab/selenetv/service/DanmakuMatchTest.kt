@@ -54,6 +54,25 @@ class DanmakuMatchTest {
     }
 
     @Test
+    fun `派生内容_解说有声剧PV单集_被黑名单剔除`() {
+        // 前缀规则放宽后，无精确正片时这些派生不应被误选
+        val c = listOf(
+            media("凡人修仙传 解说版"),
+            media("凡人修仙传 多人有声剧"),
+            media("凡人修仙传战斗PV"),
+            media("凡人修仙传 单集回顾"),
+        )
+        assertNull(DanmakuService.pickBestMatch("凡人修仙传", c))
+    }
+
+    @Test
+    fun `正片不被派生黑名单误伤`() {
+        // 黑名单不应误伤正常正片名
+        val c = listOf(media("凡人修仙传", "ok"))
+        assertEquals("ok", DanmakuService.pickBestMatch("凡人修仙传", c)?.mediaId)
+    }
+
+    @Test
     fun `前缀过短不命中_主角不中女主角`() {
         // ≥4 字守卫：避免短名「主角」前缀误中「主角XXX」这类派生
         val c = listOf(media("主角的逆袭人生"))

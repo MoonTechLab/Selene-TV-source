@@ -173,7 +173,10 @@ object DanmakuService {
     // 英文表收紧为词边界匹配，剔除 CD/Disc/Scan/Logo/Info 等易误伤正片标题的短词。
     private val JUNK_CN = Regex(
         "特典|预告|广告|菜单|花絮|特辑|速看|资讯|彩蛋|直拍|直播回顾|片头|片尾|幕后|映像|番外篇|" +
-            "纪录片|访谈|番外|短片|加更|走心|解忧|纯享|解读|揭秘|赏析|抢先看|超前看|名场面"
+            "纪录片|访谈|番外|短片|加更|走心|解忧|纯享|解读|揭秘|赏析|抢先看|超前看|名场面|" +
+            // 派生/二创：解说、有声剧/广播剧、宣传片 PV、单集切片（注：用「单集」而非「第N集」——
+            // 后者是正常分集名，isJunkTitle 同时给 filterJunkEpisodes 用，会误杀正片分集）
+            "解说|有声剧|广播剧|单集|PV"
     )
     private val JUNK_EN = Regex(
         "\\b(NCOP|NCED|NC|OP|ED|SP|OVA|OAD|PV|MV|Menu|Bonus|Recap|Teaser|Trailer|Preview|Sample|EDPV|SongSpot|BDSpot)\\b",
