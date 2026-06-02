@@ -42,6 +42,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -336,7 +339,24 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             danmakuCommentsByKey[key] = acc
         }
     }
-    // 每集：并发跑 search 得命中源（轻量），默认选标题匹配分最高的命中源；
+    // 统计各源各候选「当前块」条数（源间并发、源内串行），填充 danmakuCandidateCounts。仅统计，不改选中源/生效剧集。
+    suspend fun countAllSources() {
+        val ep = currentEpisode + 1
+        val chunk = org.moontechlab.selenetv.service.DanmakuService.chunkOf((controller.positionMs / 1000).toInt())
+        coroutineScope {
+            danmakuMatches.map { m ->
+                async {   // 源间并发
+                    for (cand in m.candidates) {   // 源内串行
+                        val n = runCatching {
+                            org.moontechlab.selenetv.service.DanmakuService.fetchChunk(context, m.key, cand.mediaId, ep, chunk)
+                        }.getOrDefault(emptyList()).size
+                        danmakuCandidateCounts["${m.key}|${cand.mediaId}"] = n
+                    }
+                }
+            }.awaitAll()
+        }
+    }
+    // 每集：并发跑 search 得命中源（轻量），自动模式按弹幕量选源（统计各源后取最多）；
     // 分片源弹幕**跟随播放进度连续加载附近分块**（不再一次性拉全集）。不依赖 currentSourceKey——弹幕认的是剧名。
     LaunchedEffect(currentEpisode, danmakuActive) {
         if (!danmakuActive) {   // 模式 off：完全不请求，不留任何状态
@@ -354,23 +374,18 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         // 手动模式：probe 完不自动选源，等用户在弹窗里挑。
         if (danmakuMode != "auto" || matches.isEmpty()) { selectedDanmakuKey = null }
         else {
-            // 自动：默认源 = 标题匹配分最高的命中源；逐源拉「当前块」，第一个非空即选（命中却零弹幕兜底）。
-            val cur = org.moontechlab.selenetv.service.DanmakuService.chunkOf((controller.positionMs / 1000).toInt())
-            var chosen: String? = null
-            for (m in matches) {
-                danmakuLoadedChunks.getOrPut(m.key) { mutableSetOf() }.add(cur)
-                val win = runCatching {
-                    org.moontechlab.selenetv.service.DanmakuService.fetchChunk(context, m.key, m.activeMediaId, currentEpisode + 1, cur)
-                }.getOrDefault(emptyList())
-                if (win.isNotEmpty()) {
-                    val seen = danmakuSeen.getOrPut(m.key) { HashSet() }
-                    val acc = ArrayList<org.moontechlab.selenetv.model.DanmakuComment>()
-                    for (cm in win) if (seen.add(cm.timeMs * 31 + cm.content.hashCode().toLong())) acc.add(cm)
-                    danmakuCommentsByKey[m.key] = acc
-                    chosen = m.key; break
-                }
+            // 自动：先统计各源各候选「当前块」条数，再选**弹幕最多**的源+剧集（全 0 则回落标题匹配分最高的首源）。
+            countAllSources()
+            val best = matches
+                .flatMap { m -> m.candidates.map { c -> Triple(m.key, c.mediaId, danmakuCandidateCounts["${m.key}|${c.mediaId}"] ?: 0) } }
+                .maxByOrNull { it.third }
+            if (best != null && best.third > 0) {
+                danmakuActiveMediaByKey[best.first] = best.second
+                selectedDanmakuKey = best.first
+                loadNearChunks(best.first)
+            } else {
+                selectedDanmakuKey = matches.first().key
             }
-            selectedDanmakuKey = chosen ?: matches.first().key
         }
         // 持续加载：跟随播放进度，定时补齐当前选中源进度附近的分块（手动模式下选中前为空，不拉）。
         while (isActive) {
@@ -389,21 +404,6 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         danmakuLoadedChunks.remove(key); danmakuSeen.remove(key); danmakuCommentsByKey.remove(key)
         selectedDanmakuKey = key
         scope.launch { loadNearChunks(key) }
-    }
-    // 一键统计：源间并发、源内串行，拉每个候选「当前块」记条数。**只统计、不改选中源/生效剧集**（不切源不切集）。
-    fun fetchAllDanmakuCounts() {
-        val ep = currentEpisode + 1
-        val chunk = org.moontechlab.selenetv.service.DanmakuService.chunkOf((controller.positionMs / 1000).toInt())
-        danmakuMatches.forEach { m ->
-            scope.launch {   // 源间并发
-                for (cand in m.candidates) {   // 源内串行
-                    val n = runCatching {
-                        org.moontechlab.selenetv.service.DanmakuService.fetchChunk(context, m.key, cand.mediaId, ep, chunk)
-                    }.getOrDefault(emptyList()).size
-                    danmakuCandidateCounts["${m.key}|${cand.mediaId}"] = n
-                }
-            }
-        }
     }
     // 10s 定时保存
     LaunchedEffect(currentEpisode, currentSourceKey) {
@@ -752,7 +752,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                                     activeMediaByKey = danmakuActiveMediaByKey,
                                     candidateCounts = danmakuCandidateCounts,
                                     settings = danmakuSettings,
-                                    onFetchAllCounts = { fetchAllDanmakuCounts() },
+                                    onFetchAllCounts = { scope.launch { countAllSources() } },
                                     // 选项均在弹窗内即时生效、不关窗（弹窗是配置中心，BACK 才关）。
                                     onSelectArea = {
                                         danmakuArea = it
