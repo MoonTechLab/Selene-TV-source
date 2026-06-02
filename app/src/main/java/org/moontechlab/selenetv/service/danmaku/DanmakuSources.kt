@@ -22,11 +22,7 @@ object DanmakuSources {
         Def("iqiyi", "爱奇艺", "danmaku/iqiyi.js", true),
         Def("youku", "优酷", "danmaku/youku.js", true),
         Def("mgtv", "芒果TV", "danmaku/mgtv.js", true),
-        Def("sohu", "搜狐视频", "danmaku/sohu.js", true),
         Def("letv", "乐视视频", "danmaku/letv.js", true),
-        Def("xigua", "西瓜视频", "danmaku/xigua.js", true),
-        Def("renren", "人人视频", "danmaku/renren.js", true),
-        Def("hanjutv", "韩剧TV", "danmaku/hanjutv.js", true),
     )
 
     val byKey: Map<String, Def> = ALL.associateBy { it.key }
