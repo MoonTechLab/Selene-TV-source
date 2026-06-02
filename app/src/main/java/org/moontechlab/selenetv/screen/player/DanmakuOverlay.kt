@@ -114,7 +114,7 @@ private fun DanmakuComment.toItemData(density: Float): DanmakuItemData {
         content = content,
         mode = safeMode,
         textSize = (24 * density).toInt().coerceAtLeast(18),
-        textColor = 0xFF000000.toInt() or (color and 0xFFFFFF),
+        textColor = 0xFF000000.toInt() or (color and 0xFFFFFFL).toInt(),
         score = 0,
         danmakuStyle = DanmakuItemData.DANMAKU_STYLE_NONE,
     )

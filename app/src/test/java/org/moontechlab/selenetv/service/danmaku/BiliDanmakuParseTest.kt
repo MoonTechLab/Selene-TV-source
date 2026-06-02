@@ -23,10 +23,10 @@ class BiliDanmakuParseTest {
         val first = list[0]
         assertEquals(9021L, first.timeMs)              // 9.02100s -> 9021ms
         assertEquals(DanmakuComment.MODE_SCROLL, first.mode)
-        assertEquals(16777215, first.color)
+        assertEquals(16777215L, first.color)
         assertEquals("你指尖跃动的电光，是我此生不变的信仰。", first.content)
         assertEquals(DanmakuComment.MODE_BOTTOM, list[1].mode)
-        assertEquals(13369344, list[1].color)
+        assertEquals(13369344L, list[1].color)
     }
 
     @Test

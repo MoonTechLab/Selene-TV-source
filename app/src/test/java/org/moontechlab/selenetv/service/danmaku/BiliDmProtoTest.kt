@@ -35,7 +35,7 @@ class BiliDmProtoTest {
     fun parsesSingleElem() {
         val list = BiliDmProto.parseSegment(reply(elem))
         assertEquals(1, list.size)
-        assertEquals(DanmakuComment(1000L, 5, 16777215, "hi"), list[0])
+        assertEquals(DanmakuComment(1000L, 5, 16777215L, "hi"), list[0])
     }
 
     @Test

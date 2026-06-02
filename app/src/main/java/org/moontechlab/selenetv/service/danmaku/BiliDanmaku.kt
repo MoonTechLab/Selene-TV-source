@@ -20,7 +20,7 @@ object BiliDanmaku {
             if (attrs.size < 4) continue
             val timeSec = attrs[0].toDoubleOrNull() ?: continue
             val mode = attrs[1].toIntOrNull() ?: DanmakuComment.MODE_SCROLL
-            val color = attrs[3].toIntOrNull() ?: 0xFFFFFF
+            val color = attrs[3].toLongOrNull() ?: 0xFFFFFFL
             val content = unescape(m.groupValues[2])
             if (content.isEmpty()) continue
             out += DanmakuComment((timeSec * 1000).toLong(), mode, color, content)

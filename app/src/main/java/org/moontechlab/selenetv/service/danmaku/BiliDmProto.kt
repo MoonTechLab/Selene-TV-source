@@ -34,7 +34,7 @@ object BiliDmProto {
         val r = Reader(b)
         var progress = -1L
         var mode = DanmakuComment.MODE_SCROLL
-        var color = 0xFFFFFF
+        var color = 0xFFFFFFL
         var content = ""
         while (r.hasMore()) {
             val tag = r.readVarint() ?: break
@@ -43,7 +43,7 @@ object BiliDmProto {
             when {
                 field == 2 && wire == 0 -> progress = r.readVarint() ?: break
                 field == 3 && wire == 0 -> mode = (r.readVarint() ?: break).toInt()
-                field == 5 && wire == 0 -> color = (r.readVarint() ?: break).toInt()
+                field == 5 && wire == 0 -> color = r.readVarint() ?: break
                 field == 7 && wire == 2 -> {
                     val len = r.readVarint()?.toInt() ?: break
                     content = String(r.readBytes(len), Charsets.UTF_8)
