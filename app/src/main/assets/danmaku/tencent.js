@@ -23,15 +23,27 @@ function search(keyword) {
   try {
     var json = JSON.parse(host.httpPost(url, body, QQ_HEADERS));
     if (!json || json.ret !== 0 || !json.data) return JSON.stringify(out);
+    // 正片在 normalList，areaBoxList 多为「相关影视」派生 box——两者都收，normalList 优先。
+    var items = [];
+    var nl = (json.data.normalList && json.data.normalList.itemList) || [];
+    for (var n = 0; n < nl.length; n++) items.push(nl[n]);
     var boxes = json.data.areaBoxList || [];
     for (var b = 0; b < boxes.length; b++) {
-      var items = boxes[b].itemList || [];
+      var bi = boxes[b].itemList || [];
+      for (var bj = 0; bj < bi.length; bj++) items.push(bi[bj]);
+    }
+    {
       for (var i = 0; i < items.length; i++) {
         var it = items[i], doc = it.doc || {}, vi = it.videoInfo;
         if (!vi || !doc.id) continue;
         if (doc.dataType !== undefined && doc.dataType !== 2) continue;
         var sites = vi.playSites || vi.episodeSites || [];
         if (!sites.length) continue;
+        // 只收腾讯自有站点(enName 'qq')的正片：搜索索引会把异网独播（如爱奇艺独播 'qiyi'）也列出，
+        // 但腾讯并不托管其播放/弹幕——这种 cid 在 GetPageData 取不到分集，会误占默认源(优先级高于爱奇艺)且零弹幕。
+        var onQQ = false;
+        for (var si = 0; si < sites.length; si++) { if (sites[si] && sites[si].enName === "qq") { onQQ = true; break; } }
+        if (!onQQ) continue;
         out.push({ provider: "tencent", mediaId: doc.id, title: stripEm(vi.title),
           type: vi.typeName || "", year: (vi.year && vi.year > 0) ? vi.year : 0 });
       }

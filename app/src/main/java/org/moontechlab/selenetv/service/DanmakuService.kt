@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.moontechlab.selenetv.model.DanmakuComment
+import org.moontechlab.selenetv.service.danmaku.DanmakuEpisode
+import org.moontechlab.selenetv.service.danmaku.DanmakuMedia
 import org.moontechlab.selenetv.service.danmaku.DanmakuSource
 import org.moontechlab.selenetv.service.danmaku.DanmakuSources
 import org.moontechlab.selenetv.service.danmaku.RhinoDanmakuSource
@@ -60,7 +62,7 @@ object DanmakuService {
             defs.map { def ->
                 async {
                     runCatching {
-                        val media = sourceFor(context, def).search(title).firstOrNull()
+                        val media = pickBestMatch(title, sourceFor(context, def).search(title))
                         media?.let { SourceMatch(def.key, def.display, it.mediaId) }
                     }.getOrNull()
                 }
@@ -68,6 +70,117 @@ object DanmakuService {
         }
         // 保持 defs（注册表）顺序 = 优先级顺序
         defs.mapNotNull { def -> matched.firstOrNull { it?.key == def.key } }
+    }
+
+    // 标题归一：去书名号/括号/分隔符/空白并转小写，用于跨源标题比对。
+    private fun normalizeTitle(s: String): String =
+        s.replace(Regex("[《》「」『』\\[\\]()（）·•・:：·\\-—_~!！?？,，.。\\s]"), "").lowercase()
+
+    private val CN_NUM = mapOf(
+        '一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9, '十' to 10,
+        '壹' to 1, '贰' to 2, '叁' to 3, '肆' to 4, '伍' to 5, '陆' to 6, '柒' to 7, '捌' to 8, '玖' to 9, '拾' to 10,
+    )
+    private fun romanToInt(s: String): Int {
+        val m = mapOf('I' to 1, 'V' to 5, 'X' to 10, 'L' to 50, 'C' to 100, 'D' to 500, 'M' to 1000)
+        var r = 0; var i = 0; val u = s.uppercase()
+        while (i < u.length) {
+            val cur = m[u[i]] ?: return 0
+            if (i + 1 < u.length && cur < (m[u[i + 1]] ?: 0)) { r += (m[u[i + 1]] ?: 0) - cur; i += 2 }
+            else { r += cur; i++ }
+        }
+        return r
+    }
+
+    // 季度尾标记的匹配/剥离正则（移植自 misaka get_season_from_title 的模式集）。
+    private val SEASON_PATTERNS: List<Pair<Regex, (MatchResult) -> Int?>> = listOf(
+        Regex("(?:S|Season)\\s*(\\d+)", RegexOption.IGNORE_CASE) to { m -> m.groupValues[1].toIntOrNull() },
+        Regex("第\\s*([一二三四五六七八九十壹贰叁肆伍陆柒捌玖拾\\d])\\s*[季部幕]") to { m ->
+            val g = m.groupValues[1]; g.toIntOrNull() ?: CN_NUM[g[0]]
+        },
+        Regex("([一二三四五六七八九十壹贰叁肆伍陆柒捌玖拾])\\s*之\\s*章") to { m -> CN_NUM[m.groupValues[1][0]] },
+        Regex("\\s+([Ⅰ-Ⅻ])(?=\\s|$)") to { m -> "ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ".indexOf(m.groupValues[1][0]).let { if (it < 0) null else it + 1 } },
+        Regex("\\s+([IVXLCDM]+)\\b", RegexOption.IGNORE_CASE) to { m -> romanToInt(m.groupValues[1]).takeIf { it > 0 } },
+        Regex("[^\\d](\\d{1,2})\\s*$") to { m -> m.groupValues[1].toIntOrNull()?.takeIf { it in 1..20 } },
+    )
+
+    /** 从标题解析季度，无则默认 1（移植自 misaka get_season_from_title）。 */
+    internal fun seasonFromTitle(title: String): Int {
+        if (title.isBlank()) return 1
+        for ((re, handler) in SEASON_PATTERNS) {
+            re.find(title)?.let { mr -> handler(mr)?.let { return it } }
+        }
+        return 1
+    }
+
+    // 归一标题里剥掉季度尾标记，得到「基础剧名」用于跨季比对。
+    private fun stripSeason(norm: String): String =
+        norm.replace(Regex("第[一二三四五六七八九十壹贰叁肆伍陆柒捌玖拾\\d]+[季部幕]"), "")
+            .replace(Regex("[一二三四五六七八九十]之章"), "")
+            .replace(Regex("season\\d+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^(.*[^\\d])\\d{1,2}$")) { it.groupValues[1] }
+            .ifEmpty { norm }
+
+    /** Levenshtein 相似度（0~100），近似 thefuzz.ratio，用于标题模糊匹配。 */
+    private fun ratio(a: String, b: String): Int {
+        if (a.isEmpty() && b.isEmpty()) return 100
+        if (a.isEmpty() || b.isEmpty()) return 0
+        val dp = IntArray(b.length + 1) { it }
+        for (i in 1..a.length) {
+            var prev = dp[0]; dp[0] = i
+            for (j in 1..b.length) {
+                val cur = dp[j]
+                dp[j] = if (a[i - 1] == b[j - 1]) prev else minOf(prev, dp[j], dp[j - 1]) + 1
+                prev = cur
+            }
+        }
+        val maxLen = maxOf(a.length, b.length)
+        return Math.round(100.0 * (1.0 - dp[b.length].toDouble() / maxLen)).toInt()
+    }
+
+    // 标题相似度评分（仿 misaka 加权，但只算「标题+季度」维度；不命中返回 0）。
+    private fun matchScore(query: String, candTitle: String): Int {
+        val nq = normalizeTitle(query); val nc = normalizeTitle(candTitle)
+        if (nq.isEmpty() || nc.isEmpty()) return 0
+        if (nq == nc) return 10000                       // 去标点完全一致（含季度）
+        val qBase = stripSeason(nq); val cBase = stripSeason(nc)
+        val sameSeason = seasonFromTitle(query) == seasonFromTitle(candTitle)
+        if (qBase.isNotEmpty() && qBase == cBase) return if (sameSeason) 5000 else 0  // 同剧，仅同季算命中
+        val r = ratio(qBase, cBase)                      // 基础剧名模糊
+        return if (r >= 85 && sameSeason) r else 0       // 阈值 85，且季度一致
+    }
+
+    /**
+     * 从某源 search 候选里挑与剧名最匹配的一个（misaka 思路：黑名单滤派生 → 相似度加权打分 → 取最高）。
+     * 设相关性下限（matchScore>0：完全/去标点/同剧同季/模糊≥85），低于则视为未命中——
+     * 避免「主角」误中「《主角》原著超前看/超前大赏」这类派生或别的剧。
+     */
+    internal fun pickBestMatch(query: String, candidates: List<DanmakuMedia>): DanmakuMedia? {
+        if (candidates.isEmpty() || normalizeTitle(query).isEmpty()) return null
+        return candidates
+            .filterNot { isJunkTitle(it.title) }                 // ① 搜索结果标题黑名单
+            .map { it to matchScore(query, it.title) }           // ② 相似度打分
+            .filter { it.second > 0 }                            // 下限：低于阈值不算命中
+            .maxByOrNull { it.second }?.first                    // 取最高（同分保留 search 相关性首个）
+    }
+
+    // 垃圾分集黑名单（移植自 misaka search_result_global_blacklist）。中文表逐项照搬；
+    // 英文表收紧为词边界匹配，剔除 CD/Disc/Scan/Logo/Info 等易误伤正片标题的短词。
+    private val JUNK_CN = Regex(
+        "特典|预告|广告|菜单|花絮|特辑|速看|资讯|彩蛋|直拍|直播回顾|片头|片尾|幕后|映像|番外篇|" +
+            "纪录片|访谈|番外|短片|加更|走心|解忧|纯享|解读|揭秘|赏析|抢先看|超前看|名场面"
+    )
+    private val JUNK_EN = Regex(
+        "\\b(NCOP|NCED|NC|OP|ED|SP|OVA|OAD|PV|MV|Menu|Bonus|Recap|Teaser|Trailer|Preview|Sample|EDPV|SongSpot|BDSpot)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private fun isJunkTitle(t: String): Boolean = JUNK_CN.containsMatchIn(t) || JUNK_EN.containsMatchIn(t)
+
+    /** 剔除预告/花絮等垃圾分集（避免错位拾到非正片）。全被判垃圾时保留原列表，防误杀清空。 */
+    internal fun filterJunkEpisodes(episodes: List<DanmakuEpisode>): List<DanmakuEpisode> {
+        if (episodes.isEmpty()) return episodes
+        val kept = episodes.filterNot { isJunkTitle(it.title) }
+        return if (kept.isEmpty()) episodes else kept
     }
 
     /**
@@ -93,7 +206,7 @@ object DanmakuService {
 
         val list = runCatching {
             val src = sourceFor(context, def)
-            val episodes = src.getEpisodes(match.mediaId)
+            val episodes = filterJunkEpisodes(src.getEpisodes(match.mediaId))
             val ep = episodes.getOrNull(episode1Based - 1) ?: episodes.firstOrNull()
             ?: return@runCatching emptyList()
             src.getComments(ep.episodeId)

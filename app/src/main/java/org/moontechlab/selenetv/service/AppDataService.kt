@@ -34,7 +34,8 @@ object AppDataService {
     private const val KEY_IS_LOCAL_MODE = "is_local_mode"
     private const val KEY_SKIPPED_VERSION = "skipped_version"
     private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
-    private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"
+    private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"   // 旧开关（仅迁移读）
+    private const val KEY_DANMAKU_AREA = "danmaku_area"         // 显示区域：off/third/half/full
     private const val KEY_DANMAKU_SOURCES = "danmaku_sources"   // 启用源 key 的 CSV
 
     private lateinit var prefs: SharedPreferences
@@ -46,9 +47,9 @@ object AppDataService {
     @Volatile
     private var isLocalModeCache: Boolean = false
 
-    // 弹幕开关缓存（同步读，供播放页初始化用）
+    // 弹幕显示区域缓存（off/third/half/full；同步读，供播放页初始化用）。off 即关闭。
     @Volatile
-    private var danmakuEnabledCache: Boolean = false
+    private var danmakuAreaCache: String = "off"
 
     // 启用的弹幕源 key 集合缓存（同步读，供播放页并发拉取用）
     @Volatile
@@ -60,7 +61,8 @@ object AppDataService {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
-        danmakuEnabledCache = prefs.getBoolean(KEY_DANMAKU_ENABLED, false)
+        danmakuAreaCache = prefs.getString(KEY_DANMAKU_AREA, null)
+            ?: if (prefs.getBoolean(KEY_DANMAKU_ENABLED, false)) "full" else "off"   // 迁移旧开关
         danmakuSourcesCache = prefs.getString(KEY_DANMAKU_SOURCES, null)
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
             ?: org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
@@ -221,14 +223,20 @@ object AppDataService {
 
     // ==================== 弹幕设置 ====================
 
-    /** 保存弹幕开关；同步更新内存缓存。 */
-    suspend fun setDanmakuEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
-        prefs.edit().putBoolean(KEY_DANMAKU_ENABLED, enabled).apply()
-        danmakuEnabledCache = enabled
+    /** 保存弹幕开关（映射到区域：开→full，关→off）；同步更新内存缓存。 */
+    suspend fun setDanmakuEnabled(enabled: Boolean) = setDanmakuArea(if (enabled) "full" else "off")
+
+    /** 保存弹幕显示区域（off/third/half/full）；同步更新内存缓存。 */
+    suspend fun setDanmakuArea(area: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_DANMAKU_AREA, area).apply()
+        danmakuAreaCache = area
     }
 
-    /** 同步读，零阻塞；供播放页初始化弹幕开关用。 */
-    fun isDanmakuEnabledSync(): Boolean = danmakuEnabledCache
+    /** 同步读弹幕显示区域（off/third/half/full）。 */
+    fun getDanmakuAreaSync(): String = danmakuAreaCache
+
+    /** 同步读，零阻塞；供播放页初始化弹幕开关用（区域非 off 即开）。 */
+    fun isDanmakuEnabledSync(): Boolean = danmakuAreaCache != "off"
 
     /** 同步读启用的弹幕源 key 集合（供播放页并发拉取用）。 */
     fun getEnabledDanmakuSourcesSync(): Set<String> = danmakuSourcesCache

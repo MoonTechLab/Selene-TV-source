@@ -51,19 +51,29 @@ fun DanmakuOverlay(
         modifier = modifier,
     )
 
-    // 数据变化：重载并从当前位置起播。
-    LaunchedEffect(comments) {
-        if (comments.isNotEmpty()) {
-            player.updateData(comments.map { it.toItemData(density) })
+    // 全量 item（按 comments 缓存）。暂停时只投喂 ≤当前位置 的子集。
+    val items = remember(comments) { comments.map { it.toItemData(density) } }
+
+    // 数据变化：重载并从当前位置起播。暂停态下只投喂「已到点」的弹幕（见下）。
+    LaunchedEffect(items) {
+        if (items.isNotEmpty()) {
+            player.updateData(if (isPlaying) items else items.filter { it.position <= positionMs })
             player.start(baseConfig)
             player.seekTo(positionMs)
-            if (!isPlaying) player.pause()
         }
     }
 
-    // 播放/暂停同步。
+    // 暂停：把数据裁到 ≤当前位置——屏上/刚到点的弹幕继续飞完，后续（未来时间）的不装填、不发射；
+    //       不暂停弹幕时钟，故在飞的能自然飞出屏幕后清空。
+    // 恢复：恢复全量数据并对齐视频位置，后续弹幕随播放到点再发射。
     LaunchedEffect(isPlaying) {
-        if (isPlaying) player.start() else player.pause()
+        if (isPlaying) {
+            player.updateData(items)
+            player.seekTo(positionMs)
+            player.start()
+        } else {
+            player.updateData(items.filter { it.position <= positionMs })
+        }
     }
 
     // 倍速同步。

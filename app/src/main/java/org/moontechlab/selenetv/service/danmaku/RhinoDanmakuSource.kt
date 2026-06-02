@@ -31,15 +31,21 @@ class RhinoDanmakuSource(
     }
 
     override fun search(keyword: String): List<DanmakuMedia> =
-        decode(engine?.call("search", keyword))
+        decode("search", engine?.call("search", keyword))
 
     override fun getEpisodes(mediaId: String): List<DanmakuEpisode> =
-        decode(engine?.call("getEpisodes", mediaId))
+        decode("getEpisodes", engine?.call("getEpisodes", mediaId))
 
     override fun getComments(episodeId: String): List<DanmakuComment> =
-        decode(engine?.call("getComments", episodeId))
+        decode("getComments", engine?.call("getComments", episodeId))
 
-    private inline fun <reified T> decode(jsonStr: String?): List<T> =
-        if (jsonStr.isNullOrBlank()) emptyList()
-        else runCatching { json.decodeFromString<List<T>>(jsonStr) }.getOrDefault(emptyList())
+    private inline fun <reified T> decode(fn: String, jsonStr: String?): List<T> {
+        if (jsonStr.isNullOrBlank()) {
+            Log.i("DanmakuDecode", "[$providerName.$fn] 脚本返回空")
+            return emptyList()
+        }
+        return runCatching { json.decodeFromString<List<T>>(jsonStr) }
+            .onFailure { Log.w("DanmakuDecode", "[$providerName.$fn] 反序列化失败(原始 ${jsonStr.length} 字符): ${it.message} | 头部: ${jsonStr.take(200)}") }
+            .getOrDefault(emptyList())
+    }
 }
