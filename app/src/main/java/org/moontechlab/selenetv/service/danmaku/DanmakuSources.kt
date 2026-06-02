@@ -4,8 +4,8 @@ package org.moontechlab.selenetv.service.danmaku
  * 弹幕源注册表。Phase 2 多源聚合的静态清单：每个源 = (key, 显示名, 脚本 asset, 默认是否启用)。
  *
  * 脚本当前从 assets 本地加载（Phase 3 改远程下发清单时，本表换成远程拉取即可，调用方不变）。
- * 「默认启用」= 已逆向验证可出弹幕的源；best-effort/骨架源默认关闭，用户可在设置里手动开。
- * 注：一次只用一个源渲染（见 [DanmakuService.fetchAll]），故启用多个源只是扩大候选，不会叠加上屏。
+ * 清单只收已逆向验证可出弹幕的源（全部默认启用）；best-effort/骨架占位源已移除。
+ * 注：一次只用一个源渲染（见 [DanmakuService.fetchComments]），故启用多个源只是扩大候选，不会叠加上屏。
  */
 object DanmakuSources {
 
@@ -27,13 +27,6 @@ object DanmakuSources {
         Def("xigua", "西瓜视频", "danmaku/xigua.js", true),
         Def("renren", "人人视频", "danmaku/renren.js", true),
         Def("hanjutv", "韩剧TV", "danmaku/hanjutv.js", true),
-        // best-effort（端点已逆未抓包）：默认关
-        Def("ezdmw", "ezdmw", "danmaku/ezdmw.js", false),
-        // 骨架占位（恒空）：默认关，仅占位便于日后填实
-        Def("mddcloud", "mddcloud", "danmaku/mddcloud.js", false),
-        Def("migu", "咪咕视频", "danmaku/migu.js", false),
-        Def("gamer", "巴哈姆特", "danmaku/gamer.js", false),
-        Def("dandanplay", "弹弹play", "danmaku/dandanplay.js", false),
     )
 
     val byKey: Map<String, Def> = ALL.associateBy { it.key }
