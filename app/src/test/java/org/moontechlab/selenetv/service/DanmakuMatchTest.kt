@@ -47,6 +47,20 @@ class DanmakuMatchTest {
     }
 
     @Test
+    fun `篇章后缀_基础剧名为前缀可命中`() {
+        // 跨平台命名：记录名带篇章「凡人修仙传：风起天南」，B站只叫「凡人修仙传」→ 前缀包含同季应命中
+        val c = listOf(media("凡人修仙传", "bili"))
+        assertEquals("bili", DanmakuService.pickBestMatch("凡人修仙传：风起天南", c)?.mediaId)
+    }
+
+    @Test
+    fun `前缀过短不命中_主角不中女主角`() {
+        // ≥4 字守卫：避免短名「主角」前缀误中「主角XXX」这类派生
+        val c = listOf(media("主角的逆袭人生"))
+        assertNull(DanmakuService.pickBestMatch("主角", c))
+    }
+
+    @Test
     fun `季度不一致不应命中`() {
         // S1 剧名不该误中只有 S2 的候选（季度识别生效）
         val c = listOf(media("凡人修仙传 第二季", "frx2"))

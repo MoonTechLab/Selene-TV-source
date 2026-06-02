@@ -145,6 +145,12 @@ object DanmakuService {
         val qBase = stripSeason(nq); val cBase = stripSeason(nc)
         val sameSeason = seasonFromTitle(query) == seasonFromTitle(candTitle)
         if (qBase.isNotEmpty() && qBase == cBase) return if (sameSeason) 5000 else 0  // 同剧，仅同季算命中
+        // 跨平台命名差异：一方在基础剧名后接篇章/篇名（爱奇艺「凡人修仙传-风起天南」、腾讯「凡人修仙传仙界篇」
+        // vs B站「凡人修仙传」）。较短基础名是较长名的前缀、且足够长（≥4，避免「主角」误中「女主角失格」之类）、
+        // 同季 → 判命中（中等分，弱于完全/同名同季，强于纯模糊）。
+        val shortB = if (qBase.length <= cBase.length) qBase else cBase
+        val longB = if (qBase.length <= cBase.length) cBase else qBase
+        if (shortB.length >= 4 && longB.startsWith(shortB) && sameSeason) return 3000
         val r = ratio(qBase, cBase)                      // 基础剧名模糊
         return if (r >= 85 && sameSeason) r else 0       // 阈值 85，且季度一致
     }
