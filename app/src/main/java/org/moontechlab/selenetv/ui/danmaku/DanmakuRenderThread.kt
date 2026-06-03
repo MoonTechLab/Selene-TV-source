@@ -34,6 +34,7 @@ class DanmakuRenderThread(
     private var lastFrameNs = 0L
     private var lastSyncNs = 0L
     private var looping = false
+    private var wasPreview = false
 
     private val frameCallback = Choreographer.FrameCallback { onVsync(it) }
 
@@ -79,16 +80,19 @@ class DanmakuRenderThread(
     }
 
     private fun onVsync(frameNs: Long) {
-        // 时钟只在真正播放时推进；预览（弹窗打开）与暂停一律冻结画面。否则预览期自由飞会与宿主位置漂移，
-        // 关弹窗回到播放态时被漂移校正 seekTo 清空已在屏的弹幕——用户明确要求不清空已发射弹幕。
-        if (lastFrameNs != 0L && isPlaying) {
-            val dtMs = (frameNs - lastFrameNs) / 1_000_000f
-            engineClockMs += (dtMs * playSpeed).toLong()
+        // 预览态切换：进入→快照当前帧做循环底；退出→丢弃预览缓冲，正常状态原样恢复（绝不清空已发射弹幕）。
+        if (previewMode != wasPreview) {
+            if (previewMode) engine.beginPreview() else engine.endPreview()
+            wasPreview = previewMode
+            lastFrameNs = 0L                                     // 切态后重置 dt 基准
         }
+
+        val dtMs = if (lastFrameNs != 0L) (frameNs - lastFrameNs) / 1_000_000f else 0f
         lastFrameNs = frameNs
 
-        if (isPlaying) {                                         // 周期漂移校正（仅播放时）
-            if (lastSyncNs == 0L) lastSyncNs = frameNs
+        if (isPlaying) {
+            engineClockMs += (dtMs * playSpeed).toLong()
+            if (lastSyncNs == 0L) lastSyncNs = frameNs           // 周期漂移校正（仅播放时，软跳转不清屏）
             else if (frameNs - lastSyncNs > 2_000_000_000L) {
                 lastSyncNs = frameNs
                 if (abs(engineClockMs - hostPositionMs) > 1200) {
@@ -96,13 +100,16 @@ class DanmakuRenderThread(
                     engine.seekTo(engineClockMs)
                 }
             }
+            engine.advance(engineClockMs)
+        } else if (previewMode) {
+            engine.tickPreview(dtMs.toLong())                    // 预览循环：反复滚动当前时间点的弹幕
         }
+        // 否则：暂停且无预览 → 冻结，仅按需重绘当前帧。
 
-        engine.advance(engineClockMs)
         drawFrame()
 
-        if (isPlaying) choreographer?.postFrameCallback(frameCallback)
-        else looping = false                                    // 暂停/预览：冻结画面已绘，停循环省 CPU
+        if (isPlaying || previewMode) choreographer?.postFrameCallback(frameCallback)
+        else looping = false                                    // 暂停：冻结画面已绘，停循环省 CPU
     }
 
     private fun drawFrame() {

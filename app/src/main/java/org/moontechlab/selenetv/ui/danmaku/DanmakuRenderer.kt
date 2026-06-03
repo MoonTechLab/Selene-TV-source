@@ -15,7 +15,7 @@ object DanmakuRenderer {
         if (!cfg.visible) return
         paint.textSize = cfg.textSizePx
         val alpha = (cfg.opacity.coerceIn(0f, 1f) * 255f).toInt()
-        for (d in engine.active) {
+        for (d in engine.renderActive) {
             paint.color = (alpha shl 24) or (d.colorRgb and 0xFFFFFF)
             canvas.drawText(d.text, d.x, d.y, paint)
         }

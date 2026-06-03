@@ -193,6 +193,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     var danmakuWasPlaying by remember { mutableStateOf(false) }
     // 弹幕统一菜单（区域 + 源）开合状态。
     var danmakuMenuOpen by remember { mutableStateOf(false) }
+    // 弹窗切匹配的硬清屏信号：自增一次 → DanmakuOverlay 清空在屏弹幕（仅切匹配清，切集/关弹窗不清）。
+    var danmakuClearTick by remember { mutableIntStateOf(0) }
 
     fun wake() { controlsVisible = true; interactionTick++ }
 
@@ -398,15 +400,17 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
             selectedDanmakuKey?.let { loadNearChunks(it) }
         }
     }
-    // 切换弹幕源：选中并立即加载该源进度附近分块（持续加载循环随后接管）。
+    // 切换弹幕源：清屏（切匹配必清）→ 选中并立即加载该源进度附近分块（持续加载循环随后接管）。
     fun selectDanmakuSource(key: String) {
+        danmakuClearTick++
         selectedDanmakuKey = key
         scope.launch { loadNearChunks(key) }
     }
-    // 二级菜单换剧集：改该源生效候选 → 清该源已加载/累积 → 选中并立即加载附近分块。
+    // 二级菜单换剧集：改该源生效候选 → 清该源已加载/累积 → 清屏（切匹配必清）→ 选中并立即加载附近分块。
     fun selectDanmakuCandidate(key: String, mediaId: String) {
         danmakuActiveMediaByKey[key] = mediaId
         danmakuLoadedChunks.remove(key); danmakuSeen.remove(key); danmakuCommentsByKey.remove(key)
+        danmakuClearTick++
         selectedDanmakuKey = key
         scope.launch { loadNearChunks(key) }
     }
@@ -613,8 +617,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
         // 弹幕层：叠在画面之上、压暗/控制条之下。区域决定占屏高度（上对齐）：1/3 / 半屏 / 全屏。
         // 只要弹幕开启就常驻挂载（不再按 comments 是否为空卸载/重建）——避免每集开头空窗、切换间隙频繁
-        // datasetKey 只认「视频集」：换弹幕源 / 换源内剧集匹配都不重建 —— 同一视频位置，旧弹幕自然飞出、新源续上，不清屏；
-        // 仅切视频集时重建出全新引擎。已在屏弹幕的保留另见 DanmakuRenderThread（预览冻结时钟、不被漂移 seekTo 清空）。
+        // datasetKey 恒定不重建：切集（下一集）位置归零走引擎软跳转(seekTo 重定基)——已发射弹幕飞完、新集续上，不清屏；
+        // 切匹配经 clearSignal 显式硬清屏；关弹窗经预览缓冲原样恢复。三类清/不清的归属都在引擎层处理。
         if (danmakuEnabled) {
             DanmakuOverlay(
                 comments = danmakuComments,
@@ -624,9 +628,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 visible = danmakuEnabled,
                 settings = danmakuSettings,
                 previewMode = danmakuMenuOpen,
-                datasetKey = currentEpisode,
+                datasetKey = Unit,
                 // 显示区域改由引擎在内部按比例限制弹幕高度带；view 始终全屏，切区域不再 resize → 不闪动。
                 areaFraction = danmakuAreaFraction(danmakuArea),
+                clearSignal = danmakuClearTick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()

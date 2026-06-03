@@ -41,6 +41,11 @@ class DanmakuTextureView(context: Context) : TextureView(context), TextureView.S
         renderThread?.setPlayback(pos, playing, speed, preview)
     }
 
+    /** 硬清屏（弹窗切匹配专用）：回收全部在屏弹幕。 */
+    fun submitClear() {
+        renderThread?.let { t -> t.post { engine.clear() }; t.requestRedraw() }
+    }
+
     override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
         val s = Surface(st)
         surface = s

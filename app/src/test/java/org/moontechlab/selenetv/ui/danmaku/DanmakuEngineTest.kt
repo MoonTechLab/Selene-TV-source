@@ -38,24 +38,74 @@ class DanmakuEngineTest {
         assertFalse(e.active.any { it.id == 1L })
     }
 
-    @Test fun seekClearsActiveAndRepositionsCursor() {
+    @Test fun seekIsSoftPreservesActiveAndRepositionsCursor() {
+        val e = engine()
+        e.setItems((1..10).map { scroll(it.toLong(), it * 1000L) })
+        e.advance(2500)
+        val before = e.active.map { it.id }.toSet()
+        assertTrue(before.isNotEmpty())
+        e.seekTo(5000)
+        // 软跳转：已发射弹幕保留（不清空）
+        assertEquals(before, e.active.map { it.id }.toSet())
+        // 游标重定位：从 5000 起，下一次 advance 命中 id=5；5000 之前未播的 id=4 不回补
+        e.advance(5000)
+        assertTrue(e.active.any { it.id == 5L })
+        assertFalse(e.active.any { it.id == 4L })
+    }
+
+    @Test fun softSeekKeepsOnScreenPosition() {
+        val e = engine()
+        e.setItems(listOf(scroll(1, 1000)))
+        e.advance(2000)            // id=1 入场（spawnTime=2000，x=viewW）
+        e.advance(4000)            // 飞了一会
+        val xBefore = e.active.first { it.id == 1L }.x
+        e.seekTo(50000)            // 大跳：重定基，保持在屏位置
+        e.advance(50000)
+        val d = e.active.firstOrNull { it.id == 1L }
+        assertTrue(d != null)
+        assertEquals(xBefore, d!!.x, 0.5f)
+    }
+
+    @Test fun clearEmptiesActive() {
         val e = engine()
         e.setItems((1..10).map { scroll(it.toLong(), it * 1000L) })
         e.advance(2500)
         assertTrue(e.active.isNotEmpty())
-        e.seekTo(5000)
+        e.clear()                  // 硬清屏（切匹配）
         assertTrue(e.active.isEmpty())
-        e.advance(5000)
-        assertEquals(listOf(5L), e.active.map { it.id })
     }
 
-    @Test fun seekBackwardDoesNotReplayFromZero() {
+    @Test fun previewDoesNotTouchRealState() {
         val e = engine()
-        e.setItems((1..10).map { scroll(it.toLong(), it * 1000L) })
-        e.advance(9000)
-        e.seekTo(3000)
+        e.setItems((1..20).map { scroll(it.toLong(), it * 1000L) })
+        e.advance(5000)
+        val realActive = e.active.map { it.id }.toSet()
+        val realClock = e.clock
+        e.beginPreview()
+        assertTrue(e.isPreviewing)
+        e.tickPreview(1000)        // 预览推进
+        assertEquals(realClock, e.clock)                          // 不动正常时钟
+        assertEquals(realActive, e.active.map { it.id }.toSet())  // 不动正常活跃集
+        e.endPreview()
+        assertFalse(e.isPreviewing)
+        assertEquals(realClock, e.clock)
+        assertEquals(realActive, e.active.map { it.id }.toSet())  // 退出预览原样恢复
+    }
+
+    @Test fun previewWrapsAfterWindowAndStaysBounded() {
+        val e = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 1080)
+            setConfig(DanmakuEngineConfig(rollingDurationMs = 8000L, textSizePx = 40f))
+        }
+        e.setItems((1..50).map { scroll(it.toLong(), it * 1000L) })
         e.advance(3000)
-        assertEquals(listOf(3L), e.active.map { it.id })
+        e.beginPreview()
+        e.tickPreview(2000)
+        assertTrue(e.renderActive.isNotEmpty())
+        val afterFirst = e.renderActive.size
+        e.tickPreview(10000)       // 越过窗口(8000) → 回到起点重放，不无限累积
+        assertTrue(e.isPreviewing)
+        assertTrue(e.renderActive.size <= afterFirst + 2)
     }
 
     @Test fun scrollSpreadsAcrossLanesWhenOverlapAllowed() {

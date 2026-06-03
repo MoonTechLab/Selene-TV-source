@@ -32,6 +32,7 @@ fun DanmakuOverlay(
     previewMode: Boolean = false,
     datasetKey: Any = Unit,
     areaFraction: Float = 1f,
+    clearSignal: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     androidx.compose.runtime.key(datasetKey) {
@@ -58,6 +59,10 @@ fun DanmakuOverlay(
         }
         LaunchedEffect(view, positionMs, isPlaying, speed, previewMode) {
             view?.submitPlayback(positionMs, isPlaying, speed, previewMode)
+        }
+        // 切匹配信号自增 → 硬清屏（首帧 clearSignal=0 不触发）。
+        LaunchedEffect(view, clearSignal) {
+            if (clearSignal > 0) view?.submitClear()
         }
     }
 }

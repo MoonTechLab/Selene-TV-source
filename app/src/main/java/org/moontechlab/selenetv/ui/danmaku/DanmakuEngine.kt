@@ -4,8 +4,15 @@ package org.moontechlab.selenetv.ui.danmaku
  * 弹幕布局引擎（纯 Kotlin，零 android.graphics 依赖 → JVM 可单测）。
  *
  * 持一条按 timeMs 排序的列表 + 时间游标：advance(nowMs) 把落入 (上次, now] 的项 spawn 进轨道、
- * retire 过期项、重算每条位置；draw 由外部 DanmakuRenderer 读取 [active] 完成。所有状态只应在
- * 渲染线程触碰（调用方保证），故内部不加锁。
+ * retire 过期项、重算每条位置；draw 由外部 DanmakuRenderer 读取 [renderActive] 完成。所有状态只应
+ * 在渲染线程触碰（调用方保证），故内部不加锁。
+ *
+ * 跳转语义：
+ * - [seekTo] 软跳转——保留已发射弹幕（重定基使其维持在屏继续飞出），仅重定位游标。用于切集/拖拽/漂移校正。
+ * - [clear] 硬清屏——回收全部在屏弹幕。仅用于弹窗切匹配（用户要求必清）。
+ *
+ * 预览（弹窗打开、视频暂停时）：用独立缓冲 [previewActive] + 独立游标循环重放「当前时间点」的弹幕，
+ * 不触碰正常播放状态，故关弹窗即原样恢复、绝不清空已发射弹幕。
  */
 class DanmakuEngine(private val measurer: TextMeasurer) {
 
@@ -20,9 +27,19 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     private val pool = ArrayList<ActiveDanmaku>()
     private val activeList = ArrayList<ActiveDanmaku>()
 
-    /** 只读活跃集（渲染绘制 / 单测断言）。 */
+    // 预览缓冲与游标：循环窗口重放，独立于正常播放状态。
+    private var previewing = false
+    private var previewClockMs = 0L
+    private var previewBaseMs = 0L
+    private var previewCursor = 0
+    private val previewActive = ArrayList<ActiveDanmaku>()
+
+    /** 正常活跃集（单测断言 / 正常播放绘制）。 */
     val active: List<ActiveDanmaku> get() = activeList
+    /** 当前应绘制的集合：预览时为预览缓冲，否则为正常活跃集。 */
+    val renderActive: List<ActiveDanmaku> get() = if (previewing) previewActive else activeList
     val clock: Long get() = clockMs
+    val isPreviewing: Boolean get() = previewing
 
     fun setViewport(w: Int, h: Int) { viewW = w; viewH = h }
     fun setConfig(c: DanmakuEngineConfig) { config = c }
@@ -31,45 +48,66 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     fun setItems(list: List<DanmakuItem>) {
         items = list.sortedBy { it.timeMs }
         cursor = firstIndexAtOrAfter(clockMs)
+        if (previewing) restartPreviewWindow()   // 预览中换源/换数据 → 用新数据重启循环窗口
     }
 
-    /** 跳转：清空活跃集，游标二分到目标时间。 */
+    /** 软跳转：已发射弹幕重定基（保持在屏位置继续飞出），仅重定位游标，不清空。 */
     fun seekTo(ms: Long) {
+        val delta = ms - clockMs
+        if (delta != 0L) for (d in activeList) d.spawnTimeMs += delta
         clockMs = ms
-        recycleAll()
         cursor = firstIndexAtOrAfter(ms)
+    }
+
+    /** 硬清屏：回收全部在屏弹幕（弹窗切匹配专用）。 */
+    fun clear() {
+        recycleAll(activeList)
+        if (previewing) restartPreviewWindow()
     }
 
     /** 推进到绝对时间 nowMs：spawn 到期项、retire 过期项、重算位置。 */
     fun advance(nowMs: Long) {
         clockMs = nowMs
         while (cursor < items.size && items[cursor].timeMs <= nowMs) {
-            spawn(items[cursor]); cursor++
+            spawnInto(activeList, items[cursor], nowMs); cursor++
         }
-        val laneH = laneHeight()
-        var i = 0
-        while (i < activeList.size) {
-            val d = activeList[i]
-            val expired = when (d.mode) {
-                DanmakuMode.SCROLL -> {
-                    val speed = (viewW + d.width) / config.rollingDurationMs.toFloat()
-                    d.x = viewW - speed * (nowMs - d.spawnTimeMs)
-                    d.y = d.lane * laneH + laneH
-                    d.x + d.width < 0f
-                }
-                DanmakuMode.TOP -> {
-                    d.x = (viewW - d.width) / 2f
-                    d.y = d.lane * laneH + laneH
-                    nowMs - d.spawnTimeMs > config.topBottomDurationMs
-                }
-                DanmakuMode.BOTTOM -> {
-                    d.x = (viewW - d.width) / 2f
-                    d.y = usableHeight() - d.lane * laneH
-                    nowMs - d.spawnTimeMs > config.topBottomDurationMs
-                }
-            }
-            if (expired) { recycle(d); activeList.removeAt(i) } else i++
+        layoutAndRetire(activeList, nowMs)
+    }
+
+    // ---- 预览（循环重放当前时间点） ----
+
+    fun beginPreview() {
+        if (previewing) return
+        previewing = true
+        previewBaseMs = clockMs
+        previewClockMs = clockMs
+        previewCursor = firstIndexAtOrAfter(clockMs)
+        // 以当前在屏弹幕为起点，预览首帧连贯
+        recycleAll(previewActive)
+        for (d in activeList) previewActive.add(copyOf(d))
+    }
+
+    /** 预览推进 dtMs；越过一个滚动时长就回到起点重放（反复滚动当前时间点的弹幕）。 */
+    fun tickPreview(dtMs: Long) {
+        if (!previewing) return
+        previewClockMs += dtMs
+        if (previewClockMs - previewBaseMs > config.rollingDurationMs) restartPreviewWindow()
+        while (previewCursor < items.size && items[previewCursor].timeMs <= previewClockMs) {
+            spawnInto(previewActive, items[previewCursor], previewClockMs); previewCursor++
         }
+        layoutAndRetire(previewActive, previewClockMs)
+    }
+
+    fun endPreview() {
+        if (!previewing) return
+        previewing = false
+        recycleAll(previewActive)
+    }
+
+    private fun restartPreviewWindow() {
+        recycleAll(previewActive)
+        previewClockMs = previewBaseMs
+        previewCursor = firstIndexAtOrAfter(previewBaseMs)
     }
 
     // ---- internals ----
@@ -94,29 +132,57 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         return lo
     }
 
-    private fun spawn(item: DanmakuItem) {
+    private fun spawnInto(target: MutableList<ActiveDanmaku>, item: DanmakuItem, atClock: Long) {
         val width = measurer.measure(item.text, config.textSizePx)
-        val lane = allocLane(item.mode, width)
+        val lane = allocLane(target, item.mode, width, atClock)
         if (lane < 0) return  // 防重叠放不下 / 无空轨 → 丢弃
         val d = obtain()
         d.id = item.id; d.text = item.text; d.colorRgb = item.colorRgb
-        d.mode = item.mode; d.spawnTimeMs = clockMs; d.width = width; d.lane = lane
-        activeList.add(d)
+        d.mode = item.mode; d.spawnTimeMs = atClock; d.width = width; d.lane = lane
+        target.add(d)
     }
 
-    private fun allocLane(mode: DanmakuMode, width: Float): Int = when (mode) {
-        DanmakuMode.SCROLL -> allocScrollLane(laneCount(), width)
-        DanmakuMode.TOP -> allocStaticLane(laneCount(), DanmakuMode.TOP)
-        DanmakuMode.BOTTOM -> allocStaticLane(laneCount(), DanmakuMode.BOTTOM)
+    private fun layoutAndRetire(target: MutableList<ActiveDanmaku>, nowMs: Long) {
+        val laneH = laneHeight()
+        var i = 0
+        while (i < target.size) {
+            val d = target[i]
+            val expired = when (d.mode) {
+                DanmakuMode.SCROLL -> {
+                    val speed = (viewW + d.width) / config.rollingDurationMs.toFloat()
+                    d.x = viewW - speed * (nowMs - d.spawnTimeMs)
+                    d.y = d.lane * laneH + laneH
+                    d.x + d.width < 0f
+                }
+                DanmakuMode.TOP -> {
+                    d.x = (viewW - d.width) / 2f
+                    d.y = d.lane * laneH + laneH
+                    nowMs - d.spawnTimeMs > config.topBottomDurationMs
+                }
+                DanmakuMode.BOTTOM -> {
+                    d.x = (viewW - d.width) / 2f
+                    d.y = usableHeight() - d.lane * laneH
+                    nowMs - d.spawnTimeMs > config.topBottomDurationMs
+                }
+            }
+            if (expired) { recycle(d); target.removeAt(i) } else i++
+        }
     }
 
-    private fun allocScrollLane(count: Int, width: Float): Int {
+    private fun allocLane(target: List<ActiveDanmaku>, mode: DanmakuMode, width: Float, nowClock: Long): Int =
+        when (mode) {
+            DanmakuMode.SCROLL -> allocScrollLane(target, laneCount(), width, nowClock)
+            DanmakuMode.TOP -> allocStaticLane(target, laneCount(), DanmakuMode.TOP)
+            DanmakuMode.BOTTOM -> allocStaticLane(target, laneCount(), DanmakuMode.BOTTOM)
+        }
+
+    private fun allocScrollLane(target: List<ActiveDanmaku>, count: Int, width: Float, nowClock: Long): Int {
         var bestLane = -1
         var bestGap = Float.NEGATIVE_INFINITY
         for (lane in 0 until count) {
-            val last = lastScrollInLane(lane) ?: return lane  // 空轨直接用
+            val last = lastScrollInLane(target, lane) ?: return lane  // 空轨直接用
             val lastSpeed = (viewW + last.width) / config.rollingDurationMs.toFloat()
-            val lastRight = viewW - lastSpeed * (clockMs - last.spawnTimeMs) + last.width
+            val lastRight = viewW - lastSpeed * (nowClock - last.spawnTimeMs) + last.width
             if (config.antiOverlap) {
                 if (lastRight <= viewW) {                 // 前一条已完全入场才允许
                     val gap = viewW - lastRight
@@ -130,9 +196,9 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         return bestLane
     }
 
-    private fun lastScrollInLane(lane: Int): ActiveDanmaku? {
+    private fun lastScrollInLane(target: List<ActiveDanmaku>, lane: Int): ActiveDanmaku? {
         var found: ActiveDanmaku? = null
-        for (d in activeList) {
+        for (d in target) {
             if (d.mode == DanmakuMode.SCROLL && d.lane == lane &&
                 (found == null || d.spawnTimeMs > found.spawnTimeMs)
             ) found = d
@@ -140,13 +206,20 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         return found
     }
 
-    private fun allocStaticLane(count: Int, mode: DanmakuMode): Int {
+    private fun allocStaticLane(target: List<ActiveDanmaku>, count: Int, mode: DanmakuMode): Int {
         for (lane in 0 until count) {
             var occupied = false
-            for (d in activeList) if (d.mode == mode && d.lane == lane) { occupied = true; break }
+            for (d in target) if (d.mode == mode && d.lane == lane) { occupied = true; break }
             if (!occupied) return lane
         }
         return -1
+    }
+
+    private fun copyOf(src: ActiveDanmaku): ActiveDanmaku {
+        val d = obtain()
+        d.id = src.id; d.text = src.text; d.colorRgb = src.colorRgb; d.mode = src.mode
+        d.spawnTimeMs = src.spawnTimeMs; d.width = src.width; d.lane = src.lane; d.x = src.x; d.y = src.y
+        return d
     }
 
     private fun obtain(): ActiveDanmaku {
@@ -154,5 +227,5 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         return ActiveDanmaku().also { it.inUse = true; pool.add(it) }
     }
     private fun recycle(d: ActiveDanmaku) { d.inUse = false }
-    private fun recycleAll() { for (d in activeList) d.inUse = false; activeList.clear() }
+    private fun recycleAll(list: MutableList<ActiveDanmaku>) { for (d in list) d.inUse = false; list.clear() }
 }
