@@ -47,11 +47,14 @@ fun DanmakuOverlay(
         )
 
         // 显示密度：数据层按稳定散列抽样（沿用原口径），再映射成引擎 items。
+        // 单趟 mapNotNull：免「filter 中间列表 + 二次遍历」，分片加载每到一块只过一遍累积窗口。
         val items = remember(comments, settings.densityPct) {
             val pct = settings.densityPct
-            comments
-                .filter { pct >= 100 || (((it.timeMs * 31 + it.content.hashCode()).toInt() and 0x7fffffff) % 100) < pct }
-                .map { it.toEngineItem() }
+            if (pct >= 100) comments.map { it.toEngineItem() }
+            else comments.mapNotNull { c ->
+                val keep = (((c.timeMs * 31 + c.content.hashCode()).toInt() and 0x7fffffff) % 100) < pct
+                if (keep) c.toEngineItem() else null
+            }
         }
 
         LaunchedEffect(view, items) { view?.submitItems(items) }

@@ -27,6 +27,10 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     private val pool = ArrayList<ActiveDanmaku>()
     private val activeList = ArrayList<ActiveDanmaku>()
 
+    // 按 timeMs 升序的显式比较器：Long.compareTo 是 intrinsic，避免 compareBy/sortedBy 对每个 Long 装箱
+    // （分片源每到一块都重排全量窗口，装箱会在低端机上造成 GC 抖动）。
+    private val byTime = Comparator<DanmakuItem> { a, b -> a.timeMs.compareTo(b.timeMs) }
+
     // 预览缓冲与游标：当前时刻一窗弹幕「无缝无限循环」重放，独立于正常播放状态。
     // previewLapOffsetMs 是当前一圈窗口起点对齐到的预览钟值，每圈 += 一个滚动时长 → 旧的飞出、新的续入，绝不清屏。
     private var previewing = false
@@ -48,7 +52,7 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
 
     /** 增量 merge 后按 timeMs 排序，游标重定位到当前钟（早于当前钟的新插入项不补冒）。 */
     fun setItems(list: List<DanmakuItem>) {
-        items = list.sortedBy { it.timeMs }
+        items = list.sortedWith(byTime)
         cursor = firstIndexAtOrAfter(clockMs)
         // 预览中换源/换数据：不清屏——旧的继续飞出，tickPreview 会按新数据自动续上窗口（无缝）。
         if (previewing) previewCursor = firstIndexAtOrAfter(previewBaseMs)
@@ -203,11 +207,25 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
             DanmakuMode.BOTTOM -> allocStaticLane(target, laneCount(), DanmakuMode.BOTTOM)
         }
 
+    // 每轨「最后一条滚动弹幕」的暂存（仅 allocScrollLane 内用，跨调用复用避免每次 spawn 分配）。
+    private var laneLatestScratch: Array<ActiveDanmaku?> = arrayOfNulls(0)
+
     private fun allocScrollLane(target: List<ActiveDanmaku>, count: Int, width: Float, nowClock: Long): Int {
+        // 单趟扫活跃集，得到每轨最后一条滚动弹幕 → 把原 O(轨数×活跃) 降为 O(活跃+轨数)。
+        if (laneLatestScratch.size < count) laneLatestScratch = arrayOfNulls(count)
+        val latest = laneLatestScratch
+        for (i in 0 until count) latest[i] = null
+        for (i in 0 until target.size) {
+            val d = target[i]
+            if (d.mode == DanmakuMode.SCROLL && d.lane < count) {
+                val cur = latest[d.lane]
+                if (cur == null || d.spawnTimeMs > cur.spawnTimeMs) latest[d.lane] = d
+            }
+        }
         var bestLane = -1
         var bestGap = Float.NEGATIVE_INFINITY
         for (lane in 0 until count) {
-            val last = lastScrollInLane(target, lane) ?: return lane  // 空轨直接用
+            val last = latest[lane] ?: return lane  // 空轨直接用（顺序同原实现：最低空轨优先）
             val lastSpeed = (viewW + last.width) / config.rollingDurationMs.toFloat()
             val lastRight = viewW - lastSpeed * (nowClock - last.spawnTimeMs) + last.width
             if (config.antiOverlap) {
@@ -221,17 +239,6 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
             }
         }
         return bestLane
-    }
-
-    private fun lastScrollInLane(target: List<ActiveDanmaku>, lane: Int): ActiveDanmaku? {
-        var found: ActiveDanmaku? = null
-        for (i in 0 until target.size) {
-            val d = target[i]
-            if (d.mode == DanmakuMode.SCROLL && d.lane == lane &&
-                (found == null || d.spawnTimeMs > found.spawnTimeMs)
-            ) found = d
-        }
-        return found
     }
 
     private fun allocStaticLane(target: List<ActiveDanmaku>, count: Int, mode: DanmakuMode): Int {
