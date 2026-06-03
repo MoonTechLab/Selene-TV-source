@@ -88,4 +88,48 @@ class DanmakuEngineTest {
         e.advance(7999)
         assertTrue(e.active.any { it.id == 2L })
     }
+
+    private fun top(id: Long, t: Long) = DanmakuItem(id, t, "x", DanmakuMode.TOP, 0xFFFFFF)
+    private fun bottom(id: Long, t: Long) = DanmakuItem(id, t, "x", DanmakuMode.BOTTOM, 0xFFFFFF)
+
+    @Test fun topStacksFromTop() {
+        val e = engine()
+        e.setItems(listOf(top(1, 0), top(2, 0)))
+        e.advance(0)
+        val lanes = e.active.filter { it.mode == DanmakuMode.TOP }.map { it.lane }.toSet()
+        assertEquals(setOf(0, 1), lanes)
+        val y0 = e.active.first { it.id == 1L }.y
+        val y1 = e.active.first { it.id == 2L }.y
+        assertTrue(y0 < y1)
+    }
+
+    @Test fun bottomGrowsUpwardFromBottom() {
+        val e = engine()
+        e.setItems(listOf(bottom(1, 0), bottom(2, 0)))
+        e.advance(0)
+        val y0 = e.active.first { it.id == 1L }.y
+        val y1 = e.active.first { it.id == 2L }.y
+        assertTrue(y0 > y1)
+    }
+
+    @Test fun staticExpiresAfterDuration() {
+        val e = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 1080)
+            setConfig(DanmakuEngineConfig(topBottomDurationMs = 4500L, textSizePx = 40f))
+        }
+        e.setItems(listOf(top(1, 0)))
+        e.advance(0); assertTrue(e.active.any { it.id == 1L })
+        e.advance(4501); assertFalse(e.active.any { it.id == 1L })
+    }
+
+    @Test fun lateChunkForPastTimeIsNotBackfilled() {
+        val e = engine()
+        e.setItems(listOf(scroll(1, 1000), scroll(3, 4000)))
+        e.advance(3000)
+        e.setItems(listOf(scroll(1, 1000), scroll(2, 2000), scroll(3, 4000)))
+        e.advance(3000)
+        assertFalse(e.active.any { it.id == 2L })
+        e.advance(4000)
+        assertTrue(e.active.any { it.id == 3L })
+    }
 }
