@@ -57,4 +57,35 @@ class DanmakuEngineTest {
         e.advance(3000)
         assertEquals(listOf(3L), e.active.map { it.id })
     }
+
+    @Test fun scrollSpreadsAcrossLanesWhenOverlapAllowed() {
+        val e = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 1080)
+            setConfig(DanmakuEngineConfig(rollingDurationMs = 8000L, textSizePx = 40f, antiOverlap = false))
+        }
+        e.setItems(listOf(scroll(1, 0), scroll(2, 0), scroll(3, 0)))
+        e.advance(0)
+        assertEquals(3, e.active.map { it.lane }.toSet().size)
+    }
+
+    @Test fun antiOverlapDropsWhenAllLanesBusy() {
+        val e = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 56)
+            setConfig(DanmakuEngineConfig(rollingDurationMs = 8000L, textSizePx = 40f, antiOverlap = true))
+        }
+        e.setItems(listOf(scroll(1, 0), scroll(2, 0)))
+        e.advance(0)
+        assertEquals(listOf(1L), e.active.map { it.id })
+    }
+
+    @Test fun antiOverlapAdmitsAfterPreviousFullyEntered() {
+        val e = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 56)
+            setConfig(DanmakuEngineConfig(rollingDurationMs = 8000L, textSizePx = 40f, antiOverlap = true))
+        }
+        e.setItems(listOf(scroll(1, 0), scroll(2, 7999)))
+        e.advance(0)
+        e.advance(7999)
+        assertTrue(e.active.any { it.id == 2L })
+    }
 }
