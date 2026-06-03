@@ -64,7 +64,7 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
                 }
                 DanmakuMode.BOTTOM -> {
                     d.x = (viewW - d.width) / 2f
-                    d.y = viewH - d.lane * laneH
+                    d.y = usableHeight() - d.lane * laneH
                     nowMs - d.spawnTimeMs > config.topBottomDurationMs
                 }
             }
@@ -76,10 +76,13 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
 
     private fun laneHeight(): Float = config.textSizePx * config.lineHeightFactor
 
+    /** 可用高度 = 视图高 × 显示区域比例（弹幕只占顶部这一带）。 */
+    private fun usableHeight(): Float = viewH * config.areaFraction.coerceIn(0f, 1f)
+
     private fun laneCount(): Int {
         val lh = laneHeight()
         if (lh <= 0f) return 1
-        return maxOf(1, (viewH / lh).toInt())
+        return maxOf(1, (usableHeight() / lh).toInt())
     }
 
     private fun firstIndexAtOrAfter(ms: Long): Int {

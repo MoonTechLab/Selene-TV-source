@@ -28,6 +28,8 @@ data class DanmakuEngineConfig(
     val antiOverlap: Boolean = false,
     val opacity: Float = 0.85f,
     val visible: Boolean = true,
+    /** 显示区域：弹幕限制在视图顶部这一比例的高度带内（1f=全屏）。改它只动布局、不改 view 尺寸（免闪动）。 */
+    val areaFraction: Float = 1f,
 )
 
 /** 活跃弹幕（对象池复用，避免每帧分配）。x/y 每帧由 advance 重算。 */

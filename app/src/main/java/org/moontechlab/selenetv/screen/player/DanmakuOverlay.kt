@@ -31,6 +31,7 @@ fun DanmakuOverlay(
     settings: DanmakuRenderSettings,
     previewMode: Boolean = false,
     datasetKey: Any = Unit,
+    areaFraction: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     androidx.compose.runtime.key(datasetKey) {
@@ -52,8 +53,8 @@ fun DanmakuOverlay(
         }
 
         LaunchedEffect(view, items) { view?.submitItems(items) }
-        LaunchedEffect(view, settings, density, visible) {
-            view?.submitConfig(buildEngineConfig(settings, density, visible))
+        LaunchedEffect(view, settings, density, visible, areaFraction) {
+            view?.submitConfig(buildEngineConfig(settings, density, visible, areaFraction))
         }
         LaunchedEffect(view, positionMs, isPlaying, speed, previewMode) {
             view?.submitPlayback(positionMs, isPlaying, speed, previewMode)

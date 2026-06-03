@@ -625,10 +625,12 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 settings = danmakuSettings,
                 previewMode = danmakuMenuOpen,
                 datasetKey = "${selectedDanmakuKey}|${currentEpisode}|${danmakuActiveMediaByKey[selectedDanmakuKey]}",
+                // 显示区域改由引擎在内部按比例限制弹幕高度带；view 始终全屏，切区域不再 resize → 不闪动。
+                areaFraction = danmakuAreaFraction(danmakuArea),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .fillMaxHeight(danmakuAreaFraction(danmakuArea)),
+                    .fillMaxHeight(),
             )
         }
 

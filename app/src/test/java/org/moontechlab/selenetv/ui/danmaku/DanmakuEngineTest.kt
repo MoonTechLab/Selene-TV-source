@@ -132,4 +132,24 @@ class DanmakuEngineTest {
         e.advance(4000)
         assertTrue(e.active.any { it.id == 3L })
     }
+
+    @Test fun areaFractionLimitsLanes() {
+        // laneH = 40*1.4 = 56；viewH 1120 → 全屏 20 轨；TOP 轨满即丢弃，故活跃数 = 轨数。
+        val full = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 1120)
+            setConfig(DanmakuEngineConfig(textSizePx = 40f))
+        }
+        full.setItems((1..40).map { top(it.toLong(), 0) })
+        full.advance(0)
+        assertEquals(20, full.active.count { it.mode == DanmakuMode.TOP })
+
+        // areaFraction 0.5 → 可用高 560 → 10 轨。
+        val half = DanmakuEngine(FakeMeasurer()).apply {
+            setViewport(1920, 1120)
+            setConfig(DanmakuEngineConfig(textSizePx = 40f, areaFraction = 0.5f))
+        }
+        half.setItems((1..40).map { top(it.toLong(), 0) })
+        half.advance(0)
+        assertEquals(10, half.active.count { it.mode == DanmakuMode.TOP })
+    }
 }
