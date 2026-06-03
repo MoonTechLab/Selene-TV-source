@@ -44,6 +44,25 @@ object MoonToast {
     }
 }
 
+/**
+ * 弹窗判定门：把「host 只响应自身挂载之后的新触发」这条规则抽成纯逻辑，便于单测。
+ *
+ * [MoonToast] 是进程级单例，[MoonToast.trigger] 在进程存活期间一直保留。返回键退出 MainActivity 后
+ * 进程常被系统缓存，再次启动时 Activity 重建、Compose 树重组，但 trigger 仍是上一次操作的非零值——
+ * 若直接以 trigger!=0 判定就会把上一条旧消息（「豆瓣缓存已清空」等）重弹一次（见 issue #4）。
+ * 本门以「挂载时已存在的 trigger」为基线，仅当 trigger 越过基线递增时才放行。
+ */
+class MoonToastGate(initialTrigger: Int) {
+    private var lastSeen = initialTrigger
+
+    /** trigger 相对上次未变化（含挂载时的初始值）→ 不弹；否则记录并放行一次。 */
+    fun shouldShow(trigger: Int): Boolean {
+        if (trigger == lastSeen) return false
+        lastSeen = trigger
+        return true
+    }
+}
+
 private const val TOAST_DURATION_MS = 2200L
 
 /** 全局 Toast 宿主：在 AppNavHost 顶层渲染一次即可，覆盖所有页面。 */
@@ -51,8 +70,10 @@ private const val TOAST_DURATION_MS = 2200L
 fun MoonToastHost(modifier: Modifier = Modifier) {
     var visible by remember { mutableStateOf(false) }
     val trigger = MoonToast.trigger
+    // 以挂载时已有的 trigger 为基线，仅响应其后的新触发：避免进程被缓存、Activity 重建后重弹旧消息。
+    val gate = remember { MoonToastGate(trigger) }
     LaunchedEffect(trigger) {
-        if (trigger == 0) return@LaunchedEffect // 启动时未触发过，不弹
+        if (!gate.shouldShow(trigger)) return@LaunchedEffect
         visible = true
         delay(TOAST_DURATION_MS)
         visible = false
