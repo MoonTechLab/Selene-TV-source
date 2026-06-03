@@ -80,16 +80,26 @@ object AppDataService {
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
-        // 区域 off 仍保留（播放页可暂时关闭）。仅首次（无 mode 记录）做一次性迁移：旧 area=off → mode=off + 区域回落 full。
+        // 区域 off 仍保留（播放页可暂时关闭）。
         val rawArea = prefs.getString(KEY_DANMAKU_AREA, null)
             ?: if (prefs.getBoolean(KEY_DANMAKU_ENABLED, false)) "full" else "off"
         val savedMode = prefs.getString(KEY_DANMAKU_MODE, null)
-        if (savedMode == null) {
-            danmakuModeCache = if (rawArea == "off") "off" else "auto"
-            danmakuAreaCache = if (rawArea == "off") "full" else rawArea
-        } else {
-            danmakuModeCache = savedMode
-            danmakuAreaCache = rawArea
+        when {
+            // 已有 mode 记录：直接采用
+            savedMode != null -> {
+                danmakuModeCache = savedMode
+                danmakuAreaCache = rawArea
+            }
+            // 全新安装（无任何旧弹幕状态）：默认「手动」——探测弹幕源但不自动选中/加载。
+            !prefs.contains(KEY_DANMAKU_AREA) && !prefs.contains(KEY_DANMAKU_ENABLED) -> {
+                danmakuModeCache = "manual"
+                danmakuAreaCache = "full"
+            }
+            // 旧版本升级一次性迁移：旧 area=off → mode=off；否则 auto。
+            else -> {
+                danmakuModeCache = if (rawArea == "off") "off" else "auto"
+                danmakuAreaCache = if (rawArea == "off") "full" else rawArea
+            }
         }
         // 上次非 off 区域：优先取已存值，否则回落到当前区域（非 off）或 full。
         danmakuLastAreaCache = prefs.getString(KEY_DANMAKU_LAST_AREA, null)
