@@ -32,7 +32,7 @@ class DanmakuMappingTest {
         val settings = DanmakuRenderSettings(opacity = 0.7f, speed = 2.0f, fontScale = 1.2f, antiOverlap = true)
         val cfg = buildEngineConfig(settings, density = 2f, visible = true)
         assertEquals((DanmakuRenderSettings.BASE_DURATION_MS / 2.0f).toLong(), cfg.rollingDurationMs)
-        assertEquals(24f * 2f * 1.2f, cfg.textSizePx, 0.001f)
+        assertEquals(20f * 2f * 1.2f, cfg.textSizePx, 0.001f)
         assertEquals(0.7f, cfg.opacity, 0.001f)
         assertEquals(true, cfg.antiOverlap)
         assertEquals(true, cfg.visible)

@@ -23,7 +23,8 @@ fun DanmakuComment.toEngineItem(): DanmakuItem = DanmakuItem(
 fun buildEngineConfig(settings: DanmakuRenderSettings, density: Float, visible: Boolean): DanmakuEngineConfig =
     DanmakuEngineConfig(
         rollingDurationMs = (DanmakuRenderSettings.BASE_DURATION_MS / settings.speed).toLong(),
-        textSizePx = 24f * density * settings.fontScale,
+        // 基准 20f：原 24f 偏大，下调到约「较小」档，使「标准」(fontScale=1.0) 即为舒适默认大小。
+        textSizePx = 20f * density * settings.fontScale,
         opacity = settings.opacity,
         antiOverlap = settings.antiOverlap,
         visible = visible,
