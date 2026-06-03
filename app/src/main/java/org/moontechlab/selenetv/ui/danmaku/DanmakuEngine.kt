@@ -27,11 +27,13 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     private val pool = ArrayList<ActiveDanmaku>()
     private val activeList = ArrayList<ActiveDanmaku>()
 
-    // 预览缓冲与游标：循环窗口重放，独立于正常播放状态。
+    // 预览缓冲与游标：当前时刻一窗弹幕「无缝无限循环」重放，独立于正常播放状态。
+    // previewLapOffsetMs 是当前一圈窗口起点对齐到的预览钟值，每圈 += 一个滚动时长 → 旧的飞出、新的续入，绝不清屏。
     private var previewing = false
     private var previewClockMs = 0L
     private var previewBaseMs = 0L
     private var previewCursor = 0
+    private var previewLapOffsetMs = 0L
     private val previewActive = ArrayList<ActiveDanmaku>()
 
     /** 正常活跃集（单测断言 / 正常播放绘制）。 */
@@ -48,7 +50,8 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     fun setItems(list: List<DanmakuItem>) {
         items = list.sortedBy { it.timeMs }
         cursor = firstIndexAtOrAfter(clockMs)
-        if (previewing) restartPreviewWindow()   // 预览中换源/换数据 → 用新数据重启循环窗口
+        // 预览中换源/换数据：不清屏——旧的继续飞出，tickPreview 会按新数据自动续上窗口（无缝）。
+        if (previewing) previewCursor = firstIndexAtOrAfter(previewBaseMs)
     }
 
     /** 软跳转：已发射弹幕重定基（保持在屏位置继续飞出），仅重定位游标，不清空。 */
@@ -59,10 +62,14 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         cursor = firstIndexAtOrAfter(ms)
     }
 
-    /** 硬清屏：回收全部在屏弹幕（弹窗切匹配专用）。 */
+    /** 硬清屏：回收全部在屏弹幕（弹窗切匹配专用）。预览中则把预览缓冲也清掉并重置循环起点。 */
     fun clear() {
         recycleAll(activeList)
-        if (previewing) restartPreviewWindow()
+        if (previewing) {
+            recycleAll(previewActive)
+            previewCursor = firstIndexAtOrAfter(previewBaseMs)
+            previewLapOffsetMs = previewBaseMs
+        }
     }
 
     /** 推进到绝对时间 nowMs：spawn 到期项、retire 过期项、重算位置。 */
@@ -81,19 +88,36 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         previewing = true
         previewBaseMs = clockMs
         previewClockMs = clockMs
+        previewLapOffsetMs = clockMs
         previewCursor = firstIndexAtOrAfter(clockMs)
-        // 以当前在屏弹幕为起点，预览首帧连贯
+        // 以当前在屏弹幕为起点，预览首帧与真实画面连贯
         recycleAll(previewActive)
         for (d in activeList) previewActive.add(copyOf(d))
     }
 
-    /** 预览推进 dtMs；越过一个滚动时长就回到起点重放（反复滚动当前时间点的弹幕）。 */
+    /**
+     * 预览推进 dtMs：把「当前时刻一窗」[base, base+滚动时长) 的弹幕无缝无限循环重放。
+     * 每条窗口弹幕按 scheduled = lapOffset + (timeMs - base) 在预览钟到点时发射；一圈走完游标回到窗口起点、
+     * lapOffset += 一个滚动时长（旧的此时刚好飞出、新的从右侧续入）→ 模拟无限弹幕，绝不清屏。
+     */
     fun tickPreview(dtMs: Long) {
         if (!previewing) return
         previewClockMs += dtMs
-        if (previewClockMs - previewBaseMs > config.rollingDurationMs) restartPreviewWindow()
-        while (previewCursor < items.size && items[previewCursor].timeMs <= previewClockMs) {
-            spawnInto(previewActive, items[previewCursor], previewClockMs); previewCursor++
+        val w = config.rollingDurationMs
+        if (w > 0L && items.isNotEmpty()) {
+            val windowStart = firstIndexAtOrAfter(previewBaseMs)
+            val windowEnd = firstIndexAtOrAfter(previewBaseMs + w)
+            if (windowEnd > windowStart) {
+                if (previewCursor < windowStart || previewCursor >= windowEnd) previewCursor = windowStart
+                var guard = 0
+                while (guard++ < 4096) {
+                    val sched = previewLapOffsetMs + (items[previewCursor].timeMs - previewBaseMs)
+                    if (sched > previewClockMs) break
+                    spawnInto(previewActive, items[previewCursor], sched)
+                    previewCursor++
+                    if (previewCursor >= windowEnd) { previewCursor = windowStart; previewLapOffsetMs += w }
+                }
+            }
         }
         layoutAndRetire(previewActive, previewClockMs)
     }
@@ -102,12 +126,6 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         if (!previewing) return
         previewing = false
         recycleAll(previewActive)
-    }
-
-    private fun restartPreviewWindow() {
-        recycleAll(previewActive)
-        previewClockMs = previewBaseMs
-        previewCursor = firstIndexAtOrAfter(previewBaseMs)
     }
 
     // ---- internals ----

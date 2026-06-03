@@ -92,20 +92,28 @@ class DanmakuEngineTest {
         assertEquals(realActive, e.active.map { it.id }.toSet())  // 退出预览原样恢复
     }
 
-    @Test fun previewWrapsAfterWindowAndStaysBounded() {
+    @Test fun previewLoopsSeamlesslyNeverEmptyAndBounded() {
         val e = DanmakuEngine(FakeMeasurer()).apply {
             setViewport(1920, 1080)
             setConfig(DanmakuEngineConfig(rollingDurationMs = 8000L, textSizePx = 40f))
         }
+        // 稠密弹幕：当前时刻一窗 [3000,11000) 有 8 条，飞行时长 8000 → 任意时刻都有若干在屏。
         e.setItems((1..50).map { scroll(it.toLong(), it * 1000L) })
         e.advance(3000)
         e.beginPreview()
-        e.tickPreview(2000)
-        assertTrue(e.renderActive.isNotEmpty())
-        val afterFirst = e.renderActive.size
-        e.tickPreview(10000)       // 越过窗口(8000) → 回到起点重放，不无限累积
+        var everEmpty = false
+        var maxSize = 0
+        repeat(2000) {                 // 2000 帧 × 16ms ≈ 32s，跨多圈循环
+            e.tickPreview(16)
+            if (e.renderActive.isEmpty()) everEmpty = true
+            if (e.renderActive.size > maxSize) maxSize = e.renderActive.size
+        }
+        assertFalse(everEmpty)          // 无缝：循环过程中从不清空
+        assertTrue(maxSize <= 64)       // 有界：不无限累积（远小于全量 50+）
         assertTrue(e.isPreviewing)
-        assertTrue(e.renderActive.size <= afterFirst + 2)
+        // 退出预览不动正常状态
+        e.endPreview()
+        assertFalse(e.isPreviewing)
     }
 
     @Test fun scrollSpreadsAcrossLanesWhenOverlapAllowed() {
