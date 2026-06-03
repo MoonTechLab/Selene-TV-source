@@ -65,10 +65,6 @@
 # libmpv JNI 绑定：native 方法所在类不可裁剪/混淆
 -keep class dev.jdtech.mpv.** { *; }
 
-# ---- akdanmaku 弹幕引擎 ----
--keep class com.kuaishou.akdanmaku.** { *; }
--dontwarn com.kuaishou.akdanmaku.**
-
 # ---- Rhino 脚本引擎 ----
 -keep class org.mozilla.javascript.** { *; }
 -dontwarn org.mozilla.javascript.**
