@@ -9,11 +9,11 @@ package org.moontechlab.selenetv.service.danmaku
  * - [antiOverlap] 防重叠 → 分轨拒绝重叠（放不下丢弃）
  */
 data class DanmakuRenderSettings(
-    val opacity: Float = 0.85f,
+    val opacity: Float = 1.0f,
     val speed: Float = 1.0f,
     val fontScale: Float = 1.0f,
     val densityPct: Int = 100,
-    val antiOverlap: Boolean = false,
+    val antiOverlap: Boolean = true,
 ) {
     companion object {
         const val BASE_DURATION_MS = 8000f   // speed=1.0 时滚动弹幕飞过屏幕的时长

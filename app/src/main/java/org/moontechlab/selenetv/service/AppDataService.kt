@@ -56,11 +56,11 @@ object AppDataService {
 
     // 弹幕显示区域缓存（third/half/full；同步读，供播放页初始化用）。决定弹幕层占屏高度。
     @Volatile
-    private var danmakuAreaCache: String = "full"
+    private var danmakuAreaCache: String = "third"
 
     // 上次非 off 显示区域缓存：弹幕「开关」一键开启时恢复到此（记忆用户偏好）。
     @Volatile
-    private var danmakuLastAreaCache: String = "full"
+    private var danmakuLastAreaCache: String = "third"
 
     // 弹幕默认模式缓存（off=完全关闭/manual=默认不开启/auto=默认开启）。决定播放页是否 probe/选源/显示弹幕键。
     @Volatile
@@ -95,10 +95,10 @@ object AppDataService {
                 danmakuModeCache = savedMode
                 danmakuAreaCache = rawArea
             }
-            // 全新安装（无任何旧弹幕状态）：默认「手动」——探测弹幕源但不自动选中/加载。
+            // 全新安装（无任何旧弹幕状态）：默认「手动」——探测弹幕源但不自动选中/加载；区域默认 1/3 屏。
             !prefs.contains(KEY_DANMAKU_AREA) && !prefs.contains(KEY_DANMAKU_ENABLED) -> {
                 danmakuModeCache = "manual"
-                danmakuAreaCache = "full"
+                danmakuAreaCache = "third"
             }
             // 旧版本升级一次性迁移：旧 area=off → mode=off；否则 auto。
             else -> {
@@ -108,7 +108,7 @@ object AppDataService {
         }
         // 上次非 off 区域：优先取已存值，否则回落到当前区域（非 off）或 full。
         danmakuLastAreaCache = prefs.getString(KEY_DANMAKU_LAST_AREA, null)
-            ?: danmakuAreaCache.takeIf { it != "off" } ?: "full"
+            ?: danmakuAreaCache.takeIf { it != "off" } ?: "third"
         danmakuSourcesCache = prefs.getString(KEY_DANMAKU_SOURCES, null)
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
             ?: org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
