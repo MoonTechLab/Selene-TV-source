@@ -378,9 +378,19 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         }.getOrDefault(emptyList())
         danmakuMatches = matches
         matches.forEach { danmakuActiveMediaByKey[it.key] = it.activeMediaId }
-        // 手动模式：probe 完不自动选源，等用户在弹窗里挑。
-        if (danmakuMode != "auto" || matches.isEmpty()) { selectedDanmakuKey = null }
-        else {
+        if (matches.isEmpty()) {
+            selectedDanmakuKey = null
+        } else if (danmakuMode != "auto") {
+            // 手动模式：probe 完不自动选源；但若用户已在播放页选过源（切源/切集前已开启弹幕），
+            // 只要该源在新一集仍命中就保持选中并立即续上新集分块——不回到「未选」。未选过则维持空等用户在弹窗里挑。
+            val prev = selectedDanmakuKey
+            if (prev != null && matches.any { it.key == prev }) {
+                selectedDanmakuKey = prev
+                loadNearChunks(prev)
+            } else {
+                selectedDanmakuKey = null
+            }
+        } else {
             // 自动：先统计各源各候选「当前块」条数，再选**弹幕最多**的源+剧集（全 0 则回落标题匹配分最高的首源）。
             countAllSources()
             val best = matches
