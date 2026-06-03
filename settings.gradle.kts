@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SeleneTV"
 include(":app")
+include(":baselineprofile")

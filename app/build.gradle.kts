@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.androidx.baselineprofile)
     kotlin("plugin.serialization") version "2.1.0"
 }
 
@@ -122,6 +123,10 @@ dependencies {
 
     // 弹幕渲染引擎（开源，OpenGL，纯 Kotlin 无 .so）
     implementation("com.kuaishou:akdanmaku:1.0.3")
+
+    // Baseline Profile：运行期安装由 :baselineprofile 生成、随 release 打包的 app 级 profile（AOT 热路径）
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
 
     // Ktor Server
     implementation("io.ktor:ktor-server-core:2.3.12")
