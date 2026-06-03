@@ -15,7 +15,10 @@ object DanmakuRenderer {
         if (!cfg.visible) return
         paint.textSize = cfg.textSizePx
         val alpha = (cfg.opacity.coerceIn(0f, 1f) * 255f).toInt()
-        for (d in engine.renderActive) {
+        // 下标遍历，避免 for-in 对 List 每帧分配 Iterator（低内存机 GC 抖动→滚动卡顿主因）。
+        val list = engine.renderActive
+        for (i in 0 until list.size) {
+            val d = list[i]
             paint.color = (alpha shl 24) or (d.colorRgb and 0xFFFFFF)
             canvas.drawText(d.text, d.x, d.y, paint)
         }

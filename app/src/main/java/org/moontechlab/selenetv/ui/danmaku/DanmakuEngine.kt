@@ -57,7 +57,7 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     /** 软跳转：已发射弹幕重定基（保持在屏位置继续飞出），仅重定位游标，不清空。 */
     fun seekTo(ms: Long) {
         val delta = ms - clockMs
-        if (delta != 0L) for (d in activeList) d.spawnTimeMs += delta
+        if (delta != 0L) for (i in 0 until activeList.size) activeList[i].spawnTimeMs += delta
         clockMs = ms
         cursor = firstIndexAtOrAfter(ms)
     }
@@ -92,7 +92,7 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         previewCursor = firstIndexAtOrAfter(clockMs)
         // 以当前在屏弹幕为起点，预览首帧与真实画面连贯
         recycleAll(previewActive)
-        for (d in activeList) previewActive.add(copyOf(d))
+        for (i in 0 until activeList.size) previewActive.add(copyOf(activeList[i]))
     }
 
     /**
@@ -225,7 +225,8 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
 
     private fun lastScrollInLane(target: List<ActiveDanmaku>, lane: Int): ActiveDanmaku? {
         var found: ActiveDanmaku? = null
-        for (d in target) {
+        for (i in 0 until target.size) {
+            val d = target[i]
             if (d.mode == DanmakuMode.SCROLL && d.lane == lane &&
                 (found == null || d.spawnTimeMs > found.spawnTimeMs)
             ) found = d
@@ -236,7 +237,7 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     private fun allocStaticLane(target: List<ActiveDanmaku>, count: Int, mode: DanmakuMode): Int {
         for (lane in 0 until count) {
             var occupied = false
-            for (d in target) if (d.mode == mode && d.lane == lane) { occupied = true; break }
+            for (i in 0 until target.size) { val d = target[i]; if (d.mode == mode && d.lane == lane) { occupied = true; break } }
             if (!occupied) return lane
         }
         return -1
@@ -250,9 +251,9 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
     }
 
     private fun obtain(): ActiveDanmaku {
-        for (d in pool) if (!d.inUse) { d.inUse = true; return d }
+        for (i in 0 until pool.size) { val d = pool[i]; if (!d.inUse) { d.inUse = true; return d } }
         return ActiveDanmaku().also { it.inUse = true; pool.add(it) }
     }
     private fun recycle(d: ActiveDanmaku) { d.inUse = false }
-    private fun recycleAll(list: MutableList<ActiveDanmaku>) { for (d in list) d.inUse = false; list.clear() }
+    private fun recycleAll(list: MutableList<ActiveDanmaku>) { for (i in 0 until list.size) list[i].inUse = false; list.clear() }
 }

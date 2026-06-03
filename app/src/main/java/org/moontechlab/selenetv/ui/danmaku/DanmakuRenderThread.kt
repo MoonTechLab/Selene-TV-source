@@ -21,9 +21,8 @@ class DanmakuRenderThread(
 
     @Volatile private var handler: Handler? = null
     private var choreographer: Choreographer? = null
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        setShadowLayer(3f, 0f, 1f, 0x80000000.toInt())  // 细描影提升暗背景可读性
-    }
+    // 不加 setShadowLayer：模糊阴影是逐条弹幕每帧一次离屏模糊，弱 GPU 上拖慢帧→滚动卡顿。
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     // 以下仅本线程触碰
     private var hostPositionMs = 0L
@@ -96,7 +95,8 @@ class DanmakuRenderThread(
             lastFrameNs = 0L                                     // 切态后重置 dt 基准
         }
 
-        val dtMs = if (lastFrameNs != 0L) (frameNs - lastFrameNs) / 1_000_000f else 0f
+        // dt 上限 64ms：偶发停顿(GC/调度)后不一次性大跳，避免“顿一下”。
+        val dtMs = if (lastFrameNs != 0L) ((frameNs - lastFrameNs) / 1_000_000f).coerceAtMost(64f) else 0f
         lastFrameNs = frameNs
 
         // 推进时机 = 播放 或 缓冲（加载/切集中）。缓冲也推进，让已发射弹幕继续飞出，不在加载时冻结。
