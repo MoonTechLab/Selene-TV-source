@@ -6,7 +6,7 @@ import org.moontechlab.selenetv.ui.danmaku.DanmakuEngineConfig
 import org.moontechlab.selenetv.ui.danmaku.DanmakuItem
 import org.moontechlab.selenetv.ui.danmaku.DanmakuMode
 
-/** DanmakuComment → 引擎 DanmakuItem。color 取低 24 位；id 与原 akdanmaku 口径一致。 */
+/** DanmakuComment → 引擎 DanmakuItem。color 取低 24 位；id = timeMs 与内容散列，与 PlayerScreen 去重口径一致。 */
 fun DanmakuComment.toEngineItem(): DanmakuItem = DanmakuItem(
     id = timeMs * 31 + content.hashCode(),
     timeMs = timeMs,

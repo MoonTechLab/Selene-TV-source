@@ -19,7 +19,7 @@ class DanmakuRenderThread(
     private val engine: DanmakuEngine,
 ) : HandlerThread("DanmakuRender") {
 
-    private var handler: Handler? = null
+    @Volatile private var handler: Handler? = null
     private var choreographer: Choreographer? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         setShadowLayer(3f, 0f, 1f, 0x80000000.toInt())  // 细描影提升暗背景可读性
@@ -58,6 +58,15 @@ class DanmakuRenderThread(
         previewMode = preview
         playSpeed = speed
         kick()
+    }
+
+    /** 起线程前一次性播种初始播放态与时钟（仅在 start() 之前调用，此时无渲染线程，直接赋值安全）。 */
+    fun setInitialPlayback(positionMs: Long, playing: Boolean, speed: Float, preview: Boolean) {
+        hostPositionMs = positionMs
+        isPlaying = playing
+        playSpeed = speed
+        previewMode = preview
+        engineClockMs = positionMs
     }
 
     fun requestRedraw() = post { kick() }

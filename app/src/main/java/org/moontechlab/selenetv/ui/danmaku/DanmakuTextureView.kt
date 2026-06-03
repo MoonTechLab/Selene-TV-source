@@ -48,10 +48,14 @@ class DanmakuTextureView(context: Context) : TextureView(context), TextureView.S
         pendingConfig?.let { engine.setConfig(it) }
         engine.setItems(pendingItems)
         val t = DanmakuRenderThread(s, engine)
+        // 起线程前播种初始播放态/时钟（渲染线程尚未启动，直接调用安全）；首帧由 onLooperPrepared 的 kick() 绘制，
+        // 不再依赖 start() 后 post 的时序竞争。后续变化经 LaunchedEffect→submitPlayback 持续下发。
+        lastPlayback?.let {
+            engine.seekTo(it.pos)
+            t.setInitialPlayback(it.pos, it.playing, it.speed, it.preview)
+        }
         renderThread = t
         t.start()
-        lastPlayback?.let { t.setPlayback(it.pos, it.playing, it.speed, it.preview) }
-        t.requestRedraw()
     }
 
     override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {

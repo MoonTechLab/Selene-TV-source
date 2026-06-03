@@ -2,11 +2,11 @@ package org.moontechlab.selenetv.service.danmaku
 
 /**
  * 弹幕渲染设置（外观/行为，与「显示区域」「弹幕源」并列，统一在播放页弹窗里调）。
- * - [opacity]     不透明度 0.3~1.0 → akdanmaku alpha
- * - [speed]       滚动速度倍率 0.5~2.0（越大越快）→ durationMs = 8000 / speed
- * - [fontScale]   字号倍率 0.6~1.6 → textSizeScale
+ * - [opacity]     不透明度 0.3~1.0 → 折入每条弹幕 paint 的 alpha 通道
+ * - [speed]       滚动速度倍率 0.5~2.0（越大越快）→ rollingDurationMs = 8000 / speed
+ * - [fontScale]   字号倍率 0.6~1.6 → textSizePx
  * - [densityPct]  显示密度百分比（25/50/75/100）→ 数据层抽样上屏比例（防刷屏）
- * - [antiOverlap] 防重叠 → allowOverlap = !antiOverlap
+ * - [antiOverlap] 防重叠 → 分轨拒绝重叠（放不下丢弃）
  */
 data class DanmakuRenderSettings(
     val opacity: Float = 0.85f,
