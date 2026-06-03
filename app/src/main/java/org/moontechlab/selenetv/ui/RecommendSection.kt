@@ -155,7 +155,7 @@ fun RecommendSection(
             ) {
             if (isLoading || videos.isEmpty()) {
                 // 加载状态或无数据 - 显示 10 个骨架屏占位卡片
-                items(10) { index ->
+                items(10, contentType = { "skeleton" }) { index ->
                     SkeletonVideoCard(
                         modifier = Modifier
                             .then(if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier)
@@ -165,8 +165,13 @@ fun RecommendSection(
                     )
                 }
             } else {
-                // 实际视频卡片
-                itemsIndexed(videos, key = { _, video -> video.id }) { index, video ->
+                // 实际视频卡片。contentType 统一为 "videocard"：滚动时 Compose 复用同型卡片的组合
+                // 槽位，免去逐项重建组合，减少左右滚动的掉帧。
+                itemsIndexed(
+                    videos,
+                    key = { _, video -> video.id },
+                    contentType = { _, _ -> "videocard" },
+                ) { index, video ->
                     VideoCard(
                         videoInfo = video,
                         from = from,
