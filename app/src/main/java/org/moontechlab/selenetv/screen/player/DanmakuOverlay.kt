@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kuaishou.akdanmaku.DanmakuConfig
 import com.kuaishou.akdanmaku.data.DanmakuItemData
+import com.kuaishou.akdanmaku.render.SimpleRenderer
 import com.kuaishou.akdanmaku.ui.DanmakuPlayer
 import com.kuaishou.akdanmaku.ui.DanmakuView
 import kotlinx.coroutines.delay
@@ -42,15 +43,17 @@ fun DanmakuOverlay(
     androidx.compose.runtime.key(datasetKey) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
-    // 自定义 renderer：补齐 akdanmaku 缓存未命中（兜底直绘）时丢失的整体透明度（见 AlphaDanmakuRenderer）。
-    val player = remember { DanmakuPlayer(AlphaDanmakuRenderer()) }
+    // 整体透明度改在 View 层一次性合成（见下方 view.alpha）：引擎内部恒按不透明绘制。
+    // 这样既免了低端机「每条弹幕每帧 saveLayerAlpha」的逐条离屏开销（卡顿/卡死主因），
+    // 又让缓存未命中的兜底直绘路径也统一透明（旧 AlphaDanmakuRenderer 的目的由 View.alpha 接管）。
+    val player = remember { DanmakuPlayer(SimpleRenderer()) }
     // 弹幕是否运转：真正在播 或 预览中。akdanmaku 滚动速度由 rollingDurationMs 决定（durationMs 仅顶/底停留时长）。
     val animating = isPlaying || previewMode
 
     val config = remember {
         DanmakuConfig(
             textSizeScale = settings.fontScale,
-            alpha = settings.opacity,
+            alpha = 1f,   // 透明度移到 View.alpha；引擎内恒不透明（免 saveLayerAlpha 开销）
             rollingDurationMs = (DanmakuRenderSettings.BASE_DURATION_MS / settings.speed).toLong(),
             allowOverlap = !settings.antiOverlap,
             visibility = visible,
@@ -58,7 +61,9 @@ fun DanmakuOverlay(
     }
 
     AndroidView(
-        factory = { ctx -> DanmakuView(ctx).also { player.bindView(it) } },
+        // 整体透明度走 View.alpha：硬件层对整屏弹幕一次性合成，替代「每条弹幕每帧 saveLayerAlpha」的逐条离屏开销。
+        factory = { ctx -> DanmakuView(ctx).also { player.bindView(it); it.alpha = settings.opacity } },
+        update = { it.alpha = settings.opacity },   // 弹窗实时调不透明度即时生效
         modifier = modifier,
     )
 
@@ -99,7 +104,7 @@ fun DanmakuOverlay(
 
     // 渲染设置实时生效：改对应字段 → 触发对应 generation → updateConfig。
     LaunchedEffect(settings, visible) {
-        config.alpha = settings.opacity; config.updateRender()
+        // 透明度不再进 config（改走 View.alpha）；其余外观/行为实时生效。
         config.textSizeScale = settings.fontScale; config.updateMeasure()
         config.rollingDurationMs = (DanmakuRenderSettings.BASE_DURATION_MS / settings.speed).toLong(); config.updateLayout()
         config.allowOverlap = !settings.antiOverlap; config.updateLayout()

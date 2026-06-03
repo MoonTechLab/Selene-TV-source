@@ -40,6 +40,13 @@ class SeleneApplication : Application(), ImageLoaderFactory {
         // 初始化 AppDataService
         AppDataService.init(this)
         LocalStore.init(this)
+
+        // 低端机（约 2GB）：akdanmaku 弹幕位图缓存池默认上限 50MB，在小堆设备上叠加 ExoPlayer/Compose/Coil
+        // 易致内存压力与 GC 抖动 → 降到 10MB（够覆盖在屏弹幕工作集；未命中走兜底直绘，开销可控）。
+        // CacheManager 在构造（进播放页创建 DanmakuPlayer 时）才读此静态值，故在此处启动期设置即可生效。
+        if (AppDataService.isLowRamDeviceSync()) {
+            com.kuaishou.akdanmaku.DanmakuConfig.CACHE_POOL_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+        }
         Log.d("SeleneApplication", "Application initialized")
         
         // 启动遥控器 Web 服务器

@@ -74,11 +74,16 @@ object AppDataService {
     @Volatile
     private var danmakuRenderCache = org.moontechlab.selenetv.service.danmaku.DanmakuRenderSettings()
 
+    // 低内存设备（约 ≤2GB 或系统 low-ram 标记）缓存：用于下调弹幕缓存上限/默认密度，缓解低端机卡顿与内存压力。
+    @Volatile
+    private var lowRamCache: Boolean = false
+
     /**
      * 初始化服务，需要在 Application 中调用
      */
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        lowRamCache = computeLowRam(context)
         isLocalModeCache = prefs.getBoolean(KEY_IS_LOCAL_MODE, false)
         // 区域 off 仍保留（播放页可暂时关闭）。
         val rawArea = prefs.getString(KEY_DANMAKU_AREA, null)
@@ -112,7 +117,8 @@ object AppDataService {
             opacity = prefs.getFloat(KEY_DANMAKU_OPACITY, d.opacity),
             speed = prefs.getFloat(KEY_DANMAKU_SPEED, d.speed),
             fontScale = prefs.getFloat(KEY_DANMAKU_FONT, d.fontScale),
-            densityPct = prefs.getInt(KEY_DANMAKU_DENSITY, d.densityPct),
+            // 低端机默认密度降到 50%（减半每帧上屏弹幕数→主线程绘制开销/缓存位图同步减半）；用户显式设过则尊重其选择。
+            densityPct = prefs.getInt(KEY_DANMAKU_DENSITY, if (lowRamCache) 50 else d.densityPct),
             antiOverlap = prefs.getBoolean(KEY_DANMAKU_ANTIOVERLAP, d.antiOverlap),
         )
         // 每次启动生成新的 session token
@@ -131,6 +137,18 @@ object AppDataService {
      * 获取当前会话 token
      */
     fun getSessionToken(): String = sessionToken
+
+    /** 低内存设备（约 ≤2GB 或系统 low-ram 标记）。供弹幕缓存上限/默认密度等低端机优化使用。 */
+    fun isLowRamDeviceSync(): Boolean = lowRamCache
+
+    // 设备内存判定：系统 low-ram 标记，或物理内存 ≤ ~2.2GiB（2GB 机实测 totalMem 约 1.9GiB，3GB 机约 2.8GiB，阈值可清晰区分）。
+    private fun computeLowRam(context: Context): Boolean {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return false
+        if (am.isLowRamDevice) return true
+        val mi = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        return mi.totalMem in 1..2_400_000_000L
+    }
 
     // ==================== 用户数据相关 ====================
 
