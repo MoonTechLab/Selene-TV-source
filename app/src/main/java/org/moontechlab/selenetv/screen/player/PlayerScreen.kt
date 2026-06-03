@@ -162,6 +162,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val danmakuActive = danmakuMode != "off"           // 模式非 off：跑 probe、显示弹幕键
     // 弹幕显示区域（off/third/half/full，播放页弹窗里可改）；off=暂时关闭。区域决定弹幕层占屏高度。
     var danmakuArea by remember { mutableStateOf(org.moontechlab.selenetv.service.AppDataService.getDanmakuAreaSync()) }
+    // 上次非 off 区域：弹幕「开关」一键开启时恢复到此（记忆用户偏好）。
+    var danmakuLastArea by remember { mutableStateOf(org.moontechlab.selenetv.service.AppDataService.getDanmakuLastAreaSync()) }
     val danmakuEnabled = danmakuActive && danmakuArea != "off"   // 真正上屏：模式开 且 区域非 off
     var danmakuMatches by remember {
         mutableStateOf<List<org.moontechlab.selenetv.service.DanmakuService.SourceMatch>>(emptyList())
@@ -293,9 +295,12 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
     val panelTabFocus = remember { FocusRequester() }
     val speedPillFocus = remember { FocusRequester() }
     val aspectPillFocus = remember { FocusRequester() }
-    val danmakuPillFocus = remember { FocusRequester() }
+    val danmakuPillFocus = remember { FocusRequester() }   // 弹幕开关段（主）
+    val danmakuGearFocus = remember { FocusRequester() }   // 弹幕齿轮段（进设置）
     val skipFocus = remember { FocusRequester() }
     var skipFocused by remember { mutableStateOf(false) }
+    // 焦点是否落在按钮行（弹幕/比例/倍速 等 pill）：为真时抑制 OSD 自动隐藏，避免操作途中控制条消失。
+    var controlsRowHasFocus by remember { mutableStateOf(false) }
 
     // 首帧载入起播集（带进入时的续看位置）
     LaunchedEffect(Unit) {
@@ -456,8 +461,9 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     // OSD 自动隐藏：播放中、面板未开、倍速弹窗未开、静止满 4s 即隐去
     // 隐藏时把焦点收回进度条——避免焦点遗留在 pill 等隐藏元素上，下次按键时唤起路径不可预测
-    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, aspectPopupOpen, danmakuMenuOpen, interactionTick) {
-        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen && !aspectPopupOpen && !danmakuMenuOpen) {
+    LaunchedEffect(controlsVisible, isPlaying, panelOpen, speedPopupOpen, aspectPopupOpen, danmakuMenuOpen, controlsRowHasFocus, interactionTick) {
+        // 焦点在按钮行（pill）时不自动隐藏——用户正在操作，控制条应常驻。
+        if (controlsVisible && isPlaying && !panelOpen && !speedPopupOpen && !aspectPopupOpen && !danmakuMenuOpen && !controlsRowHasFocus) {
             kotlinx.coroutines.delay(AUTO_HIDE_MS)
             controlsVisible = false
             try { (if (activeSegment != null) skipFocus else scrubberFocus).requestFocus() } catch (_: Exception) {}
@@ -713,7 +719,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 Column {
                     // Alignment.Bottom：中文标题几乎无下伸部，字框底边 ≈ 基线。
                     // pill 底边对齐字框底边 → 视觉上贴在中文字符的下缘，且 pill 整体下沉。
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier.onFocusChanged { controlsRowHasFocus = it.hasFocus },
+                    ) {
                         Text(
                             text = launch.title + (if (epCount > 1) "  ·  第 ${currentEpisode + 1} 集" else ""),
                             color = Color.White,
@@ -727,22 +736,41 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                         // 弹幕胶囊（仅在模式非 off 时显示）：源 + 区域 + 外观都在弹窗里。
                         if (danmakuActive) {
                             val danmakuPillLabel = when {
-                                danmakuArea == "off" -> "弹幕 · 关闭"   // 区域暂时关闭
+                                danmakuArea == "off" -> "弹幕 · 关"   // 暂时关闭
                                 selectedDanmakuKey != null ->
                                     "弹幕 · " + org.moontechlab.selenetv.service.danmaku.DanmakuSources.displayOf(selectedDanmakuKey!!)
                                 else -> "弹幕"   // 尚无选中源（手动/探测中/无源）
                             }
                             Box {
-                                DanmakuPill(
+                                DanmakuPillDuo(
                                     label = danmakuPillLabel,
-                                    // 打开弹窗 = 暂停播放（定格做预览底）；关闭时若原本在播放则恢复（见 onDismiss）。
-                                    onClick = {
+                                    enabled = danmakuArea != "off",
+                                    // 开关段 OK：即时开/关弹幕，不暂停不弹窗。关→记住当前区域后置 off；开→恢复上次区域。
+                                    onToggle = {
+                                        if (danmakuArea == "off") {
+                                            val restore = danmakuLastArea.takeIf { it != "off" } ?: "full"
+                                            danmakuArea = restore
+                                            scope.launch { org.moontechlab.selenetv.service.AppDataService.setDanmakuArea(restore) }
+                                        } else {
+                                            danmakuLastArea = danmakuArea
+                                            val prev = danmakuArea
+                                            danmakuArea = "off"
+                                            scope.launch {
+                                                org.moontechlab.selenetv.service.AppDataService.setDanmakuLastArea(prev)
+                                                org.moontechlab.selenetv.service.AppDataService.setDanmakuArea("off")
+                                            }
+                                        }
+                                        wake()
+                                    },
+                                    // 齿轮段 OK：打开设置弹窗 = 暂停播放（定格做预览底）；关闭时若原本在播放则恢复（见 onDismiss）。
+                                    onOpenSettings = {
                                         speedPopupOpen = false; aspectPopupOpen = false
                                         danmakuWasPlaying = controller.isPlaying
                                         if (controller.isPlaying) controller.pause()
                                         danmakuMenuOpen = true; wake()
                                     },
-                                    focusRequester = danmakuPillFocus,
+                                    toggleFocus = danmakuPillFocus,
+                                    gearFocus = danmakuGearFocus,
                                     scrubberFocus = scrubberFocus,
                                     rightTarget = aspectPillFocus,
                                     upTarget = if (activeSegment != null) skipFocus else null,
@@ -760,7 +788,14 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                                     // 选项均在弹窗内即时生效、不关窗（弹窗是配置中心，BACK 才关）。
                                     onSelectArea = {
                                         danmakuArea = it
-                                        scope.launch { org.moontechlab.selenetv.service.AppDataService.setDanmakuArea(it) }
+                                        scope.launch {
+                                            org.moontechlab.selenetv.service.AppDataService.setDanmakuArea(it)
+                                            // 选到具体区域时同步记忆，供「开关」一键恢复。
+                                            if (it != "off") {
+                                                danmakuLastArea = it
+                                                org.moontechlab.selenetv.service.AppDataService.setDanmakuLastArea(it)
+                                            }
+                                        }
                                     },
                                     onSelectCandidate = { key, mediaId -> selectDanmakuCandidate(key, mediaId) },
                                     onChangeSettings = { s ->
@@ -784,7 +819,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                                 focusRequester = aspectPillFocus,
                                 scrubberFocus = scrubberFocus,
                                 rightTarget = speedPillFocus,
-                                leftTarget = if (danmakuActive) danmakuPillFocus else null,
+                                leftTarget = if (danmakuActive) danmakuGearFocus else null,
                                 upTarget = if (activeSegment != null) skipFocus else null,
                             )
                             AspectRatioPopup(

@@ -35,7 +35,8 @@ object AppDataService {
     private const val KEY_SKIPPED_VERSION = "skipped_version"
     private const val KEY_UPDATE_POSTPONED_UNTIL = "update_postponed_until"
     private const val KEY_DANMAKU_ENABLED = "danmaku_enabled"   // 旧开关（仅迁移读）
-    private const val KEY_DANMAKU_AREA = "danmaku_area"         // 显示区域：third/half/full（off 已迁移到 mode）
+    private const val KEY_DANMAKU_AREA = "danmaku_area"         // 显示区域：off/third/half/full（off=播放页暂时关闭）
+    private const val KEY_DANMAKU_LAST_AREA = "danmaku_last_area" // 上次非 off 区域：弹幕「开关」一键开启时恢复到此
     private const val KEY_DANMAKU_MODE = "danmaku_mode"         // 默认模式：off/manual(默认不开启)/auto(默认开启)
     private const val KEY_DANMAKU_SOURCES = "danmaku_sources"   // 启用源 key 的 CSV
     private const val KEY_DANMAKU_OPACITY = "danmaku_opacity"        // 不透明度 Float
@@ -56,6 +57,10 @@ object AppDataService {
     // 弹幕显示区域缓存（third/half/full；同步读，供播放页初始化用）。决定弹幕层占屏高度。
     @Volatile
     private var danmakuAreaCache: String = "full"
+
+    // 上次非 off 显示区域缓存：弹幕「开关」一键开启时恢复到此（记忆用户偏好）。
+    @Volatile
+    private var danmakuLastAreaCache: String = "full"
 
     // 弹幕默认模式缓存（off=完全关闭/manual=默认不开启/auto=默认开启）。决定播放页是否 probe/选源/显示弹幕键。
     @Volatile
@@ -86,6 +91,9 @@ object AppDataService {
             danmakuModeCache = savedMode
             danmakuAreaCache = rawArea
         }
+        // 上次非 off 区域：优先取已存值，否则回落到当前区域（非 off）或 full。
+        danmakuLastAreaCache = prefs.getString(KEY_DANMAKU_LAST_AREA, null)
+            ?: danmakuAreaCache.takeIf { it != "off" } ?: "full"
         danmakuSourcesCache = prefs.getString(KEY_DANMAKU_SOURCES, null)
             ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
             ?: org.moontechlab.selenetv.service.danmaku.DanmakuSources.defaultEnabledKeys
@@ -269,8 +277,17 @@ object AppDataService {
         danmakuAreaCache = area
     }
 
-    /** 同步读弹幕显示区域（third/half/full）。 */
+    /** 同步读弹幕显示区域（off/third/half/full）。 */
     fun getDanmakuAreaSync(): String = danmakuAreaCache
+
+    /** 保存上次非 off 显示区域（供弹幕「开关」一键开启时恢复）；同步更新内存缓存。 */
+    suspend fun setDanmakuLastArea(area: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_DANMAKU_LAST_AREA, area).apply()
+        danmakuLastAreaCache = area
+    }
+
+    /** 同步读上次非 off 显示区域（默认 full）。 */
+    fun getDanmakuLastAreaSync(): String = danmakuLastAreaCache
 
     /** 同步读，零阻塞；供播放页初始化弹幕开关用（模式非 off 即开）。 */
     fun isDanmakuEnabledSync(): Boolean = danmakuModeCache != "off"

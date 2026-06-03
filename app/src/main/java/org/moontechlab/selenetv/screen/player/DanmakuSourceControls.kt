@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,59 +84,150 @@ fun danmakuAreaFraction(key: String): Float = when (key) {
 }
 
 /**
- * 控制条上的「弹幕」胶囊（单一入口）。OK 唤出 [DanmakuMenuPopup]——区域 + 弹幕源都在一个菜单里。
- * 文案：关闭态「弹幕 · 关闭」，开启态「弹幕 · {当前源}」。焦点：左 leftTarget、右 rightTarget、下 scrubber。
+ * 控制条上的「弹幕」双段胶囊：一颗药丸内分两个可聚焦段——
+ *  - **开关段**（主，[toggleFocus]）：指示点 + 文案，OK 即时开/关弹幕（不暂停、不弹窗）。
+ *  - **齿轮段**（[gearFocus]）：⚙ 图标，OK 打开设置弹窗（暂停做预览）。
+ *
+ * 文案：开「弹幕 · {源}」/「弹幕」，关「弹幕 · 关」。指示点 ●绿（开）/ ○灰（关）。
+ * 焦点：两段用 LEFT/RIGHT 互切；开关段左 [leftTarget]、齿轮段右 [rightTarget]、两段下 scrubber、上 [upTarget]。
+ * 整颗药丸聚焦时统一放大（不分段缩放，避免相邻段重叠/抖动）。
  */
 @Composable
-fun DanmakuPill(
+fun DanmakuPillDuo(
     label: String,
-    onClick: () -> Unit,
-    focusRequester: FocusRequester,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    onOpenSettings: () -> Unit,
+    toggleFocus: FocusRequester,
+    gearFocus: FocusRequester,
     scrubberFocus: FocusRequester,
     rightTarget: FocusRequester,
     leftTarget: FocusRequester? = null,
     upTarget: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
-    var focused by remember { mutableStateOf(false) }
+    var toggleFocused by remember { mutableStateOf(false) }
+    var gearFocused by remember { mutableStateOf(false) }
+    val anyFocused = toggleFocused || gearFocused
     val scale by animateFloatAsState(
-        targetValue = if (focused) 1.04f else 1f,
+        targetValue = if (anyFocused) 1.04f else 1f,
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
-        label = "danmaku_pill_scale",
+        label = "danmaku_duo_scale",
     )
-    val shape = RoundedCornerShape(percent = 50)
-    Surface(
-        onClick = onClick,
+    val pillShape = RoundedCornerShape(percent = 50)
+    val segShape = RoundedCornerShape(0.dp)   // 段内方角，靠外层 clip 成药丸两端圆角
+    Row(
         modifier = modifier
-            .focusRequester(focusRequester)
-            .onFocusChanged { focused = it.isFocused }
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .focusProperties {
-                down = scrubberFocus
-                up = upTarget ?: FocusRequester.Cancel
-                left = leftTarget ?: FocusRequester.Cancel
-                right = rightTarget
-            },
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        shape = ClickableSurfaceDefaults.shape(shape = shape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White,
-        ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border(border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)), shape = shape),
-            focusedBorder = Border(BorderStroke(0.dp, Color.Transparent), shape = shape),
-        ),
+            .graphicsLayer {
+                scaleX = scale; scaleY = scale
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            }
+            .clip(pillShape)
+            .border(1.dp, Color.White.copy(alpha = 0.3f), pillShape),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.padding(horizontal = 11.dp, vertical = 3.dp)) {
-            Text(
-                text = label,
-                color = if (focused) Color(0xFF0A0A0A) else Color.White.copy(alpha = 0.85f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.W600,
-            )
+        // 开关段（主）
+        Surface(
+            onClick = onToggle,
+            modifier = Modifier
+                .focusRequester(toggleFocus)
+                .onFocusChanged { toggleFocused = it.isFocused }
+                .focusProperties {
+                    down = scrubberFocus
+                    up = upTarget ?: FocusRequester.Cancel
+                    left = leftTarget ?: FocusRequester.Cancel
+                    right = gearFocus
+                },
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            shape = ClickableSurfaceDefaults.shape(shape = segShape),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White,
+            ),
+            border = ClickableSurfaceDefaults.border(
+                border = Border(BorderStroke(0.dp, Color.Transparent), shape = segShape),
+                focusedBorder = Border(BorderStroke(0.dp, Color.Transparent), shape = segShape),
+            ),
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 11.dp, end = 11.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DanmakuToggleDot(on = enabled, onLightSurface = toggleFocused)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    color = when {
+                        toggleFocused -> Color(0xFF0A0A0A)
+                        enabled -> Color.White.copy(alpha = 0.85f)
+                        else -> Color.White.copy(alpha = 0.5f)
+                    },
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.W600,
+                )
+            }
+        }
+        // 分隔 hairline
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .height(15.dp)
+                .background(Color.White.copy(alpha = 0.18f)),
+        )
+        // 齿轮段
+        Surface(
+            onClick = onOpenSettings,
+            modifier = Modifier
+                .focusRequester(gearFocus)
+                .onFocusChanged { gearFocused = it.isFocused }
+                .focusProperties {
+                    down = scrubberFocus
+                    up = upTarget ?: FocusRequester.Cancel
+                    left = toggleFocus
+                    right = rightTarget
+                },
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            shape = ClickableSurfaceDefaults.shape(shape = segShape),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White,
+            ),
+            border = ClickableSurfaceDefaults.border(
+                border = Border(BorderStroke(0.dp, Color.Transparent), shape = segShape),
+                focusedBorder = Border(BorderStroke(0.dp, Color.Transparent), shape = segShape),
+            ),
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)) {
+                Text(
+                    text = "⚙",
+                    color = if (gearFocused) Color(0xFF0A0A0A) else Color.White.copy(alpha = 0.85f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.W600,
+                )
+            }
         }
     }
+}
+
+/** 弹幕开关指示点：●绿（开）/ ○灰空心（关）。切换时做一次轻量 scale 弹动。 */
+@Composable
+private fun DanmakuToggleDot(on: Boolean, onLightSurface: Boolean) {
+    val dotScale by animateFloatAsState(
+        targetValue = if (on) 1f else 0.7f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f),
+        label = "danmaku_dot_scale",
+    )
+    val offColor = if (onLightSurface) Color(0xFF0A0A0A).copy(alpha = 0.45f) else Color.White.copy(alpha = 0.45f)
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .graphicsLayer { scaleX = dotScale; scaleY = dotScale }
+            .clip(CircleShape)
+            .then(
+                if (on) Modifier.background(Color(0xFF4CAF50))
+                else Modifier.border(1.5.dp, offColor, CircleShape)
+            ),
+    )
 }
 
 /**
