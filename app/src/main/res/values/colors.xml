@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- 启动窗口背景：与首页渐变顶端同色，避免冷启动白闪（运行期窗口背景会被置空） -->
+    <color name="startup_background">#FF0A0A0A</color>
 </resources>

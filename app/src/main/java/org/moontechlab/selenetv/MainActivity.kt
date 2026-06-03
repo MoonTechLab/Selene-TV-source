@@ -45,7 +45,12 @@ class MainActivity : ComponentActivity() {
         // 在 super.onCreate 之前调整 density
         adjustDensity()
         super.onCreate(savedInstanceState)
-        
+
+        // Compose 内容铺满整屏并绘制不透明渐变背景 → DecorView 的窗口背景被完全遮挡，是每屏一层
+        // 白白浪费的全屏过度绘制（顶部标签栏等处实测达 4×）。运行期置空窗口背景 → 全 App 各屏 -1×。
+        // 启动那一帧仍由主题里的深色 windowBackground 兜底，避免白闪。
+        window.setBackgroundDrawable(null)
+
         // 启动时自动刷新登录 cookie
         refreshLoginCookieIfNeeded()
 

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.SeleneTV" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.SeleneTV" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 深色启动背景：仅在 Compose 首帧绘制前的启动窗口短暂可见，避免 Material.Light 的白闪。
+             运行期窗口背景在 MainActivity 中被置空（window.setBackgroundDrawable(null)），不产生过度绘制。 -->
+        <item name="android:windowBackground">@color/startup_background</item>
+    </style>
 </resources>

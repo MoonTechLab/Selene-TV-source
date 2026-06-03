@@ -711,10 +711,13 @@ fun DetailScreen(entry: DetailEntry, onBack: () -> Unit, onGoToSearch: (String) 
         1.0f to Color(0xFF050505),
     )
 
+    // 不透明全屏剧照在场时，根渐变被完全遮挡 → 跳过这层全屏绘制（详情页过度绘制 ~4×→~3×，无任何视觉变化）。
+    // 仅当确有剧照且已加载完成时跳过；加载中/无剧照仍用渐变兜底背景。
+    val heroBackdropCovers = state.useHeroV2 && !state.detailsLoading && state.heroInfo?.backdrop != null
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(brush = gradientBrush)
+            .then(if (heroBackdropCovers) Modifier else Modifier.background(brush = gradientBrush))
             // 覆盖层根焦点组：始终禁止焦点逃逸到背后的首页（加载/源解析的空窗期亦然）。
             // 内部的播放页 / 选集弹窗 / 简介弹窗都是本组子节点，焦点在它们之间移动属组内移动，
             // 不触发 exit，故不受影响。
