@@ -29,6 +29,7 @@ class DanmakuRenderThread(
     private var hostPositionMs = 0L
     private var isPlaying = false
     private var previewMode = false
+    private var buffering = false
     private var playSpeed = 1f
     private var engineClockMs = 0L
     private var lastFrameNs = 0L
@@ -49,24 +50,26 @@ class DanmakuRenderThread(
 
     fun post(r: () -> Unit) { handler?.post(r) }
 
-    fun setPlayback(positionMs: Long, playing: Boolean, speed: Float, preview: Boolean) = post {
-        if (!preview && abs(positionMs - engineClockMs) > 1200) {  // 用户拖拽即时纠正
+    fun setPlayback(positionMs: Long, playing: Boolean, speed: Float, preview: Boolean, buffering: Boolean) = post {
+        if (!preview && abs(positionMs - engineClockMs) > 1200) {  // 用户拖拽/切集归零即时纠正（软跳转，不清屏）
             engineClockMs = positionMs
             engine.seekTo(positionMs)
         }
         hostPositionMs = positionMs
         isPlaying = playing
         previewMode = preview
+        this.buffering = buffering
         playSpeed = speed
         kick()
     }
 
     /** 起线程前一次性播种初始播放态与时钟（仅在 start() 之前调用，此时无渲染线程，直接赋值安全）。 */
-    fun setInitialPlayback(positionMs: Long, playing: Boolean, speed: Float, preview: Boolean) {
+    fun setInitialPlayback(positionMs: Long, playing: Boolean, speed: Float, preview: Boolean, buffering: Boolean) {
         hostPositionMs = positionMs
         isPlaying = playing
         playSpeed = speed
         previewMode = preview
+        this.buffering = buffering
         engineClockMs = positionMs
     }
 
@@ -90,25 +93,30 @@ class DanmakuRenderThread(
         val dtMs = if (lastFrameNs != 0L) (frameNs - lastFrameNs) / 1_000_000f else 0f
         lastFrameNs = frameNs
 
-        if (isPlaying) {
+        // 推进时机 = 播放 或 缓冲（加载/切集中）。缓冲也推进，让已发射弹幕继续飞出，不在加载时冻结。
+        // 仅「用户主动暂停」（非播放、非缓冲、非预览）才冻结。
+        val animating = isPlaying || buffering
+        if (animating) {
             engineClockMs += (dtMs * playSpeed).toLong()
-            if (lastSyncNs == 0L) lastSyncNs = frameNs           // 周期漂移校正（仅播放时，软跳转不清屏）
-            else if (frameNs - lastSyncNs > 2_000_000_000L) {
-                lastSyncNs = frameNs
-                if (abs(engineClockMs - hostPositionMs) > 1200) {
-                    engineClockMs = hostPositionMs
-                    engine.seekTo(engineClockMs)
+            if (isPlaying) {                                     // 漂移校正仅在真正播放时（缓冲期宿主位置不可靠）
+                if (lastSyncNs == 0L) lastSyncNs = frameNs
+                else if (frameNs - lastSyncNs > 2_000_000_000L) {
+                    lastSyncNs = frameNs
+                    if (abs(engineClockMs - hostPositionMs) > 1200) {
+                        engineClockMs = hostPositionMs
+                        engine.seekTo(engineClockMs)
+                    }
                 }
             }
             engine.advance(engineClockMs)
         } else if (previewMode) {
             engine.tickPreview(dtMs.toLong())                    // 预览循环：反复滚动当前时间点的弹幕
         }
-        // 否则：暂停且无预览 → 冻结，仅按需重绘当前帧。
+        // 否则：用户暂停且无预览 → 冻结，仅按需重绘当前帧。
 
         drawFrame()
 
-        if (isPlaying || previewMode) choreographer?.postFrameCallback(frameCallback)
+        if (animating || previewMode) choreographer?.postFrameCallback(frameCallback)
         else looping = false                                    // 暂停：冻结画面已绘，停循环省 CPU
     }
 

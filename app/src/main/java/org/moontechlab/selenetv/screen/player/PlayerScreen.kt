@@ -624,6 +624,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 comments = danmakuComments,
                 positionMs = positionMs,
                 isPlaying = isPlaying,
+                buffering = controller.isBuffering,
                 speed = playbackSpeed,
                 visible = danmakuEnabled,
                 settings = danmakuSettings,

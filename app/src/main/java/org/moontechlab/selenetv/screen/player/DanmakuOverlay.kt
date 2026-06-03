@@ -26,6 +26,7 @@ fun DanmakuOverlay(
     comments: List<DanmakuComment>,
     positionMs: Long,
     isPlaying: Boolean,
+    buffering: Boolean = false,
     speed: Float,
     visible: Boolean,
     settings: DanmakuRenderSettings,
@@ -57,8 +58,8 @@ fun DanmakuOverlay(
         LaunchedEffect(view, settings, density, visible, areaFraction) {
             view?.submitConfig(buildEngineConfig(settings, density, visible, areaFraction))
         }
-        LaunchedEffect(view, positionMs, isPlaying, speed, previewMode) {
-            view?.submitPlayback(positionMs, isPlaying, speed, previewMode)
+        LaunchedEffect(view, positionMs, isPlaying, buffering, speed, previewMode) {
+            view?.submitPlayback(positionMs, isPlaying, speed, previewMode, buffering)
         }
         // 切匹配信号自增 → 硬清屏（首帧 clearSignal=0 不触发）。
         LaunchedEffect(view, clearSignal) {

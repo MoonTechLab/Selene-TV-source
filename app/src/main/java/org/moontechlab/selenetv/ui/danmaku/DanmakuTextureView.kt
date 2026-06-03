@@ -19,7 +19,7 @@ class DanmakuTextureView(context: Context) : TextureView(context), TextureView.S
     private var pendingConfig: DanmakuEngineConfig? = null
     private var lastPlayback: PlaybackState? = null
 
-    private data class PlaybackState(val pos: Long, val playing: Boolean, val speed: Float, val preview: Boolean)
+    private data class PlaybackState(val pos: Long, val playing: Boolean, val speed: Float, val preview: Boolean, val buffering: Boolean)
 
     init {
         isOpaque = false
@@ -36,9 +36,9 @@ class DanmakuTextureView(context: Context) : TextureView(context), TextureView.S
         renderThread?.let { t -> t.post { engine.setConfig(config) }; t.requestRedraw() }
     }
 
-    fun submitPlayback(pos: Long, playing: Boolean, speed: Float, preview: Boolean) {
-        lastPlayback = PlaybackState(pos, playing, speed, preview)
-        renderThread?.setPlayback(pos, playing, speed, preview)
+    fun submitPlayback(pos: Long, playing: Boolean, speed: Float, preview: Boolean, buffering: Boolean) {
+        lastPlayback = PlaybackState(pos, playing, speed, preview, buffering)
+        renderThread?.setPlayback(pos, playing, speed, preview, buffering)
     }
 
     /** 硬清屏（弹窗切匹配专用）：回收全部在屏弹幕。 */
@@ -57,7 +57,7 @@ class DanmakuTextureView(context: Context) : TextureView(context), TextureView.S
         // 不再依赖 start() 后 post 的时序竞争。后续变化经 LaunchedEffect→submitPlayback 持续下发。
         lastPlayback?.let {
             engine.seekTo(it.pos)
-            t.setInitialPlayback(it.pos, it.playing, it.speed, it.preview)
+            t.setInitialPlayback(it.pos, it.playing, it.speed, it.preview, it.buffering)
         }
         renderThread = t
         t.start()
