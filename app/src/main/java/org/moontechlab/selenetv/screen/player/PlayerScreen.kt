@@ -613,8 +613,8 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
         // 弹幕层：叠在画面之上、压暗/控制条之下。区域决定占屏高度（上对齐）：1/3 / 半屏 / 全屏。
         // 只要弹幕开启就常驻挂载（不再按 comments 是否为空卸载/重建）——避免每集开头空窗、切换间隙频繁
-        // create/release DanmakuPlayer（accompanying #27 ActionThread 泄漏累积）。播放器按 datasetKey 重建：
-        // 源/集/剧集变 → 旧的 release 干净回收 + 新的空数据集，天然不跨数据集累积。
+        // datasetKey 只认「视频集」：换弹幕源 / 换源内剧集匹配都不重建 —— 同一视频位置，旧弹幕自然飞出、新源续上，不清屏；
+        // 仅切视频集时重建出全新引擎。已在屏弹幕的保留另见 DanmakuRenderThread（预览冻结时钟、不被漂移 seekTo 清空）。
         if (danmakuEnabled) {
             DanmakuOverlay(
                 comments = danmakuComments,
@@ -624,7 +624,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 visible = danmakuEnabled,
                 settings = danmakuSettings,
                 previewMode = danmakuMenuOpen,
-                datasetKey = "${selectedDanmakuKey}|${currentEpisode}|${danmakuActiveMediaByKey[selectedDanmakuKey]}",
+                datasetKey = currentEpisode,
                 // 显示区域改由引擎在内部按比例限制弹幕高度带；view 始终全屏，切区域不再 resize → 不闪动。
                 areaFraction = danmakuAreaFraction(danmakuArea),
                 modifier = Modifier

@@ -79,14 +79,15 @@ class DanmakuRenderThread(
     }
 
     private fun onVsync(frameNs: Long) {
-        val animating = isPlaying || previewMode
-        if (lastFrameNs != 0L && animating) {
+        // 时钟只在真正播放时推进；预览（弹窗打开）与暂停一律冻结画面。否则预览期自由飞会与宿主位置漂移，
+        // 关弹窗回到播放态时被漂移校正 seekTo 清空已在屏的弹幕——用户明确要求不清空已发射弹幕。
+        if (lastFrameNs != 0L && isPlaying) {
             val dtMs = (frameNs - lastFrameNs) / 1_000_000f
             engineClockMs += (dtMs * playSpeed).toLong()
         }
         lastFrameNs = frameNs
 
-        if (animating && isPlaying && !previewMode) {           // 周期漂移校正
+        if (isPlaying) {                                         // 周期漂移校正（仅播放时）
             if (lastSyncNs == 0L) lastSyncNs = frameNs
             else if (frameNs - lastSyncNs > 2_000_000_000L) {
                 lastSyncNs = frameNs
@@ -100,8 +101,8 @@ class DanmakuRenderThread(
         engine.advance(engineClockMs)
         drawFrame()
 
-        if (animating) choreographer?.postFrameCallback(frameCallback)
-        else looping = false                                    // 静止：冻结画面已绘，停循环省 CPU
+        if (isPlaying) choreographer?.postFrameCallback(frameCallback)
+        else looping = false                                    // 暂停/预览：冻结画面已绘，停循环省 CPU
     }
 
     private fun drawFrame() {
