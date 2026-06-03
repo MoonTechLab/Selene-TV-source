@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -114,6 +115,10 @@ fun AnimatedTabContent(
                 .graphicsLayer {
                     this.alpha = alpha.value
                     translationX = offsetX.value
+                    // 关键：alpha<1 默认会把整页内容先渲染到离屏缓冲再整体调透（满屏 saveLayer，弱 GPU 每帧重负，
+                    // 切 tab 掉帧主因之一）。整页主要是不透明、互不重叠的卡片 → 用 ModulateAlpha 逐绘制调透，
+                    // 免掉离屏缓冲，淡入淡出观感不变。
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
                 }
         ) {
             content(displayedTabId)
