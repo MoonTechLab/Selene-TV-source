@@ -85,7 +85,13 @@ class DanmakuRenderThread(
     private fun onVsync(frameNs: Long) {
         // 预览态切换：进入→快照当前帧做循环底；退出→丢弃预览缓冲，正常状态原样恢复（绝不清空已发射弹幕）。
         if (previewMode != wasPreview) {
-            if (previewMode) engine.beginPreview() else engine.endPreview()
+            if (previewMode) {
+                engine.beginPreview()
+            } else {
+                engine.endPreview()                             // 接管预览画面为正常活跃集（不跳回快照）
+                engine.seekTo(hostPositionMs)                   // 软对齐真实位置：保位置 + 恢复正常装填
+                engineClockMs = hostPositionMs
+            }
             wasPreview = previewMode
             lastFrameNs = 0L                                     // 切态后重置 dt 基准
         }

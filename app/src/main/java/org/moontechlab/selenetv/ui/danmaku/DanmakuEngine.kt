@@ -122,10 +122,19 @@ class DanmakuEngine(private val measurer: TextMeasurer) {
         layoutAndRetire(previewActive, previewClockMs)
     }
 
+    /**
+     * 结束预览：把预览缓冲「接管」为正常活跃集（而非丢弃回退到开窗前快照），正常钟对齐到预览钟 →
+     * 关弹窗时屏上弹幕从预览位置无缝继续飞，不会跳回开窗时的位置（消除「重置」效果）。
+     * 随后调用方应 [seekTo] 宿主真实位置（软跳转保位置）以对齐播放并恢复正常装填。
+     */
     fun endPreview() {
         if (!previewing) return
         previewing = false
-        recycleAll(previewActive)
+        recycleAll(activeList)                 // 释放开窗前的快照对象回池
+        activeList.addAll(previewActive)       // 采用预览缓冲对象（仍 inUse）为正常活跃集
+        previewActive.clear()                  // 仅清列表引用，对象已转交，勿 recycle
+        clockMs = previewClockMs
+        cursor = firstIndexAtOrAfter(clockMs)
     }
 
     // ---- internals ----

@@ -75,7 +75,7 @@ class DanmakuEngineTest {
         assertTrue(e.active.isEmpty())
     }
 
-    @Test fun previewDoesNotTouchRealState() {
+    @Test fun previewIsolatesRealStateDuringThenAdoptsOnEnd() {
         val e = engine()
         e.setItems((1..20).map { scroll(it.toLong(), it * 1000L) })
         e.advance(5000)
@@ -84,12 +84,12 @@ class DanmakuEngineTest {
         e.beginPreview()
         assertTrue(e.isPreviewing)
         e.tickPreview(1000)        // 预览推进
-        assertEquals(realClock, e.clock)                          // 不动正常时钟
-        assertEquals(realActive, e.active.map { it.id }.toSet())  // 不动正常活跃集
+        assertEquals(realClock, e.clock)                          // 预览期不动正常时钟
+        assertEquals(realActive, e.active.map { it.id }.toSet())  // 预览期不动正常活跃集
         e.endPreview()
         assertFalse(e.isPreviewing)
-        assertEquals(realClock, e.clock)
-        assertEquals(realActive, e.active.map { it.id }.toSet())  // 退出预览原样恢复
+        // 接管：退出预览后正常活跃集采用预览画面（非空、不丢弃），无缝继续而非跳回快照
+        assertTrue(e.active.isNotEmpty())
     }
 
     @Test fun previewLoopsSeamlesslyNeverEmptyAndBounded() {
