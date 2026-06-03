@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kuaishou.akdanmaku.DanmakuConfig
 import com.kuaishou.akdanmaku.data.DanmakuItemData
-import com.kuaishou.akdanmaku.render.SimpleRenderer
 import com.kuaishou.akdanmaku.ui.DanmakuPlayer
 import com.kuaishou.akdanmaku.ui.DanmakuView
 import kotlinx.coroutines.delay
@@ -43,7 +42,8 @@ fun DanmakuOverlay(
     androidx.compose.runtime.key(datasetKey) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
-    val player = remember { DanmakuPlayer(SimpleRenderer()) }
+    // 自定义 renderer：补齐 akdanmaku 缓存未命中（兜底直绘）时丢失的整体透明度（见 AlphaDanmakuRenderer）。
+    val player = remember { DanmakuPlayer(AlphaDanmakuRenderer()) }
     // 弹幕是否运转：真正在播 或 预览中。akdanmaku 滚动速度由 rollingDurationMs 决定（durationMs 仅顶/底停留时长）。
     val animating = isPlaying || previewMode
 
