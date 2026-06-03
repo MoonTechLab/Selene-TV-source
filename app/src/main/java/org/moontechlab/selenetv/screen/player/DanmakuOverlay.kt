@@ -36,8 +36,11 @@ fun DanmakuOverlay(
     visible: Boolean,
     settings: DanmakuRenderSettings,
     previewMode: Boolean = false,   // 设置弹窗打开时：视频暂停但弹幕继续飞，做实时预览（速度/密度才看得见）
+    datasetKey: Any = Unit,         // 数据集标识(源|集|剧集)：变则整块重建播放器(旧的 release 干净回收)，避免跨数据集累积；
+                                    // 不变则同一播放器贯穿(含「空→有弹幕」的加载空窗)，杜绝频繁 create/release churn 与泄漏累积。
     modifier: Modifier = Modifier,
 ) {
+    androidx.compose.runtime.key(datasetKey) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
     val player = remember { DanmakuPlayer(SimpleRenderer()) }
@@ -67,32 +70,28 @@ fun DanmakuOverlay(
             .map { it.toItemData(density) }
     }
 
-    // 区分「全新数据集」(换集/换源/首次) 与「流式追加」(同集分段陆续补来)：
-    // 前者要 start+seek 对齐当前位置；后者仅 updateData 增量上屏，避免每段重置造成跳帧。
-    val prevFirstId = remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
-    val prevSize = remember { androidx.compose.runtime.mutableStateOf(0) }
+    // 增量装填（关键，闪退根因修复）：akdanmaku 的 updateData 是「追加」而非「替换」，且 DanmakuItem/Data
+    // 未重写 equals，其内部 removeAll+addAll 去重按 identity 失效——若每次把整段（越来越长）重喂，sortedData 会
+    // 无限累积 + 每帧 removeAll/sort 越来越重，单集持续播放几分钟后 OOM/ANR 闪退。
+    // 故这里**每条弹幕只喂一次**：仅把尚未喂过的 id 交给 updateData（idSet 本就按 id 去重渲染，增量喂正合适）。
+    val fedIds = remember { HashSet<Long>() }
+    val started = remember { androidx.compose.runtime.mutableStateOf(false) }
     LaunchedEffect(items) {
-        if (items.isEmpty()) { prevFirstId.value = null; prevSize.value = 0; return@LaunchedEffect }
-        val firstId = items.first().danmakuId
-        val fresh = prevFirstId.value != firstId || items.size < prevSize.value
-        player.updateData(if (animating) items else items.filter { it.position <= positionMs })
-        if (fresh) {
+        if (items.isEmpty()) return@LaunchedEffect
+        if (!started.value) {
             player.start(config)
             player.seekTo(positionMs)
+            if (!animating) player.pause()   // 挂载时若非播放态：起播后立即暂停
+            started.value = true
         }
-        prevFirstId.value = firstId
-        prevSize.value = items.size
+        val newItems = items.filter { fedIds.add(it.danmakuId) }   // add 返回 true = 首次出现，只喂新增
+        if (newItems.isNotEmpty()) player.updateData(newItems)
     }
 
-    // 运转/停：运转时投喂全量并起播（含预览）；停时裁到 ≤当前位置——屏上的飞完即清，不再发射。
+    // 播放/暂停走引擎自身时钟（pause/start），不再用 updateData 重喂数据（重喂正是闪退根因）。
     LaunchedEffect(animating) {
-        if (animating) {
-            player.updateData(items)
-            player.seekTo(positionMs)
-            player.start()
-        } else {
-            player.updateData(items.filter { it.position <= positionMs })
-        }
+        if (!started.value) return@LaunchedEffect
+        if (animating) { player.seekTo(positionMs); player.start() } else { player.pause() }
     }
 
     // 视频倍速同步（与弹幕滚动速度设置无关：前者是播放速率，后者是 rollingDurationMs）。
@@ -122,8 +121,10 @@ fun DanmakuOverlay(
     }
 
     DisposableEffect(player) {
-        onDispose { player.release() }
+        // 反射兜底 release，修正 akdanmaku 1.0.3 的 ActionThread 泄漏（见 DanmakuPlayerReleaser）。
+        onDispose { DanmakuPlayerReleaser.release(player) }
     }
+    } // key(datasetKey)
 }
 
 /** 统一弹幕 → akdanmaku item。mode 1/4/5 与 akdanmaku 常量一一对应。color 十进制 RGB → ARGB。 */

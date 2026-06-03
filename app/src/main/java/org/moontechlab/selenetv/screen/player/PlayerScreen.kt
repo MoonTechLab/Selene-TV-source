@@ -606,7 +606,10 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
         controller.VideoSurface(Modifier.fillMaxSize())
 
         // 弹幕层：叠在画面之上、压暗/控制条之下。区域决定占屏高度（上对齐）：1/3 / 半屏 / 全屏。
-        if (danmakuEnabled && danmakuComments.isNotEmpty()) {
+        // 只要弹幕开启就常驻挂载（不再按 comments 是否为空卸载/重建）——避免每集开头空窗、切换间隙频繁
+        // create/release DanmakuPlayer（accompanying #27 ActionThread 泄漏累积）。播放器按 datasetKey 重建：
+        // 源/集/剧集变 → 旧的 release 干净回收 + 新的空数据集，天然不跨数据集累积。
+        if (danmakuEnabled) {
             DanmakuOverlay(
                 comments = danmakuComments,
                 positionMs = positionMs,
@@ -615,6 +618,7 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 visible = danmakuEnabled,
                 settings = danmakuSettings,
                 previewMode = danmakuMenuOpen,
+                datasetKey = "${selectedDanmakuKey}|${currentEpisode}|${danmakuActiveMediaByKey[selectedDanmakuKey]}",
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
