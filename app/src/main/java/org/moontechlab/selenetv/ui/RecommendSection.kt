@@ -169,7 +169,10 @@ fun RecommendSection(
                 // 槽位，免去逐项重建组合，减少左右滚动的掉帧。
                 itemsIndexed(
                     videos,
-                    key = { _, video -> video.id },
+                    // key 必须全局唯一：app 对一条记录的唯一标识是 source+id（播放记录/收藏均以此为键）。
+                    // 仅用 id 时，历史里存在不同源、相同 id 的记录（同名影片或不同源恰好撞号）会导致
+                    // LazyRow key 冲突，抛 IllegalArgumentException 使首页加载崩溃。
+                    key = { _, video -> "${video.source}+${video.id}" },
                     contentType = { _, _ -> "videocard" },
                 ) { index, video ->
                     VideoCard(
