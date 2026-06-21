@@ -87,7 +87,14 @@ class MpvPlayerController(
         mpv.setOptionString("ytdl", "no")
         when (decodeMode) {
             AppDataService.DecodeMode.HARDWARE -> {
-                mpv.setOptionString("hwdec", "mediacodec-copy")
+                // 优先直通（零拷贝）MediaCodec，失败再退回拷，最后软解（mpv 0.41 行为：按列表
+                // 逐个尝试初始化，全失败才软解）。直通解码输出经 AImageReader 直接作为 GL 纹理被
+                // vo=gpu 采样，不回读系统内存——这也是项目 MPV_MIN_SDK=26 的由来（AImageReader 需 API 26）。
+                // 旧值仅 "mediacodec-copy" 会把每帧从 GPU 回拷到 CPU 再重新上传，4K 像素吞吐约为
+                // 1080p 的 4 倍，直接打满内存带宽 → 解码追不上 → 音视频同时卡顿（issue #14）；
+                // 1080p 拷贝路径尚能扛、4K 则不行，与「1080p 流畅、4K 卡」吻合。列表第二项 -copy
+                // 保留为兜底：直通初始化失败的设备自动退回原行为，不丢兼容性。
+                mpv.setOptionString("hwdec", "mediacodec,mediacodec-copy")
                 mpv.setOptionString("hwdec-codecs", "h264,hevc,vp9,av1")
             }
             AppDataService.DecodeMode.SOFTWARE -> mpv.setOptionString("hwdec", "no")
