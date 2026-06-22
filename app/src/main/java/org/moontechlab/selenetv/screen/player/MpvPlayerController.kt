@@ -100,6 +100,29 @@ class MpvPlayerController(
             AppDataService.DecodeMode.SOFTWARE -> mpv.setOptionString("hwdec", "no")
         }
         userAgent?.let { mpv.setOptionString("user-agent", MediaHttp.resolveLiveUa(it)) }
+
+        // issue #14 跟进：1.4.5 的直通解码修好了 4K「持续卡顿」，但长时间（约 20~30min）播 4K
+        // 直播后会周期性出现 ~10s 卡顿（用户已排除网络：1000M 宽带；同源用其他 App 长播不卡）。
+        // 根因不在解码，而在 mpv 默认的前向缓冲太浅：demuxer-readahead-secs 默认仅 1.0s，直播源
+        // 按实时速率推流，缓冲只攒 1~2s；一旦源侧/链路出现瞬时抖动（HLS 取段延迟、服务端节流间隙、
+        // GC 暂停等）就立刻见底 → paused-for-cache（即本类的 isBuffering）。而 HTTP-FLV/HLS 直播
+        // 连接断后要重连重灌，恢复常达 ~10s。其他播放器默认缓冲更深，同样抖动不外露。
+        // 对策：① 建一个真正的前向缓冲吸收突发抖动；② 让底层 HTTP 透明重连自愈，避免一次抖动升级
+        // 成长卡顿。readahead 是「上限」不是「起播门槛」，首帧到达即起播；直播数据本就只能实时到达，
+        // 稳态下不会显著偏离直播边缘，仅在源突发供给时多攒几段做缓冲，延迟代价极小。
+        mpv.setOptionString("cache", "yes")
+        mpv.setOptionString("demuxer-readahead-secs", "30")
+        // 4K 高码率下 30s 前向缓冲需要更大的字节上限（默认 150MiB 可能存不下）；back 缓冲直播用不上，
+        // 压小以省内存（直通解码的 4K 纹理本身已占显存/内存）。
+        mpv.setOptionString("demuxer-max-bytes", "256MiB")
+        mpv.setOptionString("demuxer-max-back-bytes", "32MiB")
+        // FFmpeg(libavformat) 层 HTTP 透明重连：直播连接被服务端/链路掐断时自动重连续读，
+        // 把「断流→~10s 黑屏重缓冲」降级为底层无感重连。reconnect_streamed 覆盖不可 seek 的直播流。
+        mpv.setOptionString(
+            "stream-lavf-o",
+            "reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=2",
+        )
+
         mpv.init()
         mpv.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
         mpv.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
