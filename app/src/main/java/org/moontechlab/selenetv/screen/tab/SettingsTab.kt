@@ -124,6 +124,9 @@ fun SettingsTab(
     var bangumiImageSource by remember { mutableStateOf("") }
     var tmdbApiKey by remember { mutableStateOf("") }
     var m3u8ProxyUrl by remember { mutableStateOf("") }
+    var adFilterEnabled by remember { mutableStateOf(false) }
+    var adFilterRegexRules by remember { mutableStateOf("") }
+    var adFilterDomains by remember { mutableStateOf("") }
     var playerType by remember { mutableStateOf("") }
     var decodeMode by remember { mutableStateOf("") }
     var searchOrigin by remember { mutableStateOf("") }
@@ -165,10 +168,15 @@ fun SettingsTab(
     val bangumiImageSourceFocusRequester = remember { FocusRequester() }
     val tmdbApiKeyFocusRequester = remember { FocusRequester() }
     val m3u8ProxyFocusRequester = remember { FocusRequester() }
+    val adFilterFocusRequester = remember { FocusRequester() }
+    val adRegexFocusRequester = remember { FocusRequester() }
+    val adDomainsFocusRequester = remember { FocusRequester() }
 
     // 输入弹框状态
     var showTmdbApiKeyDialog by remember { mutableStateOf(false) }
     var showM3u8ProxyDialog by remember { mutableStateOf(false) }
+    var showAdRegexDialog by remember { mutableStateOf(false) }
+    var showAdDomainsDialog by remember { mutableStateOf(false) }
 
     // 缓存清理确认弹框状态
     var showClearDoubanCacheDialog by remember { mutableStateOf(false) }
@@ -224,6 +232,9 @@ fun SettingsTab(
         bangumiImageSource = AppDataService.getBangumiImageSourceDisplayName()
         tmdbApiKey = AppDataService.getTmdbApiKey()
         m3u8ProxyUrl = AppDataService.getM3u8ProxyUrl()
+        adFilterEnabled = AppDataService.isAdFilterEnabled()
+        adFilterRegexRules = AppDataService.getAdFilterRegexRules()
+        adFilterDomains = AppDataService.getAdFilterDomains()
         playerType = AppDataService.getPlayerTypeDisplayName()
         decodeMode = AppDataService.getDecodeModeDisplayName()
         searchOrigin = AppDataService.getSearchOriginDisplayName()
@@ -386,9 +397,37 @@ fun SettingsTab(
                 SettingRow(
                     label = "M3U8 代理",
                     value = m3u8ProxyUrl.ifEmpty { "未设置" },
-                    showDivider = false,
                     onClick = { showM3u8ProxyDialog = true },
                     modifier = Modifier.focusRequester(m3u8ProxyFocusRequester)
+                )
+                SettingRow(
+                    label = "广告过滤（规则配置）",
+                    value = if (adFilterEnabled) "已启用（规则暂未生效）" else "关闭",
+                    onClick = {
+                        coroutineScope.launch {
+                            val next = !adFilterEnabled
+                            AppDataService.setAdFilterEnabled(next)
+                            adFilterEnabled = next
+                        }
+                    },
+                    modifier = Modifier.focusRequester(adFilterFocusRequester)
+                )
+                SettingRow(
+                    label = "广告 URL 正则规则",
+                    value = adFilterRegexRules.lineSequence().count { it.isNotBlank() }.let {
+                        if (it == 0) "未设置" else "$it 条规则"
+                    },
+                    onClick = { showAdRegexDialog = true },
+                    modifier = Modifier.focusRequester(adRegexFocusRequester)
+                )
+                SettingRow(
+                    label = "广告域名规则",
+                    value = adFilterDomains.lineSequence().count { it.isNotBlank() }.let {
+                        if (it == 0) "未设置" else "$it 个域名"
+                    },
+                    showDivider = false,
+                    onClick = { showAdDomainsDialog = true },
+                    modifier = Modifier.focusRequester(adDomainsFocusRequester)
                 )
 
                 if (!isLocalMode) {
@@ -726,6 +765,50 @@ fun SettingsTab(
                 coroutineScope.launch {
                     AppDataService.saveM3u8ProxyUrl(value)
                     m3u8ProxyUrl = value
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 广告 URL 正则规则输入弹框（每行一条）
+    AnimatedSelectDialog(
+        visible = showAdRegexDialog,
+        onDismiss = { showAdRegexDialog = false },
+        onClosed = { adRegexFocusRequester.requestFocus() }
+    ) { onClose ->
+        TextInputDialogContent(
+            title = "广告 URL 正则规则",
+            placeholder = "每行一条正则表达式",
+            initialValue = adFilterRegexRules,
+            multiline = true,
+            onConfirm = { value ->
+                coroutineScope.launch {
+                    AppDataService.saveAdFilterRegexRules(value)
+                    adFilterRegexRules = value
+                }
+                onClose()
+            },
+            onDismiss = onClose
+        )
+    }
+
+    // 广告域名输入弹框（每行一个域名）
+    AnimatedSelectDialog(
+        visible = showAdDomainsDialog,
+        onDismiss = { showAdDomainsDialog = false },
+        onClosed = { adDomainsFocusRequester.requestFocus() }
+    ) { onClose ->
+        TextInputDialogContent(
+            title = "广告域名规则",
+            placeholder = "每行一个域名，例如 ads.example.com",
+            initialValue = adFilterDomains,
+            multiline = true,
+            onConfirm = { value ->
+                coroutineScope.launch {
+                    AppDataService.saveAdFilterDomains(value)
+                    adFilterDomains = value
                 }
                 onClose()
             },
@@ -1149,7 +1232,8 @@ private fun TextInputDialogContent(
     placeholder: String,
     initialValue: String,
     onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    multiline: Boolean = false
 ) {
     var inputValue by remember { mutableStateOf(initialValue) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
@@ -1207,15 +1291,18 @@ private fun TextInputDialogContent(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF2A2A2A))
                 .border(1.dp, Color(0xFF444444), RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .then(if (multiline) Modifier.height(150.dp) else Modifier),
             textStyle = TextStyle(
                 color = TextDefault,
                 fontSize = 14.sp
             ),
             cursorBrush = SolidColor(Color.White),
-            singleLine = true,
+            singleLine = !multiline,
             // 软键盘「完成」=确认动作：完成时把焦点移到确认按钮 → 输入框失焦、IME 关闭且不回弹
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(
+                imeAction = if (multiline) ImeAction.Default else ImeAction.Done
+            ),
             keyboardActions = KeyboardActions(onDone = {
                 try { confirmButtonFocusRequester.requestFocus() } catch (_: Exception) {}
             }),
