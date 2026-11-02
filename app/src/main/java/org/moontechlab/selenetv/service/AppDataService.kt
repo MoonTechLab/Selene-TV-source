@@ -566,6 +566,17 @@ object AppDataService {
         prefs.edit().putString(KEY_AD_FILTER_DOMAINS, domains).apply()
     }
 
+    /** 同步读取过滤配置，供 ExoPlayer DataSource 在请求线程创建时使用。 */
+    fun isAdFilterEnabledSync(): Boolean = prefs.getBoolean(KEY_AD_FILTER_ENABLED, false)
+
+    fun getAdFilterRegexRulesSync(): List<String> =
+        prefs.getString(KEY_AD_FILTER_REGEX_RULES, "")?.lineSequence()
+            ?.map { it.trim() }?.filter { it.isNotEmpty() }?.toList() ?: emptyList()
+
+    fun getAdFilterDomainsSync(): List<String> =
+        prefs.getString(KEY_AD_FILTER_DOMAINS, "")?.lineSequence()
+            ?.map { it.trim() }?.filter { it.isNotEmpty() }?.toList() ?: emptyList()
+
     // ==================== 其他设置 ====================
 
     /**
