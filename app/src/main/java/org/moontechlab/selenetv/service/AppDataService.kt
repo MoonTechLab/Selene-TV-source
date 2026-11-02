@@ -541,7 +541,7 @@ object AppDataService {
 
     // ==================== 广告过滤规则设置 ====================
 
-    /** 广告过滤默认关闭；当前版本仅保存规则，尚未接入 HLS 分片过滤。 */
+    /** 广告过滤默认关闭；规则由 ExoPlayer 的 HLS DataSource 读取，MPV 当前尚未接入。 */
     suspend fun isAdFilterEnabled(): Boolean = withContext(Dispatchers.IO) {
         prefs.getBoolean(KEY_AD_FILTER_ENABLED, false)
     }
