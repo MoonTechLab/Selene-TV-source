@@ -6,6 +6,7 @@ import androidx.media3.datasource.DataSource
 import org.moontechlab.selenetv.service.AppDataService
 import org.moontechlab.selenetv.service.AppDataService.PlayerType
 import org.moontechlab.selenetv.service.MediaHttp
+import org.moontechlab.selenetv.service.HlsAdFilteringDataSource
 
 /** libmpv 要求 API 26+；低于 26 时把 MPV 降级为 ExoPlayer（.so 永不加载）。 */
 const val MPV_MIN_SDK = 26
@@ -23,8 +24,9 @@ object PlayerFactory {
         val decode = AppDataService.getDecodeModeSync()
         val type = resolveEffectivePlayerType(AppDataService.getPlayerTypeSync(), Build.VERSION.SDK_INT)
         fun exo(): VideoPlayer {
-            val ds: DataSource.Factory =
+            val upstream: DataSource.Factory =
                 if (userAgent != null) MediaHttp.dataSourceFactory(userAgent) else MediaHttp.dataSourceFactory
+            val ds: DataSource.Factory = HlsAdFilteringDataSource.Factory(upstream)
             return PlayerController(context, ds, decode)
         }
         return when (type) {
