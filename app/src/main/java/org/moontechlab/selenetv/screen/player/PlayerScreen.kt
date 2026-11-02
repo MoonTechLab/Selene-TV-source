@@ -245,9 +245,25 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
                 speedResults = HashMap(acc)
                 speedTesting = false
             } catch (e: kotlinx.coroutines.CancellationException) {
+                // 用户主动停止或页面退出：保留已完成结果，丢弃仍在测速的条目。
                 speedResults = HashMap(acc.filterValues { it.state != org.moontechlab.selenetv.model.SpeedTestState.TESTING })
                 speedTesting = false
                 throw e
+            } catch (e: Exception) {
+                // 单个源的 URL/响应异常不应成为未捕获的主线程协程异常并导致整个播放页闪退。
+                // 将尚未返回结果的源标记为失败，保留已完成结果。
+                val settled = HashMap(acc)
+                testable.forEach { source ->
+                    val key = sourceKey(source)
+                    if (settled[key]?.state == org.moontechlab.selenetv.model.SpeedTestState.TESTING) {
+                        settled[key] = org.moontechlab.selenetv.model.SourceSpeed(
+                            org.moontechlab.selenetv.model.SpeedTestState.FAILED,
+                        )
+                    }
+                }
+                speedResults = settled
+                android.util.Log.w("PlayerScreen", "Speed test failed; playback will continue", e)
+                speedTesting = false
             }
         }
     }
@@ -462,7 +478,11 @@ fun PlayerScreen(launch: PlayerLaunch, onExit: () -> Unit, modifier: Modifier = 
 
     // 退出 / 离开时释放播放器
     DisposableEffect(Unit) {
-        onDispose { controller.release() }
+        onDispose {
+            // 离开播放页时同步取消测速，避免网络回调/状态刷新晚于页面生命周期。
+            speedTestJob?.cancel()
+            controller.release()
+        }
     }
 
     // 播放/缓冲期间保持屏幕常亮，防止机器进入休眠/屏保；暂停或离开播放页后恢复系统息屏超时
