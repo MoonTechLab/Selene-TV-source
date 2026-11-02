@@ -402,7 +402,7 @@ fun SettingsTab(
                 )
                 SettingRow(
                     label = "广告过滤（规则配置）",
-                    value = if (adFilterEnabled) "已启用（规则暂未生效）" else "关闭",
+                    value = if (adFilterEnabled) "已启用（ExoPlayer 生效，MPV 暂不支持）" else "关闭",
                     onClick = {
                         coroutineScope.launch {
                             val next = !adFilterEnabled
