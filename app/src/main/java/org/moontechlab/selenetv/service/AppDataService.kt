@@ -26,6 +26,9 @@ object AppDataService {
     private const val KEY_BANGUMI_DATA_SOURCE = "bangumi_data_source"
     private const val KEY_BANGUMI_IMAGE_SOURCE = "bangumi_image_source"
     private const val KEY_M3U8_PROXY_URL = "m3u8_proxy_url"
+    private const val KEY_AD_FILTER_ENABLED = "ad_filter_enabled"
+    private const val KEY_AD_FILTER_REGEX_RULES = "ad_filter_regex_rules"
+    private const val KEY_AD_FILTER_DOMAINS = "ad_filter_domains"
     private const val KEY_TMDB_API_KEY = "tmdb_api_key"
     private const val KEY_SESSION_TOKEN = "session_token"
     private const val KEY_PLAYER_TYPE = "player_type"
@@ -535,6 +538,33 @@ object AppDataService {
         BangumiImageSource.fromKey(key).displayName
     }
 
+
+    // ==================== 广告过滤规则设置 ====================
+
+    /** 广告过滤默认关闭；当前版本仅保存规则，尚未接入 HLS 分片过滤。 */
+    suspend fun isAdFilterEnabled(): Boolean = withContext(Dispatchers.IO) {
+        prefs.getBoolean(KEY_AD_FILTER_ENABLED, false)
+    }
+
+    suspend fun setAdFilterEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit().putBoolean(KEY_AD_FILTER_ENABLED, enabled).apply()
+    }
+
+    suspend fun getAdFilterRegexRules(): String = withContext(Dispatchers.IO) {
+        prefs.getString(KEY_AD_FILTER_REGEX_RULES, "") ?: ""
+    }
+
+    suspend fun saveAdFilterRegexRules(rules: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_AD_FILTER_REGEX_RULES, rules).apply()
+    }
+
+    suspend fun getAdFilterDomains(): String = withContext(Dispatchers.IO) {
+        prefs.getString(KEY_AD_FILTER_DOMAINS, "") ?: ""
+    }
+
+    suspend fun saveAdFilterDomains(domains: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(KEY_AD_FILTER_DOMAINS, domains).apply()
+    }
 
     // ==================== 其他设置 ====================
 
