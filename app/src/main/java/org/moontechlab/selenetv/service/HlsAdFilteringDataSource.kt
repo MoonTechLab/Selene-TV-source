@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 /**
  * Intercepts HLS playlist responses for ExoPlayer while leaving media segments
  * and all non-HLS requests on the original DataSource unchanged.
@@ -41,7 +42,9 @@ class HlsAdFilteringDataSource(
         }
         val original = output.toByteArray()
         val source = original.toString(Charsets.UTF_8)
-        val filtered = HlsAdFilter.filterPlaylist(source, dataSpec.uri.toString(), rules)
+        val filtered = runCatching {
+            HlsAdFilter.filterPlaylist(source, dataSpec.uri.toString(), rules)
+        }.getOrDefault(source)
         playlistBytes = ByteArrayInputStream(filtered.toByteArray(Charsets.UTF_8))
         opened = true
         return filtered.toByteArray(Charsets.UTF_8).size.toLong()
