@@ -567,7 +567,7 @@ object AppDataService {
     }
 
     /** 同步读取过滤配置，供 ExoPlayer DataSource 在请求线程创建时使用。 */
-    fun isAdFilterEnabledSync(): Boolean = prefs.getBoolean(KEY_AD_FILTER_ENABLED, false)
+    fun isAdFilterEnabledSync(): Boolean = prefs.getBoolean(KEY_AD_FILTER_ENABLED, true)
 
     fun getAdFilterRegexRulesSync(): List<String> =
         prefs.getString(KEY_AD_FILTER_REGEX_RULES, "")?.lineSequence()
